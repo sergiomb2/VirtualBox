@@ -920,7 +920,7 @@ DECL_HIDDEN_CALLBACK(int) gitsR3CmdQueueProcess(PPDMDEVINS pDevIns, PGITSDEV pGi
                             Assert(sizeof(uDevId) * 8 >= RT_BF_GET(pGitsDev->uTypeReg.u, GITS_BF_CTRL_REG_TYPER_DEV_BITS) + 1);
 
                             GIC_CRIT_SECT_ENTER(pDevIns);
-                            gitsR3CmdMapIntr(pDevIns, pGitsDev, uDevId, uEventId, uIntId, uIcId, uCmdId);
+                            gitsR3CmdMapIntr(pDevIns, pGitsDev, uDevId, uEventId, uIntId, uIcId, true /* fMapti */);
                             GIC_CRIT_SECT_LEAVE(pDevIns);
                             STAM_COUNTER_INC(&pGitsDev->StatCmdMapti);
 
