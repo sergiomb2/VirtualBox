@@ -750,8 +750,8 @@ static void gitsR3CmdMapIntr(PPDMDEVINS pDevIns, PGITSDEV pGitsDev, uint32_t uDe
             if (uEventId < cEntries)
             {
                 /* Write the interrupt-translation entry mapping event ID with INTID and ICID. */
-                GITSITE const uIte = RT_BF_MAKE(GITS_BF_ITE_ICID,  uIcId)
-                                   | RT_BF_MAKE(GITS_BF_ITE_INTID, uIntId)
+                GITSITE const uIte = RT_BF_MAKE(GITS_BF_ITE_ICID,    uIcId)
+                                   | RT_BF_MAKE(GITS_BF_ITE_INTID,   uIntId)
                                    | RT_BF_MAKE(GITS_BF_ITE_IS_PHYS, 1)
                                    | RT_BF_MAKE(GITS_BF_ITE_VALID,   1);
                 rc = gitsR3IteWrite(pDevIns, uDte, uEventId, uIte);
@@ -910,22 +910,31 @@ DECL_HIDDEN_CALLBACK(int) gitsR3CmdQueueProcess(PPDMDEVINS pDevIns, PGITSDEV pGi
 
                         case GITS_CMD_ID_MAPTI:
                         {
-                            /* Map device ID and event ID to corresponding ITE. */
+                            /* Map device ID and event ID to corresponding ITE with ICID and the INTID. */
+                            uint16_t const uIcId    = RT_BF_GET(pCmd->au64[2].u, GITS_BF_CMD_MAPTI_DW2_IC_ID);
                             uint32_t const uDevId   = RT_BF_GET(pCmd->au64[0].u, GITS_BF_CMD_MAPTI_DW0_DEV_ID);
                             uint32_t const uEventId = RT_BF_GET(pCmd->au64[1].u, GITS_BF_CMD_MAPTI_DW1_EVENT_ID);
                             uint32_t const uIntId   = RT_BF_GET(pCmd->au64[1].u, GITS_BF_CMD_MAPTI_DW1_PHYS_INTID);
-                            uint16_t const uIcId    = RT_BF_GET(pCmd->au64[2].u, GITS_BF_CMD_MAPTI_DW2_IC_ID);
-
-                            /* We support 32-bits of device ID and hence it cannot be out of range (asserted below). */
-                            Assert(sizeof(uDevId) * 8 >= RT_BF_GET(pGitsDev->uTypeReg.u, GITS_BF_CTRL_REG_TYPER_DEV_BITS) + 1);
 
                             GIC_CRIT_SECT_ENTER(pDevIns);
                             gitsR3CmdMapIntr(pDevIns, pGitsDev, uDevId, uEventId, uIntId, uIcId, true /* fMapti */);
                             GIC_CRIT_SECT_LEAVE(pDevIns);
                             STAM_COUNTER_INC(&pGitsDev->StatCmdMapti);
+                            break;
+                        }
 
-                            //AssertMsgFailed(("uDevId=%RU32 uEventId=%RU32 uIntId=%RU32 uIcId=%RU16\n",
-                            //                 uDevId, uEventId, uIntId, uIcId));
+                        case GITS_CMD_ID_MAPI:
+                        {
+                            /* Map device ID and event ID to corresponding ITE with ICID and the INTID same as the event ID. */
+                            uint16_t const uIcId    = RT_BF_GET(pCmd->au64[2].u, GITS_BF_CMD_MAPTI_DW2_IC_ID);
+                            uint32_t const uDevId   = RT_BF_GET(pCmd->au64[0].u, GITS_BF_CMD_MAPTI_DW0_DEV_ID);
+                            uint32_t const uEventId = RT_BF_GET(pCmd->au64[1].u, GITS_BF_CMD_MAPTI_DW1_EVENT_ID);
+                            uint32_t const uIntId   = uEventId;
+
+                            GIC_CRIT_SECT_ENTER(pDevIns);
+                            gitsR3CmdMapIntr(pDevIns, pGitsDev, uDevId, uEventId, uIntId, uIcId, false /* fMapti */);
+                            GIC_CRIT_SECT_LEAVE(pDevIns);
+                            STAM_COUNTER_INC(&pGitsDev->StatCmdMapti);
                             break;
                         }
 
