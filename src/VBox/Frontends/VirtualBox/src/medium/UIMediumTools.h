@@ -100,6 +100,17 @@ namespace UIMediumTools
                                                        const QString &strMachineName = QString(),
                                                        const QString &strMachineGuestOSTypeId = QString());
 
+    /** Creates and shows a dialog (wizard) to edit a medium of type @a enmMediumType. For now only for DVD (VISO).
+      * @param  pActionPool              Brings the action-pool.
+      * @param  pParent                  Brings the parent of the dialog,
+      * @param  enmMediumType            Brings the medium type,
+      * @param  strMediumPath            Brings the medium file path,
+      * returns QUuid of the modified medium. */
+    SHARED_LIBRARY_STUFF QUuid openMediumEditDialog(UIActionPool *pActionPool,
+                                                    QWidget *pParent,
+                                                    UIMediumDeviceType enmMediumType,
+                                                    const QString &strMediumPath);
+
     /** Prepares storage menu according passed parameters.
       * @param  pMenu              Brings the #QMenu to be prepared.
       * @param  pListener          Brings the listener #QObject, this @a menu being prepared for.

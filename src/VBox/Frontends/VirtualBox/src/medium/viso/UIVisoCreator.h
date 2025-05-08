@@ -208,6 +208,9 @@ public:
     static QUuid createViso(UIActionPool *pActionPool, QWidget *pParent,
                             const QString &strDefaultFolder = QString(),
                             const QString &strMachineName  = QString());
+    static QUuid editViso(UIActionPool *pActionPool, QWidget *pParent,
+                          const QString &strVISOFilePath);
+
 
 protected:
 

@@ -332,6 +332,25 @@ QUuid UIMediumTools::openMediumCreatorDialog(UIActionPool *pActionPool,
     return uMediumId;
 }
 
+QUuid UIMediumTools::openMediumEditDialog(UIActionPool *pActionPool,
+                                          QWidget *pParent,
+                                          UIMediumDeviceType enmMediumType,
+                                          const QString &strMediumPath)
+{
+    QUuid uMediumId;
+    switch (enmMediumType)
+    {
+        case UIMediumDeviceType_HardDisk:
+        case UIMediumDeviceType_Floppy:
+        default:
+            break;
+        case UIMediumDeviceType_DVD:
+            uMediumId = UIVisoCreatorDialog::editViso(pActionPool, pParent, strMediumPath);
+            break;
+    }
+    return uMediumId;
+}
+
 void UIMediumTools::prepareStorageMenu(QMenu *pMenu,
                                        QObject *pListener,
                                        const char *pszSlotName,

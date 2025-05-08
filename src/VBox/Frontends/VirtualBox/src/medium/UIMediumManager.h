@@ -198,6 +198,8 @@ private slots:
         void sltToggleMediumSearchVisibility(bool fVisible);
         /** Handles command to refresh medium. */
         void sltRefreshAll();
+        /** Handles command to edir viso. */
+        void sltEditVISO();
     /** @} */
 
     /** @name Menu/action handler stuff.

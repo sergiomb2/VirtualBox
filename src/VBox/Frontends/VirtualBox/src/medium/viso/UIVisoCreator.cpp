@@ -976,6 +976,16 @@ QUuid UIVisoCreatorDialog::createViso(UIActionPool *pActionPool, QWidget *pParen
     return mediumId;
 }
 
+/* static */
+QUuid UIVisoCreatorDialog::editViso(UIActionPool *pActionPool, QWidget *pParent, const QString &strVISOFilePath)
+{
+    Q_UNUSED(pActionPool);
+    Q_UNUSED(pParent);
+    if (!QFileInfo(strVISOFilePath).exists())
+        return QUuid();
+    return QUuid();
+}
+
 bool UIVisoCreatorDialog::saveVISOFile()
 {
     QStringList VisoEntryList = entryList();
