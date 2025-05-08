@@ -693,8 +693,9 @@ DECLHIDDEN(void) gicDistReadLpiConfigTableFromMem(PPDMDEVINS pDevIns)
 }
 
 
-static void gicReDistReadLpiPendingBitmapFromMem(PPDMDEVINS pDevIns, PVMCPU pVCpu, PGICDEV pGicDev)
+static void gicReDistReadLpiPendingBitmapFromMem(PPDMDEVINS pDevIns, PVMCPU pVCpu)
 {
+    PGICDEV pGicDev = PDMDEVINS_2_DATA(pDevIns, PGICDEV);
     Assert(pGicDev->fEnableLpis);
     LogFlowFunc(("\n"));
 
@@ -2530,7 +2531,7 @@ DECLINLINE(VBOXSTRICTRC) gicReDistWriteRegister(PPDMDEVINS pDevIns, PVMCPUCC pVC
                 if (pGicDev->fEnableLpis)
                 {
                     gicDistReadLpiConfigTableFromMem(pDevIns);
-                    gicReDistReadLpiPendingBitmapFromMem(pDevIns, pVCpu, pGicDev);
+                    gicReDistReadLpiPendingBitmapFromMem(pDevIns, pVCpu);
                 }
                 else
                 {

@@ -124,6 +124,7 @@ typedef enum GITSDIAG
     kGitsDiag_CmdQueue_Basic_Invalid_PhysAddr,
 
     /* Command: INVALL. */
+    kGitsDiag_CmdQueue_Cmd_Invall_Cte_Unmapped,
     kGitsDiag_CmdQueue_Cmd_Invall_Icid_Invalid,
 
     /* Command: MAPC. */

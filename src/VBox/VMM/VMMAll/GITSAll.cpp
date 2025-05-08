@@ -36,6 +36,7 @@
 #include <VBox/gic.h>
 #include <VBox/vmm/pdmdev.h>
 #include <VBox/vmm/dbgf.h>
+#include <VBox/vmm/vm.h>        /* pVM->cCpus */
 #include <iprt/errcore.h>       /* VINF_SUCCESS */
 #include <iprt/string.h>        /* RT_ZERO */
 #include <iprt/mem.h>           /* RTMemAllocZ, RTMemFree */
@@ -67,6 +68,7 @@ static const char *const g_apszGitsDiagDesc[] =
     GITSDIAG_DESC(CmdQueue_Basic_Invalid_PhysAddr),
 
     /* Command queue: INVALL. */
+    GITSDIAG_DESC(CmdQueue_Cmd_Invall_Cte_Unmapped),
     GITSDIAG_DESC(CmdQueue_Cmd_Invall_Icid_Invalid),
 
     /* Command: MAPV. */
@@ -939,11 +941,8 @@ DECL_HIDDEN_CALLBACK(int) gitsR3CmdQueueProcess(PPDMDEVINS pDevIns, PGITSDEV pGi
 
                         case GITS_CMD_ID_INV:
                         {
-                            uint64_t const uReg = pGitsDev->aItsTableRegs[0].u;
-                            AssertMsgFailed(("aItsTableRegs[0].u=%#RX64 (%#RGp %#RGp) Valid=%RTbool\n", uReg,
-                                             uReg & GITS_BF_CTRL_REG_BASER_PHYS_ADDR_MASK, gitsGetBaseRegPhysAddr(uReg),
-                                             RT_BOOL(RT_BF_GET(uReg, GITS_BF_CTRL_REG_BASER_VALID))));
-                            NOREF(uReg);
+                            /* Reading the table is likely to take the same time as reading just one entry. */
+                            gicDistReadLpiConfigTableFromMem(pDevIns);
                             break;
                         }
 
@@ -957,8 +956,15 @@ DECL_HIDDEN_CALLBACK(int) gitsR3CmdQueueProcess(PPDMDEVINS pDevIns, PGITSDEV pGi
                             /* Reading the table is likely to take the same time as reading just one entry. */
                             uint64_t const uDw2  = pCmd->au64[2].u;
                             uint16_t const uIcId = RT_BF_GET(uDw2, GITS_BF_CMD_INVALL_DW2_IC_ID);
-                            if (RT_LIKELY(uIcId < RT_ELEMENTS(pGitsDev->aCtes)))
-                                gicDistReadLpiConfigTableFromMem(pDevIns);
+                            PCVMCC         pVM   = PDMDevHlpGetVM(pDevIns);
+                            if (uIcId < RT_ELEMENTS(pGitsDev->aCtes))
+                            {
+                                if (pGitsDev->aCtes[uIcId].idTargetCpu < pVM->cCpus)
+                                    gicDistReadLpiConfigTableFromMem(pDevIns);
+                                else
+                                    gitsCmdQueueSetError(pDevIns, pGitsDev, kGitsDiag_CmdQueue_Cmd_Invall_Cte_Unmapped,
+                                                         false /* fStall */);
+                            }
                             else
                                 gitsCmdQueueSetError(pDevIns, pGitsDev, kGitsDiag_CmdQueue_Cmd_Invall_Icid_Invalid,
                                                      false /* fStall */);
