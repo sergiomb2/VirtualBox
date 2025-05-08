@@ -713,6 +713,15 @@ static int gitsR3IteWrite(PPDMDEVINS pDevIns, GITSDTE uDte, uint32_t uEventId, G
 static void gitsR3CmdMapIntr(PPDMDEVINS pDevIns, PGITSDEV pGitsDev, uint32_t uDevId, uint32_t uEventId, uint16_t uIntId,
                              uint16_t uIcId, bool fMapti)
 {
+#define GITS_CMD_QUEUE_SET_ERR_RET(a_enmDiagSuffix) \
+    do \
+    { \
+        gitsCmdQueueSetError(pDevIns, pGitsDev, \
+                             fMapti ? kGitsDiag_CmdQueue_Cmd_ ## Mapti_ ## a_enmDiagSuffix \
+                                    : kGitsDiag_CmdQueue_Cmd_ ## Mapi_  ## a_enmDiagSuffix, false /* fStall */); \
+        return; \
+    } while (0)
+
     /* We support 32-bits of device ID and hence it cannot be out of range (asserted below). */
     Assert(sizeof(uDevId) * 8 >= RT_BF_GET(pGitsDev->uTypeReg.u, GITS_BF_CTRL_REG_TYPER_DEV_BITS) + 1);
 
@@ -720,58 +729,48 @@ static void gitsR3CmdMapIntr(PPDMDEVINS pDevIns, PGITSDEV pGitsDev, uint32_t uDe
     if (uIcId < RT_ELEMENTS(pGitsDev->aCtes))
     { /* likely */ }
     else
-    {
-        gitsCmdQueueSetError(pDevIns, pGitsDev, fMapti ? kGitsDiag_CmdQueue_Cmd_Mapti_IcId_Invalid
-                                                       : kGitsDiag_CmdQueue_Cmd_Mapi_IcId_Invalid, false /* fStall */);
-        return;
-    }
+        GITS_CMD_QUEUE_SET_ERR_RET(IcId_Invalid);
 
     /* Validate LPI INTID. */
     if (gicDistIsLpiValid(pDevIns, uIntId))
     { /* likely */ }
     else
-    {
-        gitsCmdQueueSetError(pDevIns, pGitsDev, fMapti ? kGitsDiag_CmdQueue_Cmd_Mapti_Lpi_Invalid
-                                                       : kGitsDiag_CmdQueue_Cmd_Mapi_Lpi_Invalid, false /* fStall */);
-        return;
-    }
+        GITS_CMD_QUEUE_SET_ERR_RET(Lpi_Invalid);
 
     /* Read the device-table entry. */
     GITSDTE uDte = 0;
     int rc = gitsR3DteRead(pDevIns, pGitsDev, uDevId, &uDte);
     if (RT_SUCCESS(rc))
-    {
-        /* Check that the device ID mapping is valid. */
-        bool const fValid = RT_BF_GET(uDte, GITS_BF_DTE_VALID);
-        if (fValid)
-        {
-            /* Check that the event ID (which is the index) is within range. */
-            uint32_t const cEntries = RT_BIT_32(RT_BF_GET(uDte, GITS_BF_DTE_ITT_ADDR) + 1);
-            if (uEventId < cEntries)
-            {
-                /* Write the interrupt-translation entry mapping event ID with INTID and ICID. */
-                GITSITE const uIte = RT_BF_MAKE(GITS_BF_ITE_ICID,    uIcId)
-                                   | RT_BF_MAKE(GITS_BF_ITE_INTID,   uIntId)
-                                   | RT_BF_MAKE(GITS_BF_ITE_IS_PHYS, 1)
-                                   | RT_BF_MAKE(GITS_BF_ITE_VALID,   1);
-                rc = gitsR3IteWrite(pDevIns, uDte, uEventId, uIte);
-                if (RT_SUCCESS(rc))
-                    return;
+    { /* likely */ }
+    else
+        GITS_CMD_QUEUE_SET_ERR_RET(Dte_Rd_Failed);
 
-                gitsCmdQueueSetError(pDevIns, pGitsDev, fMapti ? kGitsDiag_CmdQueue_Cmd_Mapti_Ite_Wr_Failed
-                                                               : kGitsDiag_CmdQueue_Cmd_Mapi_Ite_Wr_Failed, false /* fStall */);
-            }
-            else
-                gitsCmdQueueSetError(pDevIns, pGitsDev, fMapti ? kGitsDiag_CmdQueue_Cmd_Mapti_EventId_Invalid
-                                                               : kGitsDiag_CmdQueue_Cmd_Mapi_EventId_Invalid, false /* fStall */);
-        }
-        else
-            gitsCmdQueueSetError(pDevIns, pGitsDev, fMapti ? kGitsDiag_CmdQueue_Cmd_Mapti_DevId_Unmapped
-                                                           : kGitsDiag_CmdQueue_Cmd_Mapi_DevId_Unmapped, false /* fStall */);
+    /* Check that the device ID mapping is valid. */
+    bool const fValid = RT_BF_GET(uDte, GITS_BF_DTE_VALID);
+    if (fValid)
+    { /* likely */ }
+    else
+        GITS_CMD_QUEUE_SET_ERR_RET(DevId_Unmapped);
+
+    /* Check that the event ID (which is the index) is within range. */
+    uint32_t const cEntries = RT_BIT_32(RT_BF_GET(uDte, GITS_BF_DTE_ITT_ADDR) + 1);
+    if (uEventId < cEntries)
+    {
+        /* Write the interrupt-translation entry mapping event ID with INTID and ICID. */
+        GITSITE const uIte = RT_BF_MAKE(GITS_BF_ITE_ICID,    uIcId)
+                           | RT_BF_MAKE(GITS_BF_ITE_INTID,   uIntId)
+                           | RT_BF_MAKE(GITS_BF_ITE_IS_PHYS, 1)
+                           | RT_BF_MAKE(GITS_BF_ITE_VALID,   1);
+        rc = gitsR3IteWrite(pDevIns, uDte, uEventId, uIte);
+        if (RT_SUCCESS(rc))
+            return;
+
+        GITS_CMD_QUEUE_SET_ERR_RET(Ite_Wr_Failed);
     }
     else
-        gitsCmdQueueSetError(pDevIns, pGitsDev, fMapti ? kGitsDiag_CmdQueue_Cmd_Mapti_Dte_Rd_Failed
-                                                       : kGitsDiag_CmdQueue_Cmd_Mapi_Dte_Rd_Failed, false /* fStall */);
+        GITS_CMD_QUEUE_SET_ERR_RET(EventId_Invalid);
+
+#undef GITS_CMD_QUEUE_SET_ERR_RET
 }
 
 
