@@ -1424,7 +1424,6 @@ DECLHIDDEN(void) cpumCpuIdExplodeFeaturesX86Vmx(PCVMXMSRS pVmxMsrs, CPUMFEATURES
 
 /**
  * Call cpumCpuIdExplodeFeaturesX86Vmx with SUPHWVIRTMSRS instead of VMXMSRS.
- *
  */
 DECLHIDDEN(void) cpumCpuIdExplodeFeaturesX86VmxFromSupMsrs(PCSUPHWVIRTMSRS pMsrs, CPUMFEATURESX86 *pFeatures)
 {
