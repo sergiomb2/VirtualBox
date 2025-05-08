@@ -2232,9 +2232,6 @@ VMMDECL(CPUMMICROARCH)      CPUMCpuIdDetermineX86MicroarchEx(CPUMCPUVENDOR enmVe
                                                              uint8_t bModel, uint8_t bStepping);
 VMMR3DECL(int)              CPUMR3CpuIdDetectUnknownLeafMethod(PCPUMUNKNOWNCPUID penmUnknownMethod, PCPUMCPUID pDefUnknown);
 VMMR3DECL(const char *)     CPUMR3CpuIdUnknownLeafMethodName(CPUMUNKNOWNCPUID enmUnknownMethod);
-#if defined(RT_ARCH_X86) || defined(RT_ARCH_AMD64)
-VMMR3DECL(uint32_t)         CPUMR3DeterminHostMxCsrMask(void);
-#endif
 
 VMMR3DECL(int)              CPUMR3MsrRangesInsert(PVM pVM, PCCPUMMSRRANGE pNewRange);
 

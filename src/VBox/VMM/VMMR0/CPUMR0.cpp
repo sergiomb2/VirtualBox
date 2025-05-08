@@ -40,9 +40,11 @@
 #include <VBox/err.h>
 #include <VBox/log.h>
 #include <VBox/vmm/hm.h>
+
 #include <iprt/assert.h>
 #include <iprt/asm-amd64-x86.h>
 #include <iprt/mem.h>
+#include <iprt/string.h>
 #include <iprt/x86.h>
 
 
@@ -50,9 +52,10 @@
 *   Global Variables                                                                                                             *
 *********************************************************************************************************************************/
 /** Host CPU features. */
-DECL_HIDDEN_DATA(CPUHOSTFEATURES)  g_CpumHostFeatures;
-/** Static storage for host MSRs. */
-static CPUMMSRS     g_CpumHostMsrs;
+DECL_HIDDEN_DATA(CPUHOSTFEATURES)   g_CpumHostFeatures;
+/** Static storage for host MSRs.
+ * @note this isn't really used beyond module init. */
+static SUPHWVIRTMSRS                g_CpumHostHwvirtMsrs;
 
 /**
  * CPUID bits to unify among all cores.
@@ -129,16 +132,10 @@ VMMR0_INT_DECL(int) CPUMR0ModuleInit(void)
                     ("SUPR0GetHwvirtMsrs -> %Rrc\n", rc));
     if (RT_SUCCESS(rc))
     {
-        SUPHWVIRTMSRS HwvirtMsrs;
-        rc = SUPR0GetHwvirtMsrs(&HwvirtMsrs, fHwCaps, false /*fIgnored*/);
+        rc = SUPR0GetHwvirtMsrs(&g_CpumHostHwvirtMsrs, fHwCaps, false /*fIgnored*/);
         AssertLogRelRC(rc);
-        if (RT_SUCCESS(rc))
-        {
-            if (fHwCaps & SUPVTCAPS_VT_X)
-                HMGetVmxMsrsFromHwvirtMsrs(&HwvirtMsrs, &g_CpumHostMsrs.hwvirt.vmx);
-            else
-                HMGetSvmMsrsFromHwvirtMsrs(&HwvirtMsrs, &g_CpumHostMsrs.hwvirt.svm);
-        }
+        if (RT_FAILURE(rc))
+            RT_ZERO(g_CpumHostHwvirtMsrs);
     }
 
     /*
@@ -158,9 +155,11 @@ VMMR0_INT_DECL(int) CPUMR0ModuleInit(void)
     /*
      * Populate the host CPU feature global variable.
      */
-    rc = cpumCpuIdExplodeFeaturesX86(paLeaves, cLeaves, &g_CpumHostMsrs, &g_CpumHostFeatures.s);
+    rc = cpumCpuIdExplodeFeaturesX86(paLeaves, cLeaves, &g_CpumHostFeatures.s);
     RTMemFree(paLeaves);
     AssertLogRelRCReturn(rc, rc);
+    if (g_CpumHostFeatures.s.fVmx)
+        cpumCpuIdExplodeFeaturesX86VmxFromSupMsrs(&g_CpumHostHwvirtMsrs, &g_CpumHostFeatures.s);
 
     /*
      * Get MSR_IA32_ARCH_CAPABILITIES and expand it into the host feature structure.

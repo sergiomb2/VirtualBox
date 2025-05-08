@@ -565,22 +565,97 @@ PCPUMCPUIDLEAF      cpumCpuIdEnsureSpace(PVM pVM, PCPUMCPUIDLEAF *ppaLeaves, uin
 #  ifdef VBOX_STRICT
 void                cpumCpuIdAssertOrder(PCPUMCPUIDLEAF paLeaves, uint32_t cLeaves);
 #  endif
-int                 cpumCpuIdExplodeFeaturesX86(PCCPUMCPUIDLEAF paLeaves, uint32_t cLeaves, struct CPUMMSRS const *pMsrs,
-                                                CPUMFEATURESX86 *pFeatures);
+int                 cpumCpuIdExplodeFeaturesX86(PCCPUMCPUIDLEAF paLeaves, uint32_t cLeaves, CPUMFEATURESX86 *pFeatures);
 void                cpumCpuIdExplodeFeaturesX86SetSummaryBits(CPUMFEATURESX86 *pFeatures);
+DECLHIDDEN(void)    cpumCpuIdExplodeFeaturesX86Vmx(struct VMXMSRS const *pVmxMsrs, CPUMFEATURESX86 *pFeatures);
+DECLHIDDEN(void)    cpumCpuIdExplodeFeaturesX86VmxFromSupMsrs(PCSUPHWVIRTMSRS pMsrs, CPUMFEATURESX86 *pFeatures);
 void                cpumCpuIdExplodeArchCapabilities(CPUMFEATURESX86 *pFeatures, bool fHasArchCap, uint64_t fArchVal);
 # endif /* defined(RT_ARCH_X86) || defined(RT_ARCH_AMD64) || defined(VBOX_VMM_TARGET_X86) */
 # if defined(RT_ARCH_ARM64) || defined(VBOX_VMM_TARGET_ARMV8)
 int                 cpumCpuIdExplodeFeaturesArmV8(PCCPUMARMV8IDREGS pIdRegs, CPUMFEATURESARMV8 *pFeatures);
 # endif
 
+
 # ifdef IN_RING3
-DECLHIDDEN(int)     cpumR3DbgInit(PVM pVM);
+
+/** @name Per-target functions (lives in target specific source files).
+ * @{  */
+/**
+ * Called by CPUMR3Init to do target specific initializations.
+ */
+#  if defined(VBOX_VMM_TARGET_X86)
+DECLHIDDEN(int)     cpumR3InitTargetX86(PVM pVM, PCSUPHWVIRTMSRS pHostMsrs);
+#  else
+DECLHIDDEN(int)     cpumR3InitTarget(PVM pVM);
+#  endif
+/**
+ * Called by CPUMR3InitCompleted when ring-3 init is completed.
+ */
+DECLHIDDEN(int)     cpumR3InitCompletedRing3Target(PVM pVM);
+
+/**
+ * Performs target specific termination cleanups at the end of CPUMR3Term().
+ */
+DECLHIDDEN(int)     cpumR3TermTarget(PVM pVM);
+
+/**
+ * @callback_method_impl{FNSSMINTLIVEEXEC,
+ * Implemented directly in target specific source file -
+ * returns VINF_SSM_DONT_CALL_AGAIN.}
+ */
+DECLCALLBACK(int)   cpumR3LiveExecTarget(PVM pVM, PSSMHANDLE pSSM, uint32_t uPass);
+
+/**
+ * @callback_method_impl{FNSSMINTSAVEEXEC,
+ * Implemented directly in target specific source file.}
+ */
+DECLCALLBACK(int)   cpumR3SaveExecTarget(PVM pVM, PSSMHANDLE pSSM);
+
+/**
+ * @callback_method_impl{FNSSMINTLOADEXEC}
+ */
+DECLCALLBACK(int)   cpumR3LoadExecTarget(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersion, uint32_t uPass);
+
+/**
+ * Target specific done-loading function, called by cpumR3LoadDone.
+ */
+DECLHIDDEN(int)     cpumR3LoadDoneTarget(PVM pVM, PSSMHANDLE pSSM);
+
+/** What kind of cpu info dump to perform.*/
+typedef enum CPUMDUMPTYPE { CPUMDUMPTYPE_TERSE = 1, CPUMDUMPTYPE_DEFAULT, CPUMDUMPTYPE_VERBOSE } CPUMDUMPTYPE;
+/**
+ * Dump guest registers (target specific).
+ */
+DECLHIDDEN(void)    cpumR3InfoOneTarget(PVM pVM, PCVMCPU pVCpu, PCDBGFINFOHLP pHlp, CPUMDUMPTYPE enmType);
+
+/**
+ * Called by CPUMR3LogCpuIdAndMsrFeatures to do target specific work.
+ *
+ * @param   pVM                 The cross context VM structure.
+ */
+DECLHIDDEN(void)    cpumR3LogCpuIdAndMsrFeaturesTarget(PVM pVM);
+
+/**
+ * Initializes the debugger related sides of the CPUM component.
+ *
+ * Called by CPUMR3Init.
+ *
+ * @returns VBox status code.
+ * @param   pVM                 The cross context VM structure.
+ */
+DECLHIDDEN(int)     cpumR3DbgInitTarget(PVM pVM);
+/** @} */
+
+
+#  if defined(VBOX_VMM_TARGET_X86)
+DECLCALLBACK(void)  cpumR3InfoGuestHwvirt(PVM pVM, PCDBGFINFOHLP pHlp, const char *pszArgs);
+DECLCALLBACK(void)  cpumR3InfoHyper(PVM pVM, PCDBGFINFOHLP pHlp, const char *pszArgs);
+#  endif
 #  if defined(VBOX_VMM_TARGET_ARMV8)
 DECLHIDDEN(int)     cpumR3SysRegStrictInitChecks(void);
 #  elif defined(VBOX_VMM_TARGET_X86)
-int                 cpumR3InitCpuIdAndMsrs(PVM pVM, PCCPUMMSRS pHostMsrs);
-void                cpumR3InitVmxGuestFeaturesAndMsrs(PVM pVM, PCFGMNODE pCpumCfg, PCVMXMSRS pHostVmxMsrs,
+int                 cpumR3InitCpuIdAndMsrs(PVM pVM, PCSUPHWVIRTMSRS pHostMsrs);
+DECLHIDDEN(void)    cpumR3InitVmxGuestFeaturesAndMsrs(PVM pVM, PCFGMNODE pCpumCfg, PCSUPHWVIRTMSRS pHostMsrs,
                                                       PVMXMSRS pGuestVmxMsrs);
 void                cpumR3CpuIdRing3InitDone(PVM pVM);
 #  endif
@@ -593,9 +668,11 @@ int                 cpumR3LoadCpuIdArmV8(PVM pVM, PSSMHANDLE pSSM, uint32_t uVer
 DECLCALLBACK(void)  cpumR3CpuFeatInfo(PVM pVM, PCDBGFINFOHLP pHlp, const char *pszArgs);
 #  endif
 DECLCALLBACK(void)  cpumR3CpuIdInfo(PVM pVM, PCDBGFINFOHLP pHlp, const char *pszArgs);
+DECLHIDDEN(void)    cpumR3InfoParseArg(const char *pszArgs, CPUMDUMPTYPE *penmType, const char **ppszComment);
 
 int                 cpumR3DbGetCpuInfo(const char *pszName, PCPUMINFO pInfo);
 #  ifdef VBOX_VMM_TARGET_X86
+DECLHIDDEN(void)    cpumR3InfoFormatFlagsX86(char *pszEFlags, uint32_t efl);
 int                 cpumR3MsrRangesInsert(PVM pVM, PCPUMMSRRANGE *ppaMsrRanges, uint32_t *pcMsrRanges, PCCPUMMSRRANGE pNewRange);
 DECLHIDDEN(int)     cpumR3MsrReconcileWithCpuId(PVM pVM, bool fForceFlushCmd, bool fForceSpecCtrl);
 int                 cpumR3MsrApplyFudge(PVM pVM);

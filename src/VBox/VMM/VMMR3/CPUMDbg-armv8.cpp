@@ -347,15 +347,7 @@ static DBGFREGDESC const g_aCpumRegGstDescs[] =
 };
 
 
-/**
- * Initializes the debugger related sides of the CPUM component.
- *
- * Called by CPUMR3Init.
- *
- * @returns VBox status code.
- * @param   pVM                 The cross context VM structure.
- */
-DECLHIDDEN(int) cpumR3DbgInit(PVM pVM)
+DECLHIDDEN(int) cpumR3DbgInitTarget(PVM pVM)
 {
     for (VMCPUID idCpu = 0; idCpu < pVM->cCpus; idCpu++)
     {

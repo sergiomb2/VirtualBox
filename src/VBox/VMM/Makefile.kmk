@@ -112,6 +112,7 @@ VBoxVMM_SOURCES  = \
 	VMMR3/APIC.cpp \
 	VMMR3/CFGM.cpp \
 	VMMR3/CPUM.cpp \
+	VMMR3/CPUMR3-x86.cpp \
 	VMMR3/CPUMR3CpuId.cpp \
 	VMMR3/CPUMR3Db.cpp \
 	VMMR3/CPUMR3Msr-x86.cpp \
@@ -249,6 +250,7 @@ ifn1of (VBOX_WITH_ONLY_PGM_NEM_MODE, $(VBoxVMM_DEFS))
  	VMMAll/PGMAllPool.cpp
 endif
 VBoxVMM_SOURCES.amd64 += \
+	VMMR3/CPUMR3Host-x86.cpp \
 	VMMR3/PGMR3DbgA.asm \
 	$(if-expr !defined(IEM_WITHOUT_ASSEMBLY),VMMAll/target-x86/IEMAllAImpl-x86-amd64.asm,) \
 	VMMAll/VMMAllA.asm
@@ -453,6 +455,7 @@ ifdef VBOX_WITH_VIRT_ARMV8
  	VBoxVMM.d \
  	VMMR3/VMMR3VTable.cpp \
  	VMMR3/CFGM.cpp \
+ 	VMMR3/CPUM.cpp \
  	VMMR3/CPUM-armv8.cpp \
  	VMMR3/CPUMDbg-armv8.cpp \
  	VMMAll/CPUMAllCpuId.cpp \
@@ -583,6 +586,7 @@ ifdef VBOX_WITH_VIRT_ARMV8
  endif
 
  VBoxVMMArm_SOURCES.amd64 += \
+ 	VMMR3/CPUMR3Host-x86.cpp \
  	VMMR3/PGMR3DbgA.asm
 
  VBoxVMMArm_SOURCES.darwin.arm64 += \

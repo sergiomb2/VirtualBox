@@ -78,10 +78,12 @@ VBoxCpuReport_SOURCES    := \
 VBoxCpuReport_SOURCES.amd64 := \
 	VBoxCpuReport-x86.cpp \
 	VBoxCpuReportMsrSup.cpp \
+	../VMMR3/CPUMR3Host-x86.cpp \
 	../VMMR3/CPUMR3CpuId.cpp
 VBoxCpuReport_SOURCES.x86 := \
 	VBoxCpuReport-x86.cpp \
 	VBoxCpuReportMsrSup.cpp \
+	../VMMR3/CPUMR3Host-x86.cpp \
 	../VMMR3/CPUMR3CpuId.cpp
 VBoxCpuReport_SOURCES.linux.amd64 := \
 	VBoxCpuReportMsrLinux.cpp

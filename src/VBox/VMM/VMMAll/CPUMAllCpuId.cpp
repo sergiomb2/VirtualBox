@@ -1287,7 +1287,12 @@ static PCCPUMCPUIDLEAF cpumCpuIdFindLeafEx(PCCPUMCPUIDLEAF paLeaves, uint32_t cL
 }
 
 
-static void cpumExplodeVmxFeatures(PCVMXMSRS pVmxMsrs, CPUMFEATURESX86 *pFeatures)
+/**
+ * This explodes the VMX MSRs into the feature structure.
+ *
+ * The feature structure must be otherwise fully populated.
+ */
+DECLHIDDEN(void) cpumCpuIdExplodeFeaturesX86Vmx(PCVMXMSRS pVmxMsrs, CPUMFEATURESX86 *pFeatures)
 {
     Assert(pVmxMsrs);
     Assert(pFeatures);
@@ -1417,6 +1422,41 @@ static void cpumExplodeVmxFeatures(PCVMXMSRS pVmxMsrs, CPUMFEATURESX86 *pFeature
 }
 
 
+/**
+ * Call cpumCpuIdExplodeFeaturesX86Vmx with SUPHWVIRTMSRS instead of VMXMSRS.
+ *
+ */
+DECLHIDDEN(void) cpumCpuIdExplodeFeaturesX86VmxFromSupMsrs(PCSUPHWVIRTMSRS pMsrs, CPUMFEATURESX86 *pFeatures)
+{
+    /* This is a bit stupid as the structures are almost identical
+       (SUPHWVIRTMSRS has one extra member, u64FeatCtrl). */
+    VMXMSRS VmxMsrs;
+    VmxMsrs.u64Basic        = pMsrs->u.vmx.u64Basic;
+    VmxMsrs.PinCtls.u       = pMsrs->u.vmx.PinCtls.u;
+    VmxMsrs.ProcCtls.u      = pMsrs->u.vmx.ProcCtls.u;
+    VmxMsrs.ProcCtls2.u     = pMsrs->u.vmx.ProcCtls2.u;
+    VmxMsrs.ExitCtls.u      = pMsrs->u.vmx.ExitCtls.u;
+    VmxMsrs.EntryCtls.u     = pMsrs->u.vmx.EntryCtls.u;
+    VmxMsrs.TruePinCtls.u   = pMsrs->u.vmx.TruePinCtls.u;
+    VmxMsrs.TrueProcCtls.u  = pMsrs->u.vmx.TrueProcCtls.u;
+    VmxMsrs.TrueEntryCtls.u = pMsrs->u.vmx.TrueEntryCtls.u;
+    VmxMsrs.TrueExitCtls.u  = pMsrs->u.vmx.TrueExitCtls.u;
+    VmxMsrs.u64Misc         = pMsrs->u.vmx.u64Misc;
+    VmxMsrs.u64Cr0Fixed0    = pMsrs->u.vmx.u64Cr0Fixed0;
+    VmxMsrs.u64Cr0Fixed1    = pMsrs->u.vmx.u64Cr0Fixed1;
+    VmxMsrs.u64Cr4Fixed0    = pMsrs->u.vmx.u64Cr4Fixed0;
+    VmxMsrs.u64Cr4Fixed1    = pMsrs->u.vmx.u64Cr4Fixed1;
+    VmxMsrs.u64VmcsEnum     = pMsrs->u.vmx.u64VmcsEnum;
+    VmxMsrs.u64VmFunc       = pMsrs->u.vmx.u64VmFunc;
+    VmxMsrs.u64EptVpidCaps  = pMsrs->u.vmx.u64EptVpidCaps;
+    VmxMsrs.u64ProcCtls3    = pMsrs->u.vmx.u64ProcCtls3;
+    VmxMsrs.u64ExitCtls2    = pMsrs->u.vmx.u64ExitCtls2;
+    RT_ZERO(VmxMsrs.a_u64Reserved);
+
+    cpumCpuIdExplodeFeaturesX86Vmx(&VmxMsrs, pFeatures);
+}
+
+
 void cpumCpuIdExplodeFeaturesX86SetSummaryBits(CPUMFEATURESX86 *pFeatures)
 {
     /* Summary or all bits indicating the presence of the IA32_SPEC_CTRL MSR. */
@@ -1432,10 +1472,8 @@ void cpumCpuIdExplodeFeaturesX86SetSummaryBits(CPUMFEATURESX86 *pFeatures)
 }
 
 
-int cpumCpuIdExplodeFeaturesX86(PCCPUMCPUIDLEAF paLeaves, uint32_t cLeaves,
-                                struct CPUMMSRS const *pMsrs, CPUMFEATURESX86 *pFeatures)
+int cpumCpuIdExplodeFeaturesX86(PCCPUMCPUIDLEAF paLeaves, uint32_t cLeaves, CPUMFEATURESX86 *pFeatures)
 {
-    Assert(pMsrs);
     RT_ZERO(*pFeatures);
     if (cLeaves >= 2)
     {
@@ -1512,13 +1550,6 @@ int cpumCpuIdExplodeFeaturesX86(PCCPUMCPUIDLEAF paLeaves, uint32_t cLeaves,
         pFeatures->fPclMul              = RT_BOOL(pStd1Leaf->uEcx & X86_CPUID_FEATURE_ECX_PCLMUL);
         pFeatures->fMovBe               = RT_BOOL(pStd1Leaf->uEcx & X86_CPUID_FEATURE_ECX_MOVBE);
         pFeatures->fF16c                = RT_BOOL(pStd1Leaf->uEcx & X86_CPUID_FEATURE_ECX_F16C);
-# if (defined(RT_ARCH_X86) || defined(RT_ARCH_AMD64) || defined(VBOX_VMM_TARGET_X86)) \
- && !defined(VBOX_VMM_TARGET_ARMV8) /** @todo Ugly hack to avoid dragging in hm_vmx.h when targeting armv8. */
-        if (pFeatures->fVmx)
-            cpumExplodeVmxFeatures(&pMsrs->hwvirt.vmx, pFeatures);
-# else
-        RT_NOREF_PV(pMsrs);
-# endif
 
         /* Structured extended features. */
         PCCPUMCPUIDLEAF const pSxfLeaf0 = cpumCpuIdFindLeafEx(paLeaves, cLeaves, 7, 0);

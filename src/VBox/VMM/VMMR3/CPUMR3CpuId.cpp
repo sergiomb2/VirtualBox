@@ -56,32 +56,6 @@
 #define CPUM_CPUID_MAX_LEAVES       2048
 
 
-#if defined(RT_ARCH_X86) || defined(RT_ARCH_AMD64)
-/**
- * Determins the host CPU MXCSR mask.
- *
- * @returns MXCSR mask.
- */
-VMMR3DECL(uint32_t) CPUMR3DeterminHostMxCsrMask(void)
-{
-    if (   ASMHasCpuId()
-        && RTX86IsValidStdRange(ASMCpuId_EAX(0))
-        && ASMCpuId_EDX(1) & X86_CPUID_FEATURE_EDX_FXSR)
-    {
-        uint8_t volatile abBuf[sizeof(X86FXSTATE) + 64];
-        PX86FXSTATE      pState = (PX86FXSTATE)&abBuf[64 - ((uintptr_t)&abBuf[0] & 63)];
-        RT_ZERO(*pState);
-        ASMFxSave(pState);
-        if (pState->MXCSR_MASK == 0)
-            return 0xffbf;
-        return pState->MXCSR_MASK;
-    }
-    return 0;
-}
-#endif
-
-
-
 #ifndef IN_VBOX_CPU_REPORT
 /**
  * Gets a matching leaf in the CPUID leaf array, converted to a CPUMCPUID.
@@ -873,9 +847,8 @@ static int cpumR3CpuIdInitLoadOverrideSet(uint32_t uStart, PCPUMCPUID paLeaves, 
  * @param   pCpum       The CPUM part of @a VM.
  * @param   paLeaves    The leaves.  These will be copied (but not freed).
  * @param   cLeaves     The number of leaves.
- * @param   pMsrs       The MSRs.
  */
-static int cpumR3CpuIdInstallAndExplodeLeaves(PVM pVM, PCPUM pCpum, PCPUMCPUIDLEAF paLeaves, uint32_t cLeaves, PCCPUMMSRS pMsrs)
+static int cpumR3CpuIdInstallAndExplodeLeaves(PVM pVM, PCPUM pCpum, PCPUMCPUIDLEAF paLeaves, uint32_t cLeaves)
 {
 # ifdef VBOX_STRICT
     cpumCpuIdAssertOrder(paLeaves, cLeaves);
@@ -923,8 +896,7 @@ static int cpumR3CpuIdInstallAndExplodeLeaves(PVM pVM, PCPUM pCpum, PCPUMCPUIDLE
     /*
      * Explode the guest CPU features.
      */
-    int rc = cpumCpuIdExplodeFeaturesX86(pCpum->GuestInfo.paCpuIdLeavesR3, pCpum->GuestInfo.cCpuIdLeaves, pMsrs,
-                                         &pCpum->GuestFeatures);
+    int rc = cpumCpuIdExplodeFeaturesX86(pCpum->GuestInfo.paCpuIdLeavesR3, pCpum->GuestInfo.cCpuIdLeaves, &pCpum->GuestFeatures);
     AssertLogRelRCReturn(rc, rc);
 
     /*
@@ -972,8 +944,11 @@ static int cpumR3CpuIdInstallAndExplodeLeaves(PVM pVM, PCPUM pCpum, PCPUMCPUIDLE
     /*
      * Configure XSAVE offsets according to the CPUID info and set the feature flags.
      */
-    PVMCPU pVCpu0 = pVM->apCpusR3[0];
+    PVMCPU const pVCpu0 = pVM->apCpusR3[0];
     AssertCompile(sizeof(pVCpu0->cpum.s.Guest.abXState) == CPUM_MAX_XSAVE_AREA_SIZE);
+    AssertLogRelReturn(   pVM->cpum.s.GuestFeatures.cbMaxExtendedState >= sizeof(X86FXSTATE)
+                       && pVM->cpum.s.GuestFeatures.cbMaxExtendedState <= sizeof(pVCpu0->cpum.s.Guest.abXState),
+                       VERR_CPUM_IPE_2);
     memset(&pVCpu0->cpum.s.Guest.aoffXState[0], 0xff, sizeof(pVCpu0->cpum.s.Guest.aoffXState));
     pVCpu0->cpum.s.Guest.aoffXState[XSAVE_C_X87_BIT] = 0;
     pVCpu0->cpum.s.Guest.aoffXState[XSAVE_C_SSE_BIT] = 0;
@@ -3486,12 +3461,11 @@ static int cpumR3InitMtrrCap(PVM pVM, bool fMtrrVarCountIsVirt)
  *
  * @returns VBox status code.
  * @param   pVM          The cross context VM structure.
- * @param   pHostMsrs    Pointer to the host MSRs.
+ * @param   pHostMsrs    Pointer to the host MSRs. NULL if not on an x86 host or
+ *                       no support driver is being used.
  */
-int cpumR3InitCpuIdAndMsrs(PVM pVM, PCCPUMMSRS pHostMsrs)
+int cpumR3InitCpuIdAndMsrs(PVM pVM, PCSUPHWVIRTMSRS pHostMsrs)
 {
-    Assert(pHostMsrs);
-
     PCPUM       pCpum    = &pVM->cpum.s;
     PCFGMNODE   pCpumCfg = CFGMR3GetChild(CFGMR3GetRoot(pVM), "CPUM");
 
@@ -3580,15 +3554,11 @@ int cpumR3InitCpuIdAndMsrs(PVM pVM, PCCPUMMSRS pHostMsrs)
                         "Found unsupported configuration node '/CPUM/CPUID/'. "
                         "Please use IMachine::setCPUIDLeaf() instead.");
 
-    CPUMMSRS GuestMsrs;
-    RT_ZERO(GuestMsrs);
-
     /*
      * Pre-explode the CPUID info.
      */
     if (RT_SUCCESS(rc))
-        rc = cpumCpuIdExplodeFeaturesX86(pCpum->GuestInfo.paCpuIdLeavesR3, pCpum->GuestInfo.cCpuIdLeaves, &GuestMsrs,
-                                         &pCpum->GuestFeatures);
+        rc = cpumCpuIdExplodeFeaturesX86(pCpum->GuestInfo.paCpuIdLeavesR3, pCpum->GuestInfo.cCpuIdLeaves, &pCpum->GuestFeatures);
 
     /*
      * Sanitize the cpuid information passed on to the guest.
@@ -3611,8 +3581,7 @@ int cpumR3InitCpuIdAndMsrs(PVM pVM, PCCPUMMSRS pHostMsrs)
     if (RT_SUCCESS(rc))
     {
         void * const pvFree = pCpum->GuestInfo.paCpuIdLeavesR3;
-        rc = cpumR3CpuIdInstallAndExplodeLeaves(pVM, pCpum, pCpum->GuestInfo.paCpuIdLeavesR3,
-                                                pCpum->GuestInfo.cCpuIdLeaves, &GuestMsrs);
+        rc = cpumR3CpuIdInstallAndExplodeLeaves(pVM, pCpum, pCpum->GuestInfo.paCpuIdLeavesR3, pCpum->GuestInfo.cCpuIdLeaves);
         AssertLogRelRC(rc);
         RTMemFree(pvFree);
         if (RT_SUCCESS(rc))
@@ -3623,6 +3592,7 @@ int cpumR3InitCpuIdAndMsrs(PVM pVM, PCCPUMMSRS pHostMsrs)
              */
             if (RT_SUCCESS(rc))
                 rc = cpumR3MsrReconcileWithCpuId(pVM, false, false);
+
             /*
              * MSR fudging.
              */
@@ -3800,15 +3770,24 @@ int cpumR3InitCpuIdAndMsrs(PVM pVM, PCCPUMMSRS pHostMsrs)
                 if (pVM->cpum.s.GuestFeatures.fVmx)
                 {
                     Assert(Config.fNestedHWVirt);
-                    cpumR3InitVmxGuestFeaturesAndMsrs(pVM, pCpumCfg, &pHostMsrs->hwvirt.vmx, &GuestMsrs.hwvirt.vmx);
+
+                    VMXMSRS GuestVmxMsrs;
+                    RT_ZERO(GuestVmxMsrs);
+                    cpumR3InitVmxGuestFeaturesAndMsrs(pVM, pCpumCfg, pHostMsrs, &GuestVmxMsrs);
 
                     /* Copy MSRs to all VCPUs */
-                    PCVMXMSRS pVmxMsrs = &GuestMsrs.hwvirt.vmx;
                     for (VMCPUID idCpu = 0; idCpu < pVM->cCpus; idCpu++)
                     {
                         PVMCPU pVCpu = pVM->apCpusR3[idCpu];
-                        memcpy(&pVCpu->cpum.s.Guest.hwvirt.vmx.Msrs, pVmxMsrs, sizeof(*pVmxMsrs));
+                        AssertCompile(sizeof(GuestVmxMsrs) == sizeof(pVCpu->cpum.s.Guest.hwvirt.vmx.Msrs));
+                        memcpy(&pVCpu->cpum.s.Guest.hwvirt.vmx.Msrs, &GuestVmxMsrs, sizeof(GuestVmxMsrs));
                     }
+
+#if 0 /** @todo We need to expand GuestMsrs.hwvirt.vmx into the guest features!
+       *        The cpumR3CpuIdInstallAndExplodeLeaves call way above, is fed MSRs
+       *        that are all zeros all the way back to the 6.0 branch.  */
+                    cpumCpuIdExplodeFeaturesX86Vmx(GuestVmxMsrs, &pVM->cpum.s.GuestFeatures);
+#endif
                 }
 
                 return VINF_SUCCESS;
@@ -4595,9 +4574,8 @@ static int cpumR3LoadGuestCpuIdArray(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersion
  * @param   uVersion            The format version.
  * @param   paLeaves            Guest CPUID leaves loaded from the state.
  * @param   cLeaves             The number of leaves in @a paLeaves.
- * @param   pMsrs               The guest MSRs.
  */
-static int cpumR3LoadCpuIdInner(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersion, PCPUMCPUIDLEAF paLeaves, uint32_t cLeaves, PCCPUMMSRS pMsrs)
+static int cpumR3LoadCpuIdInner(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersion, PCPUMCPUIDLEAF paLeaves, uint32_t cLeaves)
 {
     AssertMsgReturn(uVersion >= CPUM_SAVED_STATE_VERSION_VER3_2, ("%u\n", uVersion), VERR_SSM_UNSUPPORTED_DATA_UNIT_VERSION);
 #if !defined(RT_ARCH_AMD64) && !defined(RT_ARCH_X86)
@@ -5145,7 +5123,7 @@ static int cpumR3LoadCpuIdInner(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersion, PCP
      * We're good, commit the CPU ID leaves.
      */
     pVM->cpum.s.GuestInfo.DefCpuId = GuestDefCpuId;
-    rc = cpumR3CpuIdInstallAndExplodeLeaves(pVM, &pVM->cpum.s, paLeaves, cLeaves, pMsrs);
+    rc = cpumR3CpuIdInstallAndExplodeLeaves(pVM, &pVM->cpum.s, paLeaves, cLeaves);
     AssertLogRelRCReturn(rc, rc);
 
     return VINF_SUCCESS;
@@ -5175,8 +5153,12 @@ int cpumR3LoadCpuIdX86(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersion, PCCPUMMSRS p
     AssertRC(rc);
     if (RT_SUCCESS(rc))
     {
-        rc = cpumR3LoadCpuIdInner(pVM, pSSM, uVersion, paLeaves, cLeaves, pMsrs);
+        rc = cpumR3LoadCpuIdInner(pVM, pSSM, uVersion, paLeaves, cLeaves);
         RTMemFree(paLeaves);
+
+        /* Expand the VMX MSRs if enabled. */
+        if (pVM->cpum.s.GuestFeatures.fVmx)
+            cpumCpuIdExplodeFeaturesX86Vmx(&pMsrs->hwvirt.vmx, &pVM->cpum.s.GuestFeatures);
     }
     return rc;
 }

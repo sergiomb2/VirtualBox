@@ -1887,6 +1887,10 @@ VMMR3DECL(PCCPUMDBENTRY)    CPUMR3DbGetEntryByName(const char *pszName);
 /** Pointer to CPUMR3DbGetEntryByName. */
 typedef DECLCALLBACKPTR(PCCPUMDBENTRY, PFNCPUMDBGETENTRYBYNAME, (const char *pszName));
 
+# if defined(RT_ARCH_X86) || defined(RT_ARCH_AMD64)
+VMMR3DECL(uint32_t)         CPUMR3DeterminHostMxCsrMask(void);
+# endif
+
 VMMR3_INT_DECL(void)    CPUMR3NemActivateGuestDebugState(PVMCPUCC pVCpu);
 VMMR3_INT_DECL(void)    CPUMR3NemActivateHyperDebugState(PVMCPUCC pVCpu);
 /** @} */
