@@ -1088,7 +1088,10 @@ DECLCALLBACK(int) gicR3Construct(PPDMDEVINS pDevIns, int iInstance, PCFGMNODE pC
 
     /* ITS. */
     PGITSDEV pGitsDev = &pGicDev->Gits;
+    GIC_REG_COUNTER(&pGitsDev->StatCmdMapd,   "ITS/Commands/MAPD",   "Number of MAPD commands executed.");
     GIC_REG_COUNTER(&pGitsDev->StatCmdMapc,   "ITS/Commands/MAPC",   "Number of MAPC commands executed.");
+    GIC_REG_COUNTER(&pGitsDev->StatCmdMapi,   "ITS/Commands/MAPI",   "Number of MAPI commands executed.");
+    GIC_REG_COUNTER(&pGitsDev->StatCmdMapti,  "ITS/Commands/MAPTI",  "Number of MAPTI commands executed.");
     GIC_REG_COUNTER(&pGitsDev->StatCmdSync,   "ITS/Commands/SYNC",   "Number of SYNC commands executed.");
     GIC_REG_COUNTER(&pGitsDev->StatCmdInvall, "ITS/Commands/INVALL", "Number of INVALL commands executed.");
 

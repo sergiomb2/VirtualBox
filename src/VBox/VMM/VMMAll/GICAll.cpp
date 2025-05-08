@@ -73,14 +73,15 @@
 /*********************************************************************************************************************************
 *   Defined Constants And Macros                                                                                                 *
 *********************************************************************************************************************************/
-#define GIC_IDLE_PRIORITY                   0xff
-#define GIC_IS_INTR_SGI(a_uIntId)           (a_uIntId - GIC_INTID_RANGE_SGI_START < GIC_INTID_SGI_RANGE_SIZE)
-#define GIC_IS_INTR_PPI(a_uIntId)           (a_uIntId - GIC_INTID_RANGE_PPI_START < GIC_INTID_PPI_RANGE_SIZE)
-#define GIC_IS_INTR_SGI_OR_PPI(a_uIntId)    (a_uIntId - GIC_INTID_RANGE_SGI_START < GIC_INTID_PPI_RANGE_SIZE)
-#define GIC_IS_INTR_SPI(a_uIntId)           (a_uIntId - GIC_INTID_RANGE_SPI_START < GIC_INTID_SPI_RANGE_SIZE)
-#define GIC_IS_INTR_SPECIAL(a_uIntId)       (a_uIntId - GIC_INTID_RANGE_SPECIAL_START < GIC_INTID_EXT_PPI_RANGE_SIZE)
-#define GIC_IS_INTR_EXT_PPI(a_uIntId)       (a_uIntId - GIC_INTID_RANGE_EXT_PPI_START < GIC_INTID_EXT_PPI_RANGE_SIZE)
-#define GIC_IS_INTR_EXT_SPI(a_uIntId)       (a_uIntId - GIC_INTID_RANGE_EXT_SPI_START < GIC_INTID_EXT_SPI_RANGE_SIZE)
+#define GIC_IDLE_PRIORITY                       0xff
+#define GIC_IS_INTR_SGI(a_uIntId)               ((a_uIntId) - GIC_INTID_RANGE_SGI_START < GIC_INTID_SGI_RANGE_SIZE)
+#define GIC_IS_INTR_PPI(a_uIntId)               ((a_uIntId) - GIC_INTID_RANGE_PPI_START < GIC_INTID_PPI_RANGE_SIZE)
+#define GIC_IS_INTR_SGI_OR_PPI(a_uIntId)        ((a_uIntId) - GIC_INTID_RANGE_SGI_START < GIC_INTID_PPI_RANGE_SIZE)
+#define GIC_IS_INTR_SPI(a_uIntId)               ((a_uIntId) - GIC_INTID_RANGE_SPI_START < GIC_INTID_SPI_RANGE_SIZE)
+#define GIC_IS_INTR_SPECIAL(a_uIntId)           ((a_uIntId) - GIC_INTID_RANGE_SPECIAL_START < GIC_INTID_EXT_PPI_RANGE_SIZE)
+#define GIC_IS_INTR_EXT_PPI(a_uIntId)           ((a_uIntId) - GIC_INTID_RANGE_EXT_PPI_START < GIC_INTID_EXT_PPI_RANGE_SIZE)
+#define GIC_IS_INTR_EXT_SPI(a_uIntId)           ((a_uIntId) - GIC_INTID_RANGE_EXT_SPI_START < GIC_INTID_EXT_SPI_RANGE_SIZE)
+#define GIC_IS_INTR_LPI(a_pGicDev, a_uIntId)    ((a_uIntId) - GIC_INTID_RANGE_LPI_START < RT_ELEMENTS((a_pGicDev)->abLpiConfig))
 
 
 #ifdef LOG_ENABLED
@@ -659,6 +660,13 @@ static void gicDistHasIrqPendingForVCpu(PCGICDEV pGicDev, PCVMCPUCC pVCpu, VMCPU
 }
 
 
+DECLHIDDEN(bool) gicDistIsLpiValid(PPDMDEVINS pDevIns, uint16_t uIntId)
+{
+    PGICDEV pGicDev = PDMDEVINS_2_DATA(pDevIns, PGICDEV);
+    return GIC_IS_INTR_LPI(pGicDev, uIntId);
+}
+
+
 DECLHIDDEN(void) gicDistReadLpiConfigTableFromMem(PPDMDEVINS pDevIns)
 {
     PGICDEV pGicDev = PDMDEVINS_2_DATA(pDevIns, PGICDEV);
@@ -674,7 +682,7 @@ DECLHIDDEN(void) gicDistReadLpiConfigTableFromMem(PPDMDEVINS pDevIns)
     }
 
     /* Copy the LPI config table from guest memory to our internal cache. */
-    Assert(UINT32_C(2) << pGicDev->uMaxLpi <= RT_ELEMENTS(pGicDev->abLpiConfig));
+    Assert(UINT32_C(2) << pGicDev->uMaxLpi == RT_ELEMENTS(pGicDev->abLpiConfig));
     RTGCPHYS const GCPhysLpiConfigTable = pGicDev->uLpiConfigBaseReg.u & GIC_BF_REDIST_REG_PROPBASER_PHYS_ADDR_MASK;
     uint32_t const cbLpiConfigTable     = sizeof(pGicDev->abLpiConfig);
 

@@ -351,6 +351,7 @@ DECL_HIDDEN_CALLBACK(VBOXSTRICTRC) gicItsMmioWrite(PPDMDEVINS pDevIns, void *pvU
 DECL_HIDDEN_CALLBACK(VBOXSTRICTRC) gicItsMmioRead(PPDMDEVINS pDevIns, void *pvUser, RTGCPHYS off, void *pv, unsigned cb);
 
 DECLHIDDEN(void)                   gicDistReadLpiConfigTableFromMem(PPDMDEVINS pDevIns);
+DECLHIDDEN(bool)                   gicDistIsLpiValid(PPDMDEVINS pDevIns, uint16_t uIntId);
 
 DECLHIDDEN(void)                   gicResetCpu(PPDMDEVINS pDevIns, PVMCPUCC pVCpu);
 DECLHIDDEN(void)                   gicReset(PPDMDEVINS pDevIns);

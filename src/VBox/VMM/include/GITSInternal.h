@@ -44,6 +44,7 @@
  */
 
 /** @name GITS Device Table Entry (DTE).
+ * This gets stored to and loaded from guest memory.
  *  @{ */
 #define GITS_BF_DTE_ITT_RANGE_SHIFT                 0
 #define GITS_BF_DTE_ITT_RANGE_MASK                  UINT64_C(0x000000000000001f)
@@ -58,26 +59,38 @@
 RT_BF_ASSERT_COMPILE_CHECKS(GITS_BF_DTE_, UINT64_C(0), UINT64_MAX,
                             (ITT_RANGE, RSVD_11_5, ITT_ADDR, RSVD_62_52, VALID));
 #define GITS_DTE_VALID_MASK                         (UINT64_MAX & ~(GITS_BF_DTE_RSVD_11_4_MASK | GITS_BF_DTE_RSVD_62_52_MASK));
-/** GITS DTE: Size of the DTE in bytes. */
-#define GITS_DTE_SIZE                               8
+
+/** GITS DTE. */
+typedef uint64_t GITSDTE;
 /** @} */
 
 /** @name GITS Interrupt Translation Entry (ITE).
+ * This gets stored to and loaded from guest memory.
+ *
+ * We use the full 64-bit format despite currently not supporting virtual INTIDs as
+ * in the future accomodating changes to size/layout of data that resides in guest
+ * memory is tedious.
  * @{ */
-#define GITS_BF_ITE_ICID_SHIFT                      0
-#define GITS_BF_ITE_ICID_MASK                       UINT32_C(0x000000ff)
-#define GITS_BF_ITE_INTID_SHIFT                     8
-#define GITS_BF_ITE_INTID_MASK                      UINT32_C(0x00ffff00)
-#define GITS_BF_ITE_RSVD_30_24_SHIFT                24
-#define GITS_BF_ITE_RSVD_30_24_MASK                 UINT32_C(0x7f000000)
-#define GITS_BF_ITE_VALID_SHIFT                     31
-#define GITS_BF_ITE_VALID_MASK                      UINT32_C(0x80000000)
-RT_BF_ASSERT_COMPILE_CHECKS(GITS_BF_ITE_, UINT32_C(0), UINT32_MAX,
-                            (ICID, INTID, RSVD_30_24, VALID));
-/** GITS ITE: Size of the ITE in bytes. */
-#define GITS_ITE_SIZE                               4
+#define GITS_BF_ITE_VPEID_SHIFT                     0
+#define GITS_BF_ITE_VPEID_MASK                      UINT64_C(0x000000000000ffff)
+#define GITS_BF_ITE_ICID_SHIFT                      16
+#define GITS_BF_ITE_ICID_MASK                       UINT64_C(0x00000000ffff0000)
+#define GITS_BF_ITE_HYPER_INTID_SHIFT               32
+#define GITS_BF_ITE_HYPER_INTID_MASK                UINT64_C(0x00007fff00000000)
+#define GITS_BF_ITE_INTID_SHIFT                     47
+#define GITS_BF_ITE_INTID_MASK                      UINT64_C(0x3fff800000000000)
+#define GITS_BF_ITE_IS_PHYS_SHIFT                   62
+#define GITS_BF_ITE_IS_PHYS_MASK                    UINT64_C(0x4000000000000000)
+#define GITS_BF_ITE_VALID_SHIFT                     63
+#define GITS_BF_ITE_VALID_MASK                      UINT64_C(0x8000000000000000)
+RT_BF_ASSERT_COMPILE_CHECKS(GITS_BF_ITE_, UINT64_C(0), UINT64_MAX,
+                            (VPEID, ICID, HYPER_INTID, INTID, IS_PHYS, VALID));
+
+/** GITS ITE. */
+typedef uint64_t GITSITE;
 /** @} */
 
+#if 0
 /** @name GITS Collection Table Entry (CTE).
  * @{ */
 #define GITS_BF_CTE_RDBASE_SHIFT                    0
@@ -90,6 +103,7 @@ RT_BF_ASSERT_COMPILE_CHECKS(GITS_BF_CTE_, UINT32_C(0), UINT32_MAX,
                             (RDBASE, RSVD_30_16, VALID));
 /** GITS CTE: Size of the CTE in bytes. */
 #define GITS_CTE_SIZE                               4
+#endif
 /** @} */
 
 /**
@@ -109,33 +123,45 @@ typedef enum GITSDIAG
     kGitsDiag_CmdQueue_Basic_Unknown_Cmd,
     kGitsDiag_CmdQueue_Basic_Invalid_PhysAddr,
 
-    /* Command queue: command errors. */
-    kGitsDiag_CmdQueue_Cmd_Invall_Icid_Overflow,
-    kGitsDiag_CmdQueue_Cmd_Mapc_Icid_Overflow,
-    kGitsDiag_CmdQueue_Cmd_Mapd_Size_Overflow,
+    /* Command: INVALL. */
+    kGitsDiag_CmdQueue_Cmd_Invall_Icid_Invalid,
 
-    /* Member for determining array index limit. */
+    /* Command: MAPC. */
+    kGitsDiag_CmdQueue_Cmd_Mapc_Icid_Invalid,
+
+    /* Command: MAPD. */
+    kGitsDiag_CmdQueue_Cmd_Mapd_Size_Invalid,
+
+    /* Command: MAPI. */
+    kGitsDiag_CmdQueue_Cmd_Mapi_DevId_Unmapped,
+    kGitsDiag_CmdQueue_Cmd_Mapi_Dte_Rd_Failed,
+    kGitsDiag_CmdQueue_Cmd_Mapi_EventId_Invalid,
+    kGitsDiag_CmdQueue_Cmd_Mapi_IcId_Invalid,
+    kGitsDiag_CmdQueue_Cmd_Mapi_Lpi_Invalid,
+
+    /* Command: MAPTI. */
+    kGitsDiag_CmdQueue_Cmd_Mapi_Ite_Wr_Failed,
+    kGitsDiag_CmdQueue_Cmd_Mapti_DevId_Unmapped,
+    kGitsDiag_CmdQueue_Cmd_Mapti_Dte_Rd_Failed,
+    kGitsDiag_CmdQueue_Cmd_Mapti_EventId_Invalid,
+    kGitsDiag_CmdQueue_Cmd_Mapti_IcId_Invalid,
+    kGitsDiag_CmdQueue_Cmd_Mapti_Ite_Wr_Failed,
+    kGitsDiag_CmdQueue_Cmd_Mapti_Lpi_Invalid,
+
     kGitsDiag_End,
-
-    /* Usual 32-bit hack. */
-    kGitsDiag_32Bit_Hack = 0x7fffffff
 } GITSDIAG;
 AssertCompileSize(GITSDIAG, 4);
 
+#if 0
 typedef struct GITSITE
 {
     uint32_t        uDevId;
     uint32_t        uEventId;
     uint16_t        uIntId;
-    uint16_t        uIcId;
+    uint8_t         uIcId;
+    uint8_t         afPadding;
 } GITSITE;
 AssertCompileSizeAlignment(GITSITE, 4);
-
-typedef struct GITSCTE
-{
-    VMCPUID         idTargetCpu;
-} GITSCTE;
-AssertCompileSizeAlignment(GITSCTE, 4);
 
 /**
  * Device Table Entry (DTE).
@@ -145,6 +171,7 @@ typedef struct GITSDTE
 {
     /** Whether this entry is valid. */
     uint8_t         fValid;
+    /** Padding. */
     uint8_t         afPadding;
     /** The index of the cached interrupt translation table. */
     uint16_t        idxItt;
@@ -161,6 +188,13 @@ typedef GITSDTE *PGITSDTE;
 /** Pointer to a const GITS device table entry. */
 typedef GITSDTE const *PCGITSDTE;
 AssertCompileSize(GITSDTE, 20);
+#endif
+
+typedef struct GITSCTE
+{
+    VMCPUID         idTargetCpu;
+} GITSCTE;
+AssertCompileSizeAlignment(GITSCTE, 4);
 
 /**
  * The GIC Interrupt Translation Service device state.
@@ -219,6 +253,8 @@ typedef struct GITSDEV
 #ifdef VBOX_WITH_STATISTICS
     STAMCOUNTER             StatCmdMapd;
     STAMCOUNTER             StatCmdMapc;
+    STAMCOUNTER             StatCmdMapi;
+    STAMCOUNTER             StatCmdMapti;
     STAMCOUNTER             StatCmdSync;
     STAMCOUNTER             StatCmdInvall;
 #endif

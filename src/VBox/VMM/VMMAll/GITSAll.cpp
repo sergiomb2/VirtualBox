@@ -59,12 +59,38 @@
 /** GITS diagnostics description for members in GITSDIAG. */
 static const char *const g_apszGitsDiagDesc[] =
 {
+    /* No error. */
     GITSDIAG_DESC(None),
+
+    /* Command queue: basic operation errors. */
     GITSDIAG_DESC(CmdQueue_Basic_Unknown_Cmd),
     GITSDIAG_DESC(CmdQueue_Basic_Invalid_PhysAddr),
-    GITSDIAG_DESC(CmdQueue_Cmd_Invall_Icid_Overflow),
-    GITSDIAG_DESC(CmdQueue_Cmd_Mapc_Icid_Overflow),
-    GITSDIAG_DESC(CmdQueue_Cmd_Mapd_Size_Overflow),
+
+    /* Command queue: INVALL. */
+    GITSDIAG_DESC(CmdQueue_Cmd_Invall_Icid_Invalid),
+
+    /* Command: MAPV. */
+    GITSDIAG_DESC(CmdQueue_Cmd_Mapc_Icid_Invalid),
+
+    /* Command: MAPD. */
+    GITSDIAG_DESC(CmdQueue_Cmd_Mapd_Size_Invalid),
+
+    /* Command: MAPI. */
+    GITSDIAG_DESC(CmdQueue_Cmd_Mapi_DevId_Unmapped),
+    GITSDIAG_DESC(CmdQueue_Cmd_Mapi_Dte_Rd_Failed),
+    GITSDIAG_DESC(CmdQueue_Cmd_Mapi_EventId_Invalid),
+    GITSDIAG_DESC(CmdQueue_Cmd_Mapi_IcId_Invalid),
+    GITSDIAG_DESC(CmdQueue_Cmd_Mapi_Ite_Wr_Failed),
+    GITSDIAG_DESC(CmdQueue_Cmd_Mapi_Lpi_Invalid),
+
+    /* Command: MAPTI. */
+    GITSDIAG_DESC(CmdQueue_Cmd_Mapti_DevId_Unmapped),
+    GITSDIAG_DESC(CmdQueue_Cmd_Mapti_Dte_Rd_Failed),
+    GITSDIAG_DESC(CmdQueue_Cmd_Mapti_EventId_Invalid),
+    GITSDIAG_DESC(CmdQueue_Cmd_Mapti_IcId_Invalid),
+    GITSDIAG_DESC(CmdQueue_Cmd_Mapti_Ite_Wr_Failed),
+    GITSDIAG_DESC(CmdQueue_Cmd_Mapti_Lpi_Invalid),
+
     /* kGitsDiag_End */
 };
 AssertCompile(RT_ELEMENTS(g_apszGitsDiagDesc) == kGitsDiag_End);
@@ -427,7 +453,7 @@ DECL_HIDDEN_CALLBACK(void) gitsInit(PGITSDEV pGitsDev)
     pGitsDev->uTypeReg.u = RT_BF_MAKE(GITS_BF_CTRL_REG_TYPER_PHYSICAL,  1)     /* Physical LPIs supported. */
                        /*| RT_BF_MAKE(GITS_BF_CTRL_REG_TYPER_VIRTUAL,   0) */  /* Virtual LPIs not supported. */
                          | RT_BF_MAKE(GITS_BF_CTRL_REG_TYPER_CCT,       0)     /* Collections in memory not supported. */
-                         | RT_BF_MAKE(GITS_BF_CTRL_REG_TYPER_ITT_ENTRY_SIZE, GITS_ITE_SIZE - 1) /* ITE size in bytes minus 1. */
+                         | RT_BF_MAKE(GITS_BF_CTRL_REG_TYPER_ITT_ENTRY_SIZE, sizeof(GITSITE) - 1) /* ITE size in bytes minus 1. */
                          | RT_BF_MAKE(GITS_BF_CTRL_REG_TYPER_ID_BITS,   31)    /* 32-bit event IDs. */
                          | RT_BF_MAKE(GITS_BF_CTRL_REG_TYPER_DEV_BITS,  31)    /* 32-bit device IDs. */
                        /*| RT_BF_MAKE(GITS_BF_CTRL_REG_TYPER_SEIS,      0) */  /* Locally generated errors not recommended. */
@@ -449,7 +475,7 @@ DECL_HIDDEN_CALLBACK(void) gitsInit(PGITSDEV pGitsDev)
 
     /* GITS_BASER<n>. */
     RT_ZERO(pGitsDev->aItsTableRegs);
-    pGitsDev->aItsTableRegs[0].u = RT_BF_MAKE(GITS_BF_CTRL_REG_BASER_ENTRY_SIZE, GITS_DTE_SIZE - 1)
+    pGitsDev->aItsTableRegs[0].u = RT_BF_MAKE(GITS_BF_CTRL_REG_BASER_ENTRY_SIZE, sizeof(GITSDTE) - 1)
                                  | RT_BF_MAKE(GITS_BF_CTRL_REG_BASER_TYPE,       GITS_BASER_TYPE_DEVICES);
 
     /* GITS_CBASER, GITS_CREADR, GITS_CWRITER. */
@@ -602,22 +628,19 @@ static void gitsR3DteCacheRemove(PGITSDEV pGitsDev, uint32_t uDevId)
 #endif
 
 
-#if 0
 static int gitsR3DteGetAddr(PPDMDEVINS pDevIns, PGITSDEV pGitsDev, uint32_t uDevId, PRTGCPHYS pGCPhysDte)
 {
     uint64_t const uBaseReg       = pGitsDev->aItsTableRegs[0].u;
     bool const     fIndirect      = RT_BF_GET(uBaseReg, GITS_BF_CTRL_REG_BASER_INDIRECT);
     RTGCPHYS       GCPhysDevTable = gitsGetBaseRegPhysAddr(uBaseReg);
-
     if (!fIndirect)
     {
-        /* This is a single (direct) table. */
-        *pGCPhysDte = GCPhysDevTable + (uDevId * GITS_DTE_SIZE);
+        *pGCPhysDte = GCPhysDevTable + uDevId * sizeof(GITSDTE);
         return VINF_SUCCESS;
     }
 
-    /* This is a two-level (indirect) table. */
-    static uint32_t const s_acbPageSizes[] = { _4K, _16K, _64K, _64K };
+    RTGCPHYS offDte = 0;
+    static uint32_t const s_acbPageSizes[]    = { _4K, _16K, _64K, _64K };
     static uint64_t const s_auPhysAddrMasks[] =
     {
         UINT64_C(0x000ffffffffff000), /*  4K bits[51:12] */
@@ -625,99 +648,130 @@ static int gitsR3DteGetAddr(PPDMDEVINS pDevIns, PGITSDEV pGitsDev, uint32_t uDev
         UINT64_C(0x000fffffffff0000), /* 64K bits[51:16] */
         UINT64_C(0x000fffffffff0000)  /* 64K bits[51:16] */
     };
-    AssertCompile(   RT_ELEMENTS(s_acbPageSizes)
-                  == (GITS_BF_CTRL_REG_BASER_PAGESIZE_MASK >> GITS_BF_CTRL_REG_BASER_PAGESIZE_SHIFT) + 1);
-    AssertCompile(RT_ELEMENTS(s_auPhysAddrMasks) == RT_ELEMENTS(s_acbPageSizes));
 
     uint8_t const  idxPageSize = RT_BF_GET(uBaseReg, GITS_BF_CTRL_REG_BASER_PAGESIZE);
     uint32_t const cbPage      = s_acbPageSizes[idxPageSize];
 
-    /* Read the the level 1 device-table entry. */
-    uint64_t       uLevel1Dte   = 0;
-    RTGCPHYS const offLevel1Dte = (uDevId / (cbPage / GITS_ITE_INDIRECT_LVL1_SIZE)) * GITS_ITE_INDIRECT_LVL1_SIZE;
-    int const rc = PDMDevHlpPhysReadMeta(pDevIns, GCPhysDevTable + offLevel1Dte, &uLevel1Dte, sizeof(uLevel1Dte));
-    if (RT_FAILURE(rc))
+    /* Read the the level 1 table device-table entry. */
+    uint32_t const cLevel1Entries = cbPage / GITS_ITE_INDIRECT_LVL1_SIZE;
+    RTGCPHYS const offLevel1Dte   = (uDevId % cLevel1Entries) * GITS_ITE_INDIRECT_LVL1_SIZE;
+    uint64_t       uLevel1Dte     = 0;
+    int rc = PDMDevHlpPhysReadMeta(pDevIns, GCPhysDevTable + offLevel1Dte, &uLevel1Dte, sizeof(uLevel1Dte));
+    if (RT_SUCCESS(rc))
     {
-        *pGCPhysDte = NIL_RTGCPHYS;
-        return rc;
+        /* Check if the entry is valid. */
+        bool const fValid = RT_BF_GET(uLevel1Dte, GITS_BF_ITE_INDIRECT_LVL1_4K_VALID);
+        if (fValid)
+        {
+            /* Compute the physical address of the device-table entry from the level 1 entry. */
+            uint32_t const cEntries = cbPage / sizeof(GITSDTE);
+            GCPhysDevTable          = uLevel1Dte & s_auPhysAddrMasks[idxPageSize];
+            offDte                  = (uDevId % cEntries) * sizeof(GITSDTE);
+
+            *pGCPhysDte = GCPhysDevTable + offDte;
+            return VINF_SUCCESS;
+        }
+        rc = VERR_NOT_FOUND;
     }
 
-    /* If the entry is valid, read the level 2 table entry. */
-    bool const fValid = RT_BF_GET(uLevel1Dte, GITS_BF_ITE_INDIRECT_LVL1_4K_VALID);
-    if (fValid)
-    {
-        /* Get size of level 2 table from the level 1 entry. */
-        uint8_t const idxLevel2PageSize = RT_BF_GET(uLevel1Dte, );
-        Assert(idxLevel2PageSize < RT_ELEMENTS(s_auPageSizes));
-        uint32_t const cbLevel2Page = s_acbPageSizes[idxLevel2PageSize];
-        uint32_t const cEntries     = cbPage / GITS_DTE_SIZE;
+    /* Something went wrong (usually shouldn't happen but could be faulty/misbehaving guest). */
+    *pGCPhysDte = NIL_RTGCPHYS;
+    return rc;
+}
 
-        /* Get the physical address of the device-table and offset to the ITE. */
-        GCPhysDevTable = uLevel1Dte & s_auPhysAddrMasks[idxPageSize];
-        offDte         = (uDevId % cEntries) * GITS_DTE_SIZE;
-    }
+
+static int gitsR3DteRead(PPDMDEVINS pDevIns, PGITSDEV pGitsDev, uint32_t uDevId, GITSDTE *puDte)
+{
+    RTGCPHYS GCPhysDte;
+    int const rc = gitsR3DteGetAddr(pDevIns, pGitsDev, uDevId, &GCPhysDte);
+    if (RT_SUCCESS(rc))
+        return PDMDevHlpPhysReadMeta(pDevIns, GCPhysDte, (void *)puDte, sizeof(*puDte));
+    AssertMsgFailed(("Failed to get device-table entry address for device ID %#RX32 rc=%Rrc\n", uDevId, rc));
+    return rc;
+}
+
+
+static int gitsR3DteWrite(PPDMDEVINS pDevIns, PGITSDEV pGitsDev, uint32_t uDevId, GITSDTE uDte)
+{
+    RTGCPHYS GCPhysDte;
+    int const rc = gitsR3DteGetAddr(pDevIns, pGitsDev, uDevId, &GCPhysDte);
+    if (RT_SUCCESS(rc))
+        return PDMDevHlpPhysWriteMeta(pDevIns, GCPhysDte, (const void *)&uDte, sizeof(uDte));
+    AssertMsgFailed(("Failed to get device-table entry address for device ID %#RX32 rc=%Rrc\n", uDevId, rc));
+    return rc;
+}
+
+
+static int gitsR3IteWrite(PPDMDEVINS pDevIns, GITSDTE uDte, uint32_t uEventId, GITSITE uIte)
+{
+    RTGCPHYS const GCPhysIntrTable = uDte & GITS_BF_DTE_ITT_ADDR_MASK;
+    RTGCPHYS const GCPhysIte       = GCPhysIntrTable + uEventId * sizeof(GITSITE);
+    return PDMDevHlpPhysWriteMeta(pDevIns, GCPhysIte, (const void *)&uIte, sizeof(uIte));
+}
+
+
+static void gitsR3CmdMapIntr(PPDMDEVINS pDevIns, PGITSDEV pGitsDev, uint32_t uDevId, uint32_t uEventId, uint16_t uIntId,
+                             uint16_t uIcId, bool fMapti)
+{
+    /* We support 32-bits of device ID and hence it cannot be out of range (asserted below). */
+    Assert(sizeof(uDevId) * 8 >= RT_BF_GET(pGitsDev->uTypeReg.u, GITS_BF_CTRL_REG_TYPER_DEV_BITS) + 1);
+
+    /* Validate ICID. */
+    if (uIcId < RT_ELEMENTS(pGitsDev->aCtes))
+    { /* likely */ }
     else
-        return VERR_NOT_FOUND;
-
-    *pGCPhysDte = &GCPhysDevTable + offDte;
-    return VINF_SUCCESS;
-}
-
-
-static int gitsR3DteRead(PPDMDEVINS pDevIns, PGITSDEV pGitsDev, uint32_t uDevId, uint64_t *puDte)
-{
-
-}
-
-#endif
-
-static int gitsR3DteWrite(PPDMDEVINS pDevIns, PGITSDEV pGitsDev, uint32_t uDevId, uint64_t uDte)
-{
-    uint64_t const uBaseReg       = pGitsDev->aItsTableRegs[0].u;
-    bool const     fIndirect      = RT_BF_GET(uBaseReg, GITS_BF_CTRL_REG_BASER_INDIRECT);
-    RTGCPHYS       GCPhysDevTable = gitsGetBaseRegPhysAddr(uBaseReg);
-
-    /* Determine the physical address of the device table entry. */
-    RTGCPHYS offDte = 0;
-    if (fIndirect)
     {
-        static uint32_t const s_acbPageSizes[] = { _4K, _16K, _64K, _64K };
-        static uint64_t const s_auPhysAddrMasks[] =
-        {
-            UINT64_C(0x000ffffffffff000), /*  4K bits[51:12] */
-            UINT64_C(0x000fffffffffc000), /* 16K bits[51:14] */
-            UINT64_C(0x000fffffffff0000), /* 64K bits[51:16] */
-            UINT64_C(0x000fffffffff0000)  /* 64K bits[51:16] */
-        };
+        gitsCmdQueueSetError(pDevIns, pGitsDev, fMapti ? kGitsDiag_CmdQueue_Cmd_Mapti_IcId_Invalid
+                                                       : kGitsDiag_CmdQueue_Cmd_Mapi_IcId_Invalid, false /* fStall */);
+        return;
+    }
 
-        uint8_t const  idxPageSize = RT_BF_GET(uBaseReg, GITS_BF_CTRL_REG_BASER_PAGESIZE);
-        Assert(idxPageSize < RT_ELEMENTS(s_acbPageSizes));
-        uint32_t const cbPage = s_acbPageSizes[idxPageSize];
+    /* Validate LPI INTID. */
+    if (gicDistIsLpiValid(pDevIns, uIntId))
+    { /* likely */ }
+    else
+    {
+        gitsCmdQueueSetError(pDevIns, pGitsDev, fMapti ? kGitsDiag_CmdQueue_Cmd_Mapti_Lpi_Invalid
+                                                       : kGitsDiag_CmdQueue_Cmd_Mapi_Lpi_Invalid, false /* fStall */);
+        return;
+    }
 
-        /* Read the the level 1 table device-table entry. */
-        RTGCPHYS const offLevel1Dte = (uDevId / (cbPage / GITS_ITE_INDIRECT_LVL1_SIZE)) * GITS_ITE_INDIRECT_LVL1_SIZE;
-        uint64_t       uLevel1Dte   = 0;
-        int const rc = PDMDevHlpPhysReadMeta(pDevIns, GCPhysDevTable + offLevel1Dte, &uLevel1Dte, sizeof(uLevel1Dte));
-        if (RT_SUCCESS(rc))
+    /* Read the device-table entry. */
+    GITSDTE uDte = 0;
+    int rc = gitsR3DteRead(pDevIns, pGitsDev, uDevId, &uDte);
+    if (RT_SUCCESS(rc))
+    {
+        /* Check that the device ID mapping is valid. */
+        bool const fValid = RT_BF_GET(uDte, GITS_BF_DTE_VALID);
+        if (fValid)
         {
-            bool const fValid = RT_BF_GET(uLevel1Dte, GITS_BF_ITE_INDIRECT_LVL1_4K_VALID);
-            if (fValid)
+            /* Check that the event ID (which is the index) is within range. */
+            uint32_t const cEntries = RT_BIT_32(RT_BF_GET(uDte, GITS_BF_DTE_ITT_ADDR) + 1);
+            if (uEventId < cEntries)
             {
-                uint32_t const cEntries = cbPage / GITS_DTE_SIZE;
-                GCPhysDevTable          = uLevel1Dte & s_auPhysAddrMasks[idxPageSize];
-                offDte                  = (uDevId % cEntries) * GITS_DTE_SIZE;
+                /* Write the interrupt-translation entry mapping event ID with INTID and ICID. */
+                GITSITE const uIte = RT_BF_MAKE(GITS_BF_ITE_ICID,  uIcId)
+                                   | RT_BF_MAKE(GITS_BF_ITE_INTID, uIntId)
+                                   | RT_BF_MAKE(GITS_BF_ITE_IS_PHYS, 1)
+                                   | RT_BF_MAKE(GITS_BF_ITE_VALID,   1);
+                rc = gitsR3IteWrite(pDevIns, uDte, uEventId, uIte);
+                if (RT_SUCCESS(rc))
+                    return;
+
+                gitsCmdQueueSetError(pDevIns, pGitsDev, fMapti ? kGitsDiag_CmdQueue_Cmd_Mapti_Ite_Wr_Failed
+                                                               : kGitsDiag_CmdQueue_Cmd_Mapi_Ite_Wr_Failed, false /* fStall */);
             }
             else
-                return VERR_NOT_FOUND;
+                gitsCmdQueueSetError(pDevIns, pGitsDev, fMapti ? kGitsDiag_CmdQueue_Cmd_Mapti_EventId_Invalid
+                                                               : kGitsDiag_CmdQueue_Cmd_Mapi_EventId_Invalid, false /* fStall */);
         }
         else
-            return rc;
+            gitsCmdQueueSetError(pDevIns, pGitsDev, fMapti ? kGitsDiag_CmdQueue_Cmd_Mapti_DevId_Unmapped
+                                                           : kGitsDiag_CmdQueue_Cmd_Mapi_DevId_Unmapped, false /* fStall */);
     }
     else
-        offDte = uDevId * GITS_DTE_SIZE;
-
-    /* Write the device-table entry to its table in memory. */
-    return PDMDevHlpPhysWriteMeta(pDevIns, GCPhysDevTable + offDte, (const void *)&uDte, sizeof(uDte));
+        gitsCmdQueueSetError(pDevIns, pGitsDev, fMapti ? kGitsDiag_CmdQueue_Cmd_Mapti_Dte_Rd_Failed
+                                                       : kGitsDiag_CmdQueue_Cmd_Mapi_Dte_Rd_Failed, false /* fStall */);
 }
 
 
@@ -805,7 +859,7 @@ DECL_HIDDEN_CALLBACK(int) gitsR3CmdQueueProcess(PPDMDEVINS pDevIns, PGITSDEV pGi
                                 GIC_CRIT_SECT_LEAVE(pDevIns);
                             }
                             else
-                                gitsCmdQueueSetError(pDevIns, pGitsDev, kGitsDiag_CmdQueue_Cmd_Mapc_Icid_Overflow,
+                                gitsCmdQueueSetError(pDevIns, pGitsDev, kGitsDiag_CmdQueue_Cmd_Mapc_Icid_Invalid,
                                                      false /* fStall */);
                             STAM_COUNTER_INC(&pGitsDev->StatCmdMapc);
                             break;
@@ -838,14 +892,17 @@ DECL_HIDDEN_CALLBACK(int) gitsR3CmdQueueProcess(PPDMDEVINS pDevIns, PGITSDEV pGi
                                     AssertRC(rc);
                                 }
                                 else
-                                    gitsCmdQueueSetError(pDevIns, pGitsDev, kGitsDiag_CmdQueue_Cmd_Mapd_Size_Overflow,
+                                    gitsCmdQueueSetError(pDevIns, pGitsDev, kGitsDiag_CmdQueue_Cmd_Mapd_Size_Invalid,
                                                          false /* fStall */);
                             }
                             else
                             {
                                 uint64_t const uDte = 0;
+                                GIC_CRIT_SECT_ENTER(pDevIns);
                                 rc = gitsR3DteWrite(pDevIns, pGitsDev, uDevId, uDte);
+                                GIC_CRIT_SECT_LEAVE(pDevIns);
                                 /** @todo Remove Device ID from internal cache. */
+                                AssertRC(rc);
                             }
                             STAM_COUNTER_INC(&pGitsDev->StatCmdMapd);
                             break;
@@ -854,13 +911,19 @@ DECL_HIDDEN_CALLBACK(int) gitsR3CmdQueueProcess(PPDMDEVINS pDevIns, PGITSDEV pGi
                         case GITS_CMD_ID_MAPTI:
                         {
                             /* Map device ID and event ID to corresponding ITE. */
-                            //uint32_t const uDevId   = RT_BF_GET(pCmd->au64[0].u, GITS_BF_CMD_MAPTI_DW0_DEV_ID);
-                            //uint32_t const uEventId = RT_BF_GET(pCmd->au64[1].u, GITS_BF_CMD_MAPTI_DW1_EVENT_ID);
-                            //uint32_t const uIntId   = RT_BF_GET(pCmd->au64[1].u, GITS_BF_CMD_MAPTI_DW1_PHYS_INTID);
-                            //uint16_t const uIcId    = RT_BF_GET(pCmd->au64[2].u, GITS_BF_CMD_MAPTI_DW2_IC_ID);
-                            //
-                            ///* We support 32-bits of device ID and hence it cannot be out of range (asserted below). */
-                            //Assert(sizeof(uDevId) * 8 >= RT_BF_GET(pGitsDev->uTypeReg.u, GITS_BF_CTRL_REG_TYPER_DEV_BITS) + 1);
+                            uint32_t const uDevId   = RT_BF_GET(pCmd->au64[0].u, GITS_BF_CMD_MAPTI_DW0_DEV_ID);
+                            uint32_t const uEventId = RT_BF_GET(pCmd->au64[1].u, GITS_BF_CMD_MAPTI_DW1_EVENT_ID);
+                            uint32_t const uIntId   = RT_BF_GET(pCmd->au64[1].u, GITS_BF_CMD_MAPTI_DW1_PHYS_INTID);
+                            uint16_t const uIcId    = RT_BF_GET(pCmd->au64[2].u, GITS_BF_CMD_MAPTI_DW2_IC_ID);
+
+                            /* We support 32-bits of device ID and hence it cannot be out of range (asserted below). */
+                            Assert(sizeof(uDevId) * 8 >= RT_BF_GET(pGitsDev->uTypeReg.u, GITS_BF_CTRL_REG_TYPER_DEV_BITS) + 1);
+
+                            GIC_CRIT_SECT_ENTER(pDevIns);
+                            gitsR3CmdMapIntr(pDevIns, pGitsDev, uDevId, uEventId, uIntId, uIcId, uCmdId);
+                            GIC_CRIT_SECT_LEAVE(pDevIns);
+                            STAM_COUNTER_INC(&pGitsDev->StatCmdMapti);
+
                             //AssertMsgFailed(("uDevId=%RU32 uEventId=%RU32 uIntId=%RU32 uIcId=%RU16\n",
                             //                 uDevId, uEventId, uIntId, uIcId));
                             break;
@@ -889,7 +952,7 @@ DECL_HIDDEN_CALLBACK(int) gitsR3CmdQueueProcess(PPDMDEVINS pDevIns, PGITSDEV pGi
                             if (RT_LIKELY(uIcId < RT_ELEMENTS(pGitsDev->aCtes)))
                                 gicDistReadLpiConfigTableFromMem(pDevIns);
                             else
-                                gitsCmdQueueSetError(pDevIns, pGitsDev, kGitsDiag_CmdQueue_Cmd_Invall_Icid_Overflow,
+                                gitsCmdQueueSetError(pDevIns, pGitsDev, kGitsDiag_CmdQueue_Cmd_Invall_Icid_Invalid,
                                                      false /* fStall */);
                             STAM_COUNTER_INC(&pGitsDev->StatCmdInvall);
                             break;
