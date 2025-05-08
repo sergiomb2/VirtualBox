@@ -319,6 +319,7 @@ private:
         void setCurrentItem(QITreeWidget *pTreeWidget, QTreeWidgetItem *pItem);
 
     void enableClearAction();
+    void enableEditAction();
     /** @} */
 
     /** @name Search stuff.

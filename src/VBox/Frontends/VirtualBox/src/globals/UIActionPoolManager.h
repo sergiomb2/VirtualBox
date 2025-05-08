@@ -176,6 +176,7 @@ enum UIActionIndexMN
     UIActionIndexMN_M_Medium_T_Search,
     UIActionIndexMN_M_Medium_S_Refresh,
     UIActionIndexMN_M_Medium_S_Clear,
+    UIActionIndexMN_M_Medium_S_Edit,
 
     /* Network Manager actions: */
     UIActionIndexMN_M_NetworkWindow,

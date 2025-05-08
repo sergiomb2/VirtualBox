@@ -633,6 +633,7 @@ void UIMediumManagerWidget::sltHandleCurrentTabChanged()
         m_pDetailsWidget->setCurrentType(currentMediumType());
 
     enableClearAction();
+    enableEditAction();
 
     /* Re-fetch currently chosen medium-item: */
     refetchCurrentChosenMediumItem();
@@ -664,6 +665,7 @@ void UIMediumManagerWidget::sltHandleContextMenuRequest(const QPoint &position)
     QMenu menu;
     if (pTreeWidget->itemAt(position))
     {
+        menu.addAction(m_pActionPool->action(UIActionIndexMN_M_Medium_S_Edit));
         menu.addAction(m_pActionPool->action(UIActionIndexMN_M_Medium_S_Copy));
         menu.addAction(m_pActionPool->action(UIActionIndexMN_M_Medium_S_Move));
         menu.addAction(m_pActionPool->action(UIActionIndexMN_M_Medium_S_Remove));
@@ -866,6 +868,7 @@ void UIMediumManagerWidget::prepareToolBar()
         m_pToolBar->addAction(m_pActionPool->action(UIActionIndexMN_M_Medium_S_Add));
         m_pToolBar->addAction(m_pActionPool->action(UIActionIndexMN_M_Medium_S_Create));
         m_pToolBar->addSeparator();
+        m_pToolBar->addAction(m_pActionPool->action(UIActionIndexMN_M_Medium_S_Edit));
         m_pToolBar->addAction(m_pActionPool->action(UIActionIndexMN_M_Medium_S_Copy));
         m_pToolBar->addAction(m_pActionPool->action(UIActionIndexMN_M_Medium_S_Move));
         m_pToolBar->addAction(m_pActionPool->action(UIActionIndexMN_M_Medium_S_Remove));
@@ -1133,6 +1136,7 @@ void UIMediumManagerWidget::updateActions()
     m_pActionPool->action(UIActionIndexMN_M_Medium_S_Release)->setEnabled(fActionEnabledRelease);
     const bool fActionEnabledDetails = true;
     m_pActionPool->action(UIActionIndexMN_M_Medium_T_Details)->setEnabled(fActionEnabledDetails);
+    enableEditAction();
 }
 
 void UIMediumManagerWidget::updateActionIcons()
@@ -1142,6 +1146,7 @@ void UIMediumManagerWidget::updateActionIcons()
     {
         m_pActionPool->action(UIActionIndexMN_M_Medium_S_Add)->setState((int)enmCurrentMediumType);
         m_pActionPool->action(UIActionIndexMN_M_Medium_S_Create)->setState((int)enmCurrentMediumType);
+        m_pActionPool->action(UIActionIndexMN_M_Medium_S_Edit)->setState((int)enmCurrentMediumType);
         m_pActionPool->action(UIActionIndexMN_M_Medium_S_Copy)->setState((int)enmCurrentMediumType);
         m_pActionPool->action(UIActionIndexMN_M_Medium_S_Move)->setState((int)enmCurrentMediumType);
         m_pActionPool->action(UIActionIndexMN_M_Medium_S_Remove)->setState((int)enmCurrentMediumType);
@@ -1322,8 +1327,9 @@ UIMediumItem* UIMediumManagerWidget::createMediumItem(const UIMedium &medium)
     /* Update tab-icons: */
     updateTabIcons(pMediumItem, Action_Add);
 
-    /* Toogle enable/disable of clear action: */
+    /* Toogle enable/disable of clear and edit actions: */
     enableClearAction();
+    enableEditAction();
 
     /* Reperform the medium search (don't jump to the found element): */
     performSearch(false);
@@ -1413,8 +1419,9 @@ void UIMediumManagerWidget::updateMediumItem(const UIMedium &medium)
     /* Update tab-icons: */
     updateTabIcons(pMediumItem, Action_Edit);
 
-    /* Toogle enable/disable of clear action: */
+    /* Toogle enable/disable of clear and edit actions: */
     enableClearAction();
+    enableEditAction();
 
     /* Re-fetch medium-item if it is current one updated: */
     if (pMediumItem == mediumItem(type))
@@ -1454,8 +1461,9 @@ void UIMediumManagerWidget::deleteMediumItem(const QUuid &uMediumID)
     /* Update tab-icons: */
     updateTabIcons(pMediumItem, Action_Remove);
 
-    /* Toogle enable/disable of clear action: */
+    /* Toogle enable/disable of clear and edit actions: */
     enableClearAction();
+    enableEditAction();
 
     /* Delete medium-item: */
     delete pMediumItem;
@@ -1573,6 +1581,24 @@ void UIMediumManagerWidget::enableClearAction()
     bool fEnable = ((currentMediumType() == UIMediumDeviceType_DVD) && m_fInaccessibleCD) ||
         ((currentMediumType() == UIMediumDeviceType_Floppy) && m_fInaccessibleFD);
     m_pActionPool->action(UIActionIndexMN_M_Medium_S_Clear)->setEnabled(fEnable);
+}
+
+void UIMediumManagerWidget::enableEditAction()
+{
+    if (!m_pActionPool || !m_pActionPool->action(UIActionIndexMN_M_Medium_S_Edit))
+        return;
+
+    if (currentMediumType() != UIMediumDeviceType_DVD)
+    {
+        m_pActionPool->action(UIActionIndexMN_M_Medium_S_Edit)->setVisible(false);
+        return;
+    }
+    m_pActionPool->action(UIActionIndexMN_M_Medium_S_Edit)->setVisible(true);
+    m_pActionPool->action(UIActionIndexMN_M_Medium_S_Edit)->setEnabled(false);
+    if (currentMediumItem())
+    {
+        m_pActionPool->action(UIActionIndexMN_M_Medium_S_Edit)->setEnabled(currentMediumItem()->name().endsWith(".viso"));
+    }
 }
 
 void UIMediumManagerWidget::performSearch(bool fSelectNext)

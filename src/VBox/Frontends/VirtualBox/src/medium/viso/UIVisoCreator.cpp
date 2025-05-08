@@ -992,7 +992,7 @@ bool UIVisoCreatorDialog::saveVISOFile()
         stream << QString("%1 %2").arg("--iprt-iso-maker-file-marker-bourne-sh").arg(QUuid::createUuid().toString()) << "\n";
         stream<< "--volume-id=" << UIVisoContentBrowser::sanitizePath(strVisoName) << "\n";
         if (!strImportedISOPath.isEmpty())
-            stream << "--import-iso=" << strImportedISOPath << "\n";
+            stream << "--import-iso " << strImportedISOPath << "\n";
         stream << VisoEntryList.join("\n");
         if (!customOptions().isEmpty())
         {

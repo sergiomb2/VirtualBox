@@ -176,6 +176,7 @@ enum UIActionIndex
     UIActionIndex_M_MediumSelector_CreateHD,
     UIActionIndex_M_MediumSelector_CreateCD,
     UIActionIndex_M_MediumSelector_CreateFD,
+    UIActionIndex_M_MediumSelector_EditCD,
     UIActionIndex_M_MediumSelector_Refresh,
 
     /* Maximum index: */

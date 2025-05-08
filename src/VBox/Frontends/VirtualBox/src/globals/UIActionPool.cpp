@@ -2794,6 +2794,40 @@ protected:
     }
 };
 
+/** Simple action extension, used as 'EditCD' action class. */
+class UIActionMenuMediumSelectorEditCD  : public UIActionSimple
+{
+    Q_OBJECT;
+
+public:
+
+    /** Constructs action passing @a pParent to the base-class. */
+    UIActionMenuMediumSelectorEditCD(UIActionPool *pParent)
+        : UIActionSimple(pParent, ":/cd_modify_32px.png",  ":/cd_modify_16px.png",
+                         ":/cd_modify_disabled_32px.png", ":/cd_modify_disabled_16px.png")
+    {
+        setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    }
+
+protected:
+
+    /** Returns shortcut extra-data ID. */
+    virtual QString shortcutExtraDataID() const RT_OVERRIDE
+    {
+        return QString("MediumSelectorEditCD");
+    }
+
+    /** Handles translation event. */
+    virtual void retranslateUi() RT_OVERRIDE
+    {
+        setName(QApplication::translate("UIActionPool", "&Edit..."));
+        setShortcutScope(QApplication::translate("UIActionPool", "Medium Selector"));
+        setStatusTip(QApplication::translate("UIActionPool", "Edit existing disk image file"));
+        setToolTip(  QApplication::translate("UIActionPool", "Edit Disk Image File")
+                   + (shortcut().isEmpty() ? QString() : QString(" (%1)").arg(shortcut().toString())));
+    }
+};
+
 /** Simple action extension, used as 'Add' action class. */
 class UIActionMenuMediumSelectorAddFD  : public UIActionSimple
 {
@@ -3414,6 +3448,7 @@ void UIActionPool::preparePool()
     m_pool[UIActionIndex_M_MediumSelector_CreateHD] = new UIActionMenuMediumSelectorCreateHD(this);
     m_pool[UIActionIndex_M_MediumSelector_CreateCD] = new UIActionMenuMediumSelectorCreateCD(this);
     m_pool[UIActionIndex_M_MediumSelector_CreateFD] = new UIActionMenuMediumSelectorCreateFD(this);
+    m_pool[UIActionIndex_M_MediumSelector_EditCD] = new UIActionMenuMediumSelectorEditCD(this);
     m_pool[UIActionIndex_M_MediumSelector_Refresh] = new UIActionMenuMediumSelectorRefresh(this);
 
     /* Prepare update-handlers for known menus: */
