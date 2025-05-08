@@ -1750,7 +1750,7 @@ SUPR0DECL(bool) SUPR0FpuBegin(bool fCtxHook)
      */
     Assert(fCtxHook || !RTThreadPreemptIsEnabled(NIL_RTTHREAD));
     kernel_fpu_begin();
-#  if 0 /* Always do it for now for better test coverage. */
+#  if RTLNX_VER_MIN(6,15,0) /* fpregs_unlock may do more than just preempt_enable, so only when necessary now. */
     if (fCtxHook)
 #  endif
     {
@@ -1778,7 +1778,7 @@ SUPR0DECL(void) SUPR0FpuEnd(bool fCtxHook)
 # if RTLNX_VER_MIN(4,19,0)
     /* HACK ALERT! See SUPR0FpuBegin for an explanation of this. */
     Assert(!RTThreadPreemptIsEnabled(NIL_RTTHREAD));
-#  if 0 /* Always do it for now for better test coverage. */
+#  if RTLNX_VER_MIN(6,15,0) /* fpregs_unlock may do more than just preempt_enable, so only when necessary now. */
     if (fCtxHook)
 #  endif
     {
