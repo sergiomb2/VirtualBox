@@ -112,11 +112,11 @@ VBoxVMM_SOURCES  = \
 	VMMR3/APIC.cpp \
 	VMMR3/CFGM.cpp \
 	VMMR3/CPUM.cpp \
-	VMMR3/CPUMR3-x86.cpp \
-	VMMR3/CPUMR3CpuId.cpp \
+	VMMR3/target-x86/CPUMR3-x86.cpp \
+	VMMR3/target-x86/CPUMR3CpuId-x86.cpp \
+	VMMR3/target-x86/CPUMR3Msr-x86.cpp \
+	VMMR3/target-x86/CPUMR3Dbg-x86.cpp \
 	VMMR3/CPUMR3Db.cpp \
-	VMMR3/CPUMR3Msr-x86.cpp \
-	VMMR3/CPUMDbg.cpp \
 	VMMR3/DBGF.cpp \
 	VMMR3/DBGFAddr.cpp \
 	VMMR3/DBGFAddrSpace.cpp \
@@ -456,12 +456,12 @@ ifdef VBOX_WITH_VIRT_ARMV8
  	VMMR3/VMMR3VTable.cpp \
  	VMMR3/CFGM.cpp \
  	VMMR3/CPUM.cpp \
- 	VMMR3/CPUM-armv8.cpp \
- 	VMMR3/CPUMDbg-armv8.cpp \
- 	VMMAll/CPUMAllCpuId.cpp \
- 	VMMR3/CPUMR3CpuId-armv8.cpp \
+ 	VMMR3/target-armv8/CPUMR3-armv8.cpp \
+ 	VMMR3/target-armv8/CPUMR3CpuId-armv8.cpp \
+ 	VMMR3/target-armv8/CPUMR3SysReg-armv8.cpp \
+ 	VMMR3/target-armv8/CPUMR3Dbg-armv8.cpp \
  	VMMR3/CPUMR3Db.cpp \
- 	VMMR3/CPUMR3SysReg-armv8.cpp \
+ 	VMMAll/CPUMAllCpuId.cpp \
  	VMMR3/DBGF.cpp \
  	VMMR3/DBGFAddr.cpp \
  	VMMR3/DBGFAddrSpace.cpp \
