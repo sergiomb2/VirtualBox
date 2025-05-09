@@ -563,49 +563,56 @@ Function W2K_CallbackInstall
   ; Shared folders.
   ;
   ${LogVerbose} "Installing Shared Folders driver ..."
+
+  ; For Win/arm we currently skip installing Shared Folders by default due to stability issues.
   !if $%KBUILD_TARGET_ARCH% == "arm64"
-    ${LogVerbose} "Shared Folders are not available on this platform architecture (arm64), skipping installation."
-  !else
-    ; The Shared Folder IFS goes to the system directory.
-    !if $%KBUILD_TARGET_ARCH% == "x86"
-      ; On x86 we have to use a different shared folder driver linked against an older RDBSS for Windows 7 and older.
-      ${If}     ${AtLeastWin2000}
-      ${AndIf}  ${AtMostWin7}
-        !insertmacro InstallLib DLL NOTSHARED REBOOT_NOTPROTECTED "$%PATH_OUT%\bin\additions\VBoxSFW2K.sys" "$g_strSystemDir\drivers\VBoxSF.sys" "$INSTDIR"
-      ${ElseIf} ${AtLeastWin8}
-        !insertmacro InstallLib DLL NOTSHARED REBOOT_NOTPROTECTED "$%PATH_OUT%\bin\additions\VBoxSF.sys" "$g_strSystemDir\drivers\VBoxSF.sys" "$INSTDIR"
-      ${EndIf}
-    !else
+    ${If} $g_bForceInstall <> "true"
+      ${LogVerbose} "Shared Folders are not available on this platform architecture (arm64), skipping installation."
+      goto skip_sf
+    ${Endif}
+  !endif
+
+  ; The Shared Folder IFS goes to the system directory.
+  !if $%KBUILD_TARGET_ARCH% == "x86"
+    ; On x86 we have to use a different shared folder driver linked against an older RDBSS for Windows 7 and older.
+    ${If}     ${AtLeastWin2000}
+    ${AndIf}  ${AtMostWin7}
+      !insertmacro InstallLib DLL NOTSHARED REBOOT_NOTPROTECTED "$%PATH_OUT%\bin\additions\VBoxSFW2K.sys" "$g_strSystemDir\drivers\VBoxSF.sys" "$INSTDIR"
+    ${ElseIf} ${AtLeastWin8}
       !insertmacro InstallLib DLL NOTSHARED REBOOT_NOTPROTECTED "$%PATH_OUT%\bin\additions\VBoxSF.sys" "$g_strSystemDir\drivers\VBoxSF.sys" "$INSTDIR"
-    !endif
-    AccessControl::GrantOnFile "$g_strSystemDir\drivers\VBoxSF.dll" "(BU)" "GenericRead"
+    ${EndIf}
+  !else
+    !insertmacro InstallLib DLL NOTSHARED REBOOT_NOTPROTECTED "$%PATH_OUT%\bin\additions\VBoxSF.sys" "$g_strSystemDir\drivers\VBoxSF.sys" "$INSTDIR"
+  !endif
+  AccessControl::GrantOnFile "$g_strSystemDir\drivers\VBoxSF.dll" "(BU)" "GenericRead"
 
-    !insertmacro InstallLib DLL NOTSHARED REBOOT_NOTPROTECTED "$%PATH_OUT%\bin\additions\VBoxMRXNP.dll" "$g_strSystemDir\VBoxMRXNP.dll" "$INSTDIR"
-    AccessControl::GrantOnFile "$g_strSystemDir\VBoxMRXNP.dll" "(BU)" "GenericRead"
-    !if $%KBUILD_TARGET_ARCH% == "amd64" ; Note: Does not exist for arm64.
-      ; Only amd64 installer: Copy the x86 DLL for 32 bit applications.
-      !insertmacro InstallLib DLL NOTSHARED REBOOT_NOTPROTECTED "$%PATH_OUT%\bin\additions\VBoxMRXNP-x86.dll" "$g_strSysWow64\VBoxMRXNP.dll" "$INSTDIR"
-      AccessControl::GrantOnFile "$g_strSysWow64\VBoxMRXNP.dll" "(BU)" "GenericRead"
-    !endif
+  !insertmacro InstallLib DLL NOTSHARED REBOOT_NOTPROTECTED "$%PATH_OUT%\bin\additions\VBoxMRXNP.dll" "$g_strSystemDir\VBoxMRXNP.dll" "$INSTDIR"
+  AccessControl::GrantOnFile "$g_strSystemDir\VBoxMRXNP.dll" "(BU)" "GenericRead"
+  !if $%KBUILD_TARGET_ARCH% == "amd64" ; Note: Does not exist for arm64.
+    ; Only amd64 installer: Copy the x86 DLL for 32 bit applications.
+    !insertmacro InstallLib DLL NOTSHARED REBOOT_NOTPROTECTED "$%PATH_OUT%\bin\additions\VBoxMRXNP-x86.dll" "$g_strSysWow64\VBoxMRXNP.dll" "$INSTDIR"
+    AccessControl::GrantOnFile "$g_strSysWow64\VBoxMRXNP.dll" "(BU)" "GenericRead"
+  !endif
 
-    ; Create the Shared Folders service ...
-    ; No need to stop/remove the service here! Do this only on uninstallation!
-    ${CmdExecute} "$\"$INSTDIR\Tools\VBoxGuestInstallHelper.exe$\" service create $\"VBoxSF$\" $\"VirtualBox Shared Folders$\" 2 1 $\"\SystemRoot\System32\drivers\VBoxSF.sys$\" $\"NetworkProvider$\"" 'non-zero-exitcode=abort'
+  ; Create the Shared Folders service ...
+  ; No need to stop/remove the service here! Do this only on uninstallation!
+  ${CmdExecute} "$\"$INSTDIR\Tools\VBoxGuestInstallHelper.exe$\" service create $\"VBoxSF$\" $\"VirtualBox Shared Folders$\" 2 1 $\"\SystemRoot\System32\drivers\VBoxSF.sys$\" $\"NetworkProvider$\"" 'non-zero-exitcode=abort'
 
-    ; ... and the link to the network provider
-    WriteRegStr HKLM "SYSTEM\CurrentControlSet\Services\VBoxSF\NetworkProvider" "DeviceName" "\Device\VBoxMiniRdr"
-    WriteRegStr HKLM "SYSTEM\CurrentControlSet\Services\VBoxSF\NetworkProvider" "Name" "VirtualBox Shared Folders"
-    WriteRegStr HKLM "SYSTEM\CurrentControlSet\Services\VBoxSF\NetworkProvider" "ProviderPath" "$SYSDIR\VBoxMRXNP.dll"
+  ; ... and the link to the network provider
+  WriteRegStr HKLM "SYSTEM\CurrentControlSet\Services\VBoxSF\NetworkProvider" "DeviceName" "\Device\VBoxMiniRdr"
+  WriteRegStr HKLM "SYSTEM\CurrentControlSet\Services\VBoxSF\NetworkProvider" "Name" "VirtualBox Shared Folders"
+  WriteRegStr HKLM "SYSTEM\CurrentControlSet\Services\VBoxSF\NetworkProvider" "ProviderPath" "$SYSDIR\VBoxMRXNP.dll"
 
-    ; Add default network providers (if not present or corrupted)
-    ${CmdExecute} "$\"$INSTDIR\Tools\VBoxGuestInstallHelper.exe$\" netprovider add WebClient"         'non-zero-exitcode=abort'
-    ${CmdExecute} "$\"$INSTDIR\Tools\VBoxGuestInstallHelper.exe$\" netprovider add LanmanWorkstation" 'non-zero-exitcode=abort'
-    ${CmdExecute} "$\"$INSTDIR\Tools\VBoxGuestInstallHelper.exe$\" netprovider add RDPNP"             'non-zero-exitcode=abort'
+  ; Add default network providers (if not present or corrupted)
+  ${CmdExecute} "$\"$INSTDIR\Tools\VBoxGuestInstallHelper.exe$\" netprovider add WebClient"         'non-zero-exitcode=abort'
+  ${CmdExecute} "$\"$INSTDIR\Tools\VBoxGuestInstallHelper.exe$\" netprovider add LanmanWorkstation" 'non-zero-exitcode=abort'
+  ${CmdExecute} "$\"$INSTDIR\Tools\VBoxGuestInstallHelper.exe$\" netprovider add RDPNP"             'non-zero-exitcode=abort'
 
-    ; Add the shared folders network provider
-    ${LogVerbose} "Adding network provider (Order = $g_iSfOrder) ..."
-    ${CmdExecute} "$\"$INSTDIR\Tools\VBoxGuestInstallHelper.exe$\" netprovider add VBoxSF $g_iSfOrder" 'non-zero-exitcode=abort'
-  !endif ; $%KBUILD_TARGET_ARCH% == "arm64"
+  ; Add the shared folders network provider
+  ${LogVerbose} "Adding network provider (Order = $g_iSfOrder) ..."
+  ${CmdExecute} "$\"$INSTDIR\Tools\VBoxGuestInstallHelper.exe$\" netprovider add VBoxSF $g_iSfOrder" 'non-zero-exitcode=abort'
+
+skip_sf:
 
   ;
   ; Set video resolution to be used after next reboot.
