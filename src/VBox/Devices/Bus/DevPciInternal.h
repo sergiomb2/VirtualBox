@@ -271,6 +271,7 @@ DECLCALLBACK(int)  devpciR3CommonRegisterDevice(PPDMDEVINS pDevIns, PPDMPCIDEV p
                                                 uint8_t uPciDevNo, uint8_t uPciFunNo, const char *pszName);
 DECLCALLBACK(int)  devpcibridgeR3CommonRegisterDevice(PPDMDEVINS pDevIns, PPDMPCIDEV pPciDev, uint32_t fFlags,
                                                       uint8_t uPciDevNo, uint8_t uPciFunNo, const char *pszName);
+DECLCALLBACK(int)  devpciR3CommonRegisterMsi(PPDMDEVINS pDevIns, PPDMPCIDEV pPciDev, PPDMMSIREG pMsiReg);
 DECLCALLBACK(int)  devpciR3CommonIORegionRegister(PPDMDEVINS pDevIns, PPDMPCIDEV pPciDev, uint32_t iRegion,
                                                   RTGCPHYS cbRegion, PCIADDRESSSPACE enmType, uint32_t fFlags,
                                                   uint64_t hHandle, PFNPCIIOREGIONMAP pfnMapUnmap);
