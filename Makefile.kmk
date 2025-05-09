@@ -909,7 +909,6 @@ VBOX_CORE_DOXYFILE_INPUT_FIRST = \
 	$(PATH_ROOT)/include/VBox/vd.h \
 	$(PATH_ROOT)/include/VBox/types.h \
 	$(PATH_ROOT)/include/VBox/err.h \
-	$(PATH_ROOT)/include/VBox/vmm/cpumdis.h \
 	$(PATH_ROOT)/include/VBox/dbggui.h \
 	$(PATH_ROOT)/include/VBox/dis.h \
 	$(PATH_ROOT)/include/VBox/disopcode-x86-amd64.h \
