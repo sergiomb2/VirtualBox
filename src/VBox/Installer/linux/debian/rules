@@ -296,7 +296,7 @@ binary: build $(if $(NOMODS),,$(bldbase)/modules-stamp)
 	rm -f $(addprefix $(archdir)/,UserManual*.pdf UserManual*.qch UserManual*.qhc LICENSE)
 	mv $(addprefix $(archdir)/,additions/VBoxGuestAdditions.iso) $(prefix)/usr/share/$(package)
 	mv $(archdir) $(prefix)/usr/lib/$(package)
-	if [ -f $(prefix)/usr/lib/$(package)/libQt6CoreVBox.so.6 ]; then
+	if [ -f $(prefix)/usr/lib/$(package)/libQt6CoreVBox.so.6 ]; then \
 	    $(vboxroot)/tools/linux.$(chrarch)/bin/chrpath \
 	        --keepgoing --replace /usr/lib/$(package) \
 	        $(prefix)/usr/lib/$(package)/*.so.6 \
@@ -305,9 +305,9 @@ binary: build $(if $(NOMODS),,$(bldbase)/modules-stamp)
 	        $(prefix)/usr/lib/$(package)/plugins/sqldrivers/*.so \
 	        $(prefix)/usr/lib/$(package)/plugins/styles/*.so \
 	        $(prefix)/usr/lib/$(package)/plugins/wayland-shell-integration/*.so \
-	        $(prefix)/usr/lib/$(package)/plugins/wayland-decoration-client/*.so
-	    echo "[Paths]" > $(prefix)/usr/lib/$(package)/qt.conf
-	    echo "Plugins = /usr/lib/$(package)/plugins" >> $(prefix)/usr/lib/$(package)/qt.conf
+	        $(prefix)/usr/lib/$(package)/plugins/wayland-decoration-client/*.so; \
+	    echo "[Paths]" > $(prefix)/usr/lib/$(package)/qt.conf; \
+	    echo "Plugins = /usr/lib/$(package)/plugins" >> $(prefix)/usr/lib/$(package)/qt.conf; \
 	fi
 	export VBOX_INSTALL_PATH=/usr/lib/$(package) && \
 	    cd $(builddir)/bin/sdk/installer/python && \
