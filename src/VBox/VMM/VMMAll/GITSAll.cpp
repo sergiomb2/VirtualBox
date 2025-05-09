@@ -128,7 +128,7 @@ DECL_HIDDEN_CALLBACK(const char *) gitsGetTranslationRegDescription(uint16_t off
 {
     switch (offReg)
     {
-        case GITS_TRANSLATION_REG_TRANSLATER:   return "GITS_TRANSLATERR";
+        case GITS_TRANSLATION_REG_TRANSLATER:   return "GITS_TRANSLATER";
         default:
             return "<UNKNOWN>";
     }
