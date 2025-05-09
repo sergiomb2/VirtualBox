@@ -935,7 +935,7 @@ DECL_HIDDEN_CALLBACK(int) gitsR3CmdQueueProcess(PPDMDEVINS pDevIns, PGITSDEV pGi
                             GIC_CRIT_SECT_ENTER(pDevIns);
                             gitsR3CmdMapIntr(pDevIns, pGitsDev, uDevId, uEventId, uIntId, uIcId, false /* fMapti */);
                             GIC_CRIT_SECT_LEAVE(pDevIns);
-                            STAM_COUNTER_INC(&pGitsDev->StatCmdMapti);
+                            STAM_COUNTER_INC(&pGitsDev->StatCmdMapi);
                             break;
                         }
 
