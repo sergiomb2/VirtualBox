@@ -958,14 +958,43 @@ typedef struct CPUMFEATURESARMV8
     /** The CPU revision (from MIDR_EL1). */
     uint8_t         uRevision;
 
+    /** Supports AArch64 (FEAT_AA64). */
+    uint32_t        fAa64 : 1;
+    /** Supports AArch64 in EL0 (FEAT_AA64EL0). */
+    uint32_t        fAa64El0 : 1;
+    /** Supports AArch64 in EL1 (FEAT_AA64EL1). */
+    uint32_t        fAa64El1 : 1;
+    /** Supports AArch64 in EL2 (FEAT_AA64EL2). */
+    uint32_t        fAa64El2 : 1;
+    /** Supports AArch64 in EL3 (FEAT_AA64EL3). */
+    uint32_t        fAa64El3 : 1;
+
+    /** Supports AArch32 (FEAT_AA32). */
+    uint32_t        fAa32 : 1;
+    /** Supports AArch32 in EL0 (FEAT_AA32EL0). */
+    uint32_t        fAa32El0 : 1;
+    /** Supports AArch32 in EL1 (FEAT_AA32EL1). */
+    uint32_t        fAa32El1 : 1;
+    /** Supports AArch32 in EL2 (FEAT_AA32EL2). */
+    uint32_t        fAa32El2 : 1;
+    /** Supports AArch32 in EL3 (FEAT_AA32EL3). */
+    uint32_t        fAa32El3 : 1;
+
     /** @name Granule sizes supported.
      * @{ */
-    /** 4KiB translation granule size supported. */
+    /** 4KiB stage 1 translation granule size supported (FEAT_TGran4K). */
     uint32_t        fTGran4K : 1;
-    /** 16KiB translation granule size supported. */
+    /** 16KiB stage 1 translation granule size supported (FEAT_TGran16K). */
     uint32_t        fTGran16K : 1;
-    /** 64KiB translation granule size supported. */
+    /** 64KiB stage translation granule size supported (FEAT_TGran64K). */
     uint32_t        fTGran64K : 1;
+
+    /** 4KiB stage 2 translation granule size supported (FEAT_S2TGran4K). */
+    uint32_t        fS2TGran4K : 1;
+    /** 16KiB stage 2 translation granule size supported (FEAT_S2TGran16K). */
+    uint32_t        fS2TGran16K : 1;
+    /** 64KiB stage 2ranslation granule size supported (FEAT_S2TGran64K). */
+    uint32_t        fS2TGran64K : 1;
     /** @} */
 
     /** @name pre-2020 Architecture Extensions.
@@ -974,6 +1003,8 @@ typedef struct CPUMFEATURESARMV8
     uint32_t        fAdvSimd : 1;
     /** Supports Advanced SIMD AES instructions (FEAT_AES). */
     uint32_t        fAes : 1;
+    /** Supports 16 bit ASID (FEAT_ASID16). */
+    uint32_t        fAsid16 : 1;
     /** Supports Advanced SIMD PMULL instructions (FEAT_PMULL). */
     uint32_t        fPmull : 1;
     /** Supports CP15Disable2 (FEAT_CP15DISABLE2). */
@@ -1014,7 +1045,7 @@ typedef struct CPUMFEATURESARMV8
     uint32_t        fSsbs2 : 1;
     /** Supports CRC32 instructions (FEAT_CRC32). */
     uint32_t        fCrc32 : 1;
-    /** Supports Intermediate chacing of trnslation table walks (FEAT_nTLBPA). */
+    /** Supports intermediate caching of translation table walks (FEAT_nTLBPA). */
     uint32_t        fNTlbpa : 1;
     /** Supports debug with VHE (FEAT_Debugv8p1). */
     uint32_t        fDebugV8p1 : 1;
@@ -1254,6 +1285,20 @@ typedef struct CPUMFEATURESARMV8
     uint32_t        fTrbe : 1;
     /** Supports Scalable Matrix Extension (FEAT_SME). */
     uint32_t        fSme : 1;
+    /** Supports mixed-endian (FEAT_MixedEnd). */
+    uint32_t        fMixedEnd : 1;
+    /** Supports mixed-endian at EL0 (FEAT_MixedEndEL0). */
+    uint32_t        fMixedEndEl0 : 1;
+    /** Supports enhanced translation synchronization (FEAT_ETS3). */
+    uint32_t        fEts3 : 1;
+    /** Supports SError interrupt exceptions from speculative reads for memory (FEAT_SpecSEI). */
+    uint32_t        fSpecSei : 1;
+    /** Supports speculative behaviour of pointer authentication (FEAT_FPACC_SPEC). */
+    uint32_t        fFpaccSpec : 1;
+    /** Supports cache speculation variant 2 version 2 (FEAT_CSV2_2). */
+    uint32_t        fCvs2_2 : 1;
+    /** Supports programming of HCR_EL2.E2H (FEAT_E2H0). */
+    uint32_t        fE2H0 : 1;
     /** @} */
 
     /** @name 2020 Architecture Extensions.
@@ -1390,8 +1435,6 @@ typedef struct CPUMFEATURESARMV8
     uint32_t        fMec : 1;
     /** Supports Enhanced Memory Tagging Extension (FEAT_MTE4). */
     uint32_t        fMte4 : 1;
-    /** Supports Canoncial Tag checking for untagged memory (FEAT_MTE_CANONCIAL_TAGS). */
-    uint32_t        fMteCanonicalTags : 1;
     /** Supports FAR_ELx on a Tag Check Fault (FEAT_MTE_TAGGED_FAR). */
     uint32_t        fMteTaggedFar : 1;
     /** Supports Store only Tag checking (FEAT_MTE_STORE_ONLY). */
@@ -1470,8 +1513,202 @@ typedef struct CPUMFEATURESARMV8
     uint32_t        fTrbeMpam : 1;
     /** @} */
 
+    /** @name Armv8.4
+     * @{  */
+    /** Supports FEAT_TRC_SR (FEAT_TRC_SR). */
+    uint32_t        fTrcSr : 1;
+    /** @} */
+
+    /** @name Armv8.4
+     * @{  */
+    /** Supports enhanced counter virtualization physical offset (FEAT_ECV_POFF). */
+    uint32_t        fEcvPOff : 1;
+    /** @} */
+
+    /** @name Armv8.6
+     * @{  */
+    /** Supports disable cycle counter on SPE freeze (FEAT_SPE_DPFZS). */
+    uint32_t        fSpeDpfzs : 1;
+    /** @} */
+
+    /** @name Armv8.7
+     * @{  */
+    /** Supports allocation tag access permission (FEAT_MTE_PERM). */
+    uint32_t        fMtePerm : 1;
+    /* Support statistical profiling inverse event filter (FEAT_SPE_FnE). */
+    uint32_t        fSpeFnE : 1;
+    /* Support statistical profiling previous branch target (FEAT_SPE_PBT). */
+    uint32_t        fSpePbt : 1;
+    /** @} */
+
+    /** @name Armv8.8
+     * @{  */
+    /** Supports address translation operations that ignore stage 1 (FEAT_ATS1A). */
+    uint32_t        fATs1a : 1;
+    /** @} */
+
+    /** @name Armv8.9
+     * @{  */
+    /** Supports canonical tag checking for untagged memory (FEAT_MTE_CANONICAL_TAGS). */
+    uint32_t        fMteCanonicalTags : 1;
+    /** @} */
+
+    /** @name Armv9.0
+     * @{  */
+    /** Supports injection of undefined instruction exceptions (FEAT_UINJ). */
+    uint32_t        fUinj : 1;
+    /** @} */
+
+    /** @name Armv9.2
+     * @{  */
+    /** Supports floating-point mode register (FEAT_FPMR). */
+    uint32_t        fFpmr : 1;
+    /* Support statistical profiling extensions for SME (FEAT_SPE_SME). */
+    uint32_t        fSpeSme : 1;
+    /** @} */
+
+    /** @name Armv9.3
+     * @{  */
+    /** Supports MPAM PE-side bandwidth controls (FEAT_MPAM_PE_BW_CTRL). */
+    uint32_t        fMpamPeBwCtrl : 1;
+    /** @} */
+
+    /** @name Armv9.4
+     * @{  */
+    /** Supports FEAT_SME_B16B16 (FEAT_SME_B16B16). */
+    uint32_t        fSmeB16B16 : 1;
+    /** Support TLBI VMALL for dirty state (FEAT_TLBIW). */
+    uint32_t        fTlbiW : 1;
+    /** Support hardware dirty state tracking structure (FEAT_HDBSS). */
+    uint32_t        fHdbss : 1;
+    /** Support hardware accelerator for cleaning dirty state (FEAT_HACDBS). */
+    uint32_t        fHacdbs : 1;
+    /** Support for concurrent use of two ASIDs (FEAT_ASID2). */
+    uint32_t        fAsid2 : 1;
+    /** Support delegated SError exception injection (FEAT_E3DSE). */
+    uint32_t        fE3Dse : 1;
+    /** Support fine-grained write trap EL3 (FEAT_FGWTE3). */
+    uint32_t        fFgwtE3 : 1;
+    /** Support RME granule protection check 2 extension (FEAT_RME_GPC2). */
+    uint32_t        fRmeGpc2 : 1;
+    /** Support streaming scalable vector bit permutes instructions (FEAT_SSVE_BitPerm). */
+    uint32_t        fSsveBitPerm : 1;
+    /** Support performance monitors extensions for SME (FEAT_PMUv3_SME). */
+    uint32_t        fPmuV3Sme : 1;
+    /* Support performance monitors event counting linking extensions (FEAT_PMUv3_TH2). */
+    uint32_t        fPmuV3Th2 : 1;
+    /* Support statistical profiling alternate clock domain extensions (FEAT_SPE_ALTCLK). */
+    uint32_t        fSpeAltClk : 1;
+    /* Support statistical profiling extended filtering by type (FEAT_SPE_EFT). */
+    uint32_t        fSpeEft : 1;
+    /* Support statistical profiling floating-point and SIMD flag extensions (FEAT_SPE_FPF). */
+    uint32_t        fSpeFpf : 1;
+    /** @} */
+
+    /** @name Armv9.5
+     * @{  */
+    /** Supports FEAT_CPA (FEAT_CPA). */
+    uint32_t        fCpa : 1;
+    /** Supports FEAT_FAMINMAX (FEAT_FAMINMAX). */
+    uint32_t        fFaMinMax : 1;
+    /** Supports FEAT_FP8 (FEAT_FP8). */
+    uint32_t        fFp8 : 1;
+    /** Supports FEAT_FP8DOT2 (FEAT_FP8DOT2). */
+    uint32_t        fFp8Dot2 : 1;
+    /** Supports FEAT_FP8DOT4 (FEAT_FP8DOT4). */
+    uint32_t        fFp8Dot4 : 1;
+    /** Supports FEAT_FP8FMA (FEAT_FP8FMA). */
+    uint32_t        fFp8Fma : 1;
+    /** Supports FEAT_LUT (FEAT_LUT). */
+    uint32_t        fLut : 1;
+    /** Supports FEAT_PAuth_LR (FEAT_PAuth_LR). */
+    uint32_t        fPAuthLR : 1;
+    /** Supports FEAT_SSVE_FP8DOT2 (FEAT_SSVE_FP8DOT2). */
+    uint32_t        fSsveFp8Dot2 : 1;
+    /** Supports FEAT_SSVE_FP8DOT4 (FEAT_SSVE_FP8DOT4). */
+    uint32_t        fSsveFp8Dot4 : 1;
+    /** Supports FEAT_SSVE_FP8FMA (FEAT_SSVE_FP8FMA). */
+    uint32_t        fSsveFp8Fma : 1;
+    /** Supports FEAT_SME_F8F16 (FEAT_SME_F8F16). */
+    uint32_t        fSmeF8F16 : 1;
+    /** Supports FEAT_SME_F8F32 (FEAT_SME_F8F32). */
+    uint32_t        fSmeF8F32 : 1;
+    /** Supports FEAT_SME_LUTv2 (FEAT_SME_LUTv2). */
+    uint32_t        fSmeLutv2 : 1;
+    /** Support system performance monitors extension version 2 (FEAT_SPMU2). */
+    uint32_t        fSpmu2 : 1;
+    /** Support breakpoint and watchpoint enhancements 2  (FEAT_BWE2). */
+    uint32_t        fBwe2 : 1;
+    /** Support enhanced software step extension (FEAT_STEP2). */
+    uint32_t        fStep2 : 1;
+    /** Support checked pointer arithmetic (FEAT_CPA2). */
+    uint32_t        fCpa2 : 1;
+    /** Supports enhanced nested virtualization (FEAT_NV2p1). */
+    uint32_t        fNV2p1 : 1;
+    /** Supports RME granular data isolation extension (FEAT_RME_GDI). */
+    uint32_t        fRmeGdi : 1;
+    /** Support RME granule protection check 3 extension (FEAT_RME_GPC3). */
+    uint32_t        fRmeGpc3 : 1;
+    /** Support streaming SVE mode AES + 128-bit polynomial multiply long instr. (FEAT_SSVE_AES). */
+    uint32_t        fSsveAes : 1;
+    /** Support MPAM default resource control (FEAT_MPAM_MSC_DCTRL). */
+    uint32_t        fMpamMscDCtrl : 1;
+    /** Support MPAM domain PARTID translation (FEAT_MPAM_MSC_DOMAINS). */
+    uint32_t        fMpamMscDomains : 1;
+    /** @} */
+
+    /** @name Armv9.6
+     * @{  */
+    /** Supports FEAT_CMPBR (FEAT_CMPBR). */
+    uint32_t        fCmpBr : 1;
+    /** Supports FEAT_F8F16MM (FEAT_F8F16MM). */
+    uint32_t        fF8F16mm : 1;
+    /** Supports FEAT_F8F32MM (FEAT_F8F32MM). */
+    uint32_t        fF8F32mm : 1;
+    /** Supports FEAT_FPRCVT (FEAT_FPRCVT). */
+    uint32_t        fFpRcvt : 1;
+    /** Supports FEAT_LSFE (FEAT_LSFE). */
+    uint32_t        fLsfe : 1;
+    /** Supports FEAT_LSUI (FEAT_LSUI). */
+    uint32_t        fLsui : 1;
+    /** Supports FEAT_PCDPHINT (FEAT_PCDPHINT). */
+    uint32_t        fPCDPHint : 1;
+    /** Supports FEAT_SME2p2 (FEAT_SME2p2). */
+    uint32_t        fSme2p2 : 1;
+    /** Supports FEAT_SSVE_FEXPA (FEAT_SSVE_FEXPA). */
+    uint32_t        fSsveFexpa : 1;
+    /** Supports FEAT_SVE2p2 (FEAT_SVE2p2). */
+    uint32_t        fSve2p2 : 1;
+    /** Supports FEAT_SVE_BFSCALE (FEAT_SVE_BFSCALE). */
+    uint32_t        fSveBfscale : 1;
+    /** Supports FEAT_SVE_F16F32MM (FEAT_SVE_F16F32MM). */
+    uint32_t        fSveF16F32mm : 1;
+    /** Supports FEAT_SME_MOP4 (FEAT_SME_MOP4). */
+    uint32_t        fSmeMop4 : 1;
+    /** Supports FEAT_SME_TMOP (FEAT_SME_TMOP). */
+    uint32_t        fSmeTmop : 1;
+    /** Supports FEAT_SVE_AES2 (FEAT_SVE_AES2). */
+    uint32_t        fSveAes2 : 1;
+    /** Supports FEAT_SPEv1p5 (FEAT_SPEv1p5). */
+    uint32_t        fSpev1p5 : 1;
+    /** Supports FEAT_TRBEv1p1 (FEAT_TRBEv1p1). */
+    uint32_t        fTrbev1p1 : 1;
+    /** Supports profiling exception extension (FEAT_SPE_EXC). */
+    uint32_t        fSpeExc : 1;
+    /** Supports statistical profiling physical addressing mode extension (FEAT_SPE_nVM). */
+    uint32_t        fSpeNvm : 1;
+    /** Supports trace buffer profiling exception extension (FEAT_TRBE_EXC). */
+    uint32_t        fTrbeExc : 1;
+    /** Supports LS64 for write-back cachable memory (FEAT_LS64WB). */
+    uint32_t        fLs64WB : 1;
+    /** Supports outer cacheable cache maint. operation (FEAT_OCCMO). */
+    uint32_t        fOccmo : 1;
+    /** Supports floating-point to/from integer in scalar fp reg (FEAT_IDTE3). */
+    uint32_t        fIdte3 : 1;
+    /** @} */
+
     /** Padding to the required size to match CPUMFEATURESX86. */
-    uint32_t        auPadding[5];
+    uint32_t        auPadding[2];
 } CPUMFEATURESARMV8;
 #ifndef VBOX_FOR_DTRACE_LIB
 AssertCompileSize(CPUMFEATURESARMV8, 64);
@@ -1860,6 +2097,7 @@ VMMDECL(int)            CPUMCpuIdCollectLeavesFromX86Host(PCPUMCPUIDLEAF *ppaLea
 VMM_INT_DECL(void)      CPUMCpuIdApplyX86HostArchCapabilities(PVMCC pVM, bool fHasArchCap, uint64_t fHostArchVal);
 #endif
 #if defined(RT_ARCH_ARM64)
+VMMDECL(int)            CPUMCpuIdCollectIdSysRegsFromArmV8Host(struct SUPARMSYSREGVAL **ppaSysRegs, uint32_t *pcSysRegs);
 VMMDECL(int)            CPUMCpuIdCollectIdRegistersFromArmV8Host(PCPUMARMV8IDREGS pIdRegs);
 #endif
 
