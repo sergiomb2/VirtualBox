@@ -9424,7 +9424,7 @@ ifndef VBOX_SVN_REV
  endif
 
  # Rule for generating a timestamp and updating the real thing on change.
- $(VBOX_SVN_REV_KMK).ts +| $(VBOX_SVN_REV_KMK): $(if $(VBOX_SVN_DEP), $(VBOX_SVN_DEP), $(if $(VBOX_GIT_DEP), $(VBOX_GIT_DEP), $(PATH_ROOT)/Config.kmk)) 
+ $(VBOX_SVN_REV_KMK).ts +| $(VBOX_SVN_REV_KMK): $(if $(VBOX_SVN_DEP), $(VBOX_SVN_DEP), $(if $(VBOX_GIT_DEP), $(VBOX_GIT_DEP), $(PATH_ROOT)/Config.kmk))
 	$(call MSG_GENERATE,,$(VBOX_SVN_REV_KMK))
 	$(QUIET)$(RM) -f $@ $@.tmp
 	$(QUIET)$(MKDIR) -p $(@D)
