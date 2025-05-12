@@ -421,7 +421,7 @@ check_environment()
         BUILD_MACHINE='sparc32'
         BUILD_CPU='blend'
         ;;
-    aarch64)
+    aarch64|arm64)
         BUILD_MACHINE='arm64'
         BUILD_CPU='blend'
         ;;
