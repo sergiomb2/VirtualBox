@@ -44,6 +44,8 @@
 
 /** Size of the ITS register frame. */
 #define GITS_REG_FRAME_SIZE                                     _64K
+/** The offset mask for an ITS register within a frame. */
+#define GITS_REG_OFFSET_MASK                                    (_64K - 1)
 
 /** The GITS command queue page size. */
 #define GITS_CMD_QUEUE_PAGE_SIZE                                0x1000

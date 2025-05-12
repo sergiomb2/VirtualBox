@@ -990,13 +990,12 @@ DECLCALLBACK(int) gicR3Construct(PPDMDEVINS pDevIns, int iInstance, PCFGMNODE pC
 
     /* ITS. */
     {
-        RTGCPHYS GCPhysMmioBase = 0;
-        rc = pHlp->pfnCFGMQueryU64(pCfg, "ItsMmioBase", &GCPhysMmioBase);
+        rc = pHlp->pfnCFGMQueryU64(pCfg, "ItsMmioBase", &pGicDev->GCPhysGits);
         if (RT_SUCCESS(rc))
         {
             Assert(pGicDev->hMmioGits != NIL_IOMMMIOHANDLE);    /* paranoia, as this would be 0 here not NIL_IOMMMIOHANDLE. */
             RTGCPHYS const cbRegion = 2 * GITS_REG_FRAME_SIZE;  /* 2 frames for GICv3. */
-            rc = PDMDevHlpMmioCreateAndMap(pDevIns, GCPhysMmioBase, cbRegion, gicItsMmioWrite, gicItsMmioRead,
+            rc = PDMDevHlpMmioCreateAndMap(pDevIns, pGicDev->GCPhysGits, cbRegion, gicItsMmioWrite, gicItsMmioRead,
                                              IOMMMIO_FLAGS_READ_DWORD_QWORD
                                            | IOMMMIO_FLAGS_WRITE_DWORD_QWORD_ZEROED
                                            | IOMMMIO_FLAGS_DBGSTOP_ON_COMPLICATED_READ
@@ -1004,6 +1003,7 @@ DECLCALLBACK(int) gicR3Construct(PPDMDEVINS pDevIns, int iInstance, PCFGMNODE pC
                                            "GIC ITS", &pGicDev->hMmioGits);
             AssertLogRelRCReturn(rc, rc);
             Assert(pGicDev->hMmioGits != NIL_IOMMMIOHANDLE);
+            Assert(pGicDev->GCPhysGits != NIL_RTGCPHYS);
 
             /* When the ITS is enabled we must support LPIs. */
             if (!pGicDev->fLpi)
@@ -1024,7 +1024,8 @@ DECLCALLBACK(int) gicR3Construct(PPDMDEVINS pDevIns, int iInstance, PCFGMNODE pC
         }
         else
         {
-            pGicDev->hMmioGits = NIL_IOMMMIOHANDLE;
+            pGicDev->hMmioGits  = NIL_IOMMMIOHANDLE;
+            pGicDev->GCPhysGits = NIL_RTGCPHYS;
 
             /* When the ITS is disabled we don't support LPIs as we do not support direct LPI injection (guests don't use it). */
             if (pGicDev->fLpi)

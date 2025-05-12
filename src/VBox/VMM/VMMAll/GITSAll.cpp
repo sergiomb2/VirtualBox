@@ -440,6 +440,7 @@ DECL_HIDDEN_CALLBACK(void) gitsMmioWriteTranslate(PGITSDEV pGitsDev, uint16_t of
     Assert(cb == 8 || cb == 4);
     Assert(!(offReg & 3));
     Log4Func(("offReg=%u uValue=%#RX64 cb=%u\n", offReg, uValue, cb));
+    /** @todo Call gitsSetLpi for GITS_TRANSLATER register offset write. */
     AssertReleaseMsgFailed(("offReg=%#x uValue=%#RX64 [%u-bit]\n", offReg, uValue, cb << 3));
 }
 
@@ -701,6 +702,14 @@ static int gitsR3DteWrite(PPDMDEVINS pDevIns, PGITSDEV pGitsDev, uint32_t uDevId
         return PDMDevHlpPhysWriteMeta(pDevIns, GCPhysDte, (const void *)&uDte, sizeof(uDte));
     AssertMsgFailed(("Failed to get device-table entry address for device ID %#RX32 rc=%Rrc\n", uDevId, rc));
     return rc;
+}
+
+
+static int gitsR3IteRead(PPDMDEVINS pDevIns, GITSDTE uDte, uint32_t uEventId, GITSITE *puIte)
+{
+    RTGCPHYS const GCPhysIntrTable = uDte & GITS_BF_DTE_ITT_ADDR_MASK;
+    RTGCPHYS const GCPhysIte       = GCPhysIntrTable + uEventId * sizeof(GITSITE);
+    return PDMDevHlpPhysReadMeta(pDevIns, GCPhysIte, (void *)puIte, sizeof(*puIte));
 }
 
 
@@ -997,17 +1006,67 @@ DECL_HIDDEN_CALLBACK(int) gitsR3CmdQueueProcess(PPDMDEVINS pDevIns, PGITSDEV pGi
 #endif /* IN_RING3 */
 
 
-/**
- * @interface_method_impl{PDMGICBACKEND,pfnSendMsi}
- */
-DECL_HIDDEN_CALLBACK(int) gitsSendMsi(PVMCC pVM, PCIBDF uBusDevFn, PCMSIMSG pMsi, uint32_t uTagSrc)
+DECL_HIDDEN_CALLBACK(int) gitsSetLpi(PPDMDEVINS pDevIns, PGITSDEV pGitsDev, uint32_t uDevId, uint32_t uEventId, bool fAsserted)
 {
-    AssertPtrReturn(pMsi, VERR_INVALID_PARAMETER);
-    Log4Func(("uBusDevFn=%#RX32 Msi.Addr=%#RX64 Msi.Data=%#RX32\n", uBusDevFn, pMsi->Addr.u64, pMsi->Data.u32));
-    RT_NOREF(pVM, uBusDevFn, pMsi, uTagSrc);
-    AssertMsgFailed(("uBusDevFn=%#RX32 Msi.Addr=%#RX64 Msi.Data=%#RX32\n", uBusDevFn, pMsi->Addr.u64, pMsi->Data.u32));
-    return VERR_NOT_IMPLEMENTED;
+    /* We support 32-bits of device ID and hence it cannot be out of range (asserted below). */
+    Assert(sizeof(uDevId) * 8 >= RT_BF_GET(pGitsDev->uTypeReg.u, GITS_BF_CTRL_REG_TYPER_DEV_BITS) + 1);
+
+    /** @todo Error recording. */
+
+    GIC_CRIT_SECT_ENTER(pDevIns);
+
+    bool const fEnabled = RT_BF_GET(pGitsDev->uCtrlReg, GITS_BF_CTRL_REG_CTLR_ENABLED);
+    if (fEnabled)
+    {
+        /* Read the DTE */
+        GITSDTE uDte;
+        int rc = gitsR3DteRead(pDevIns, pGitsDev, uDevId, &uDte);
+        if (RT_SUCCESS(rc))
+        {
+            /* Check the DTE is mapped (valid). */
+            bool const fValid = RT_BF_GET(uDte, GITS_BF_DTE_VALID);
+            if (fValid)
+            {
+                /* Check that the event ID (which is the index) is within range. */
+                uint32_t const cEntries = RT_BIT_32(RT_BF_GET(uDte, GITS_BF_DTE_ITT_ADDR) + 1);
+                if (uEventId < cEntries)
+                {
+                    /* Read the interrupt-translation entry. */
+                    GITSITE uIte = 0;
+                    rc = gitsR3IteRead(pDevIns, uDte, uEventId, &uIte);
+                    if (RT_SUCCESS(rc))
+                    {
+                        /* Check the interrupt ID is within range. */
+                        uint16_t const uIntId = RT_BF_GET(uIte, GITS_BF_ITE_INTID);
+                        uint16_t const uIcId  = RT_BF_GET(uIte, GITS_BF_ITE_ICID);
+                        bool const fIsLpiValid = gicDistIsLpiValid(pDevIns, uIntId);
+                        if (fIsLpiValid)
+                        {
+                            /* Check the interrupt collection ID is valid. */
+                            if (uIcId < RT_ELEMENTS(pGitsDev->aCtes))
+                            {
+                                Assert(!RT_BF_GET(pGitsDev->uTypeReg.u, GITS_BF_CTRL_REG_TYPER_PTA));
+                                PCVMCC         pVM  = PDMDevHlpGetVM(pDevIns);
+                                VMCPUID const idCpu = pGitsDev->aCtes[uIcId].idTargetCpu;
+
+                                /* Check that the target CPU is valid. */
+                                if (idCpu < pVM->cCpus)
+                                {
+                                    /* Set or clear the LPI pending state in the redistributor. */
+                                    PVMCPUCC pVCpu = pVM->CTX_SUFF(apCpus)[idCpu];
+                                    gicReDistSetLpi(pDevIns, pVCpu, uIntId, fAsserted);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    GIC_CRIT_SECT_LEAVE(pDevIns);
+    return VINF_SUCCESS;
 }
+
 
 #endif /* !VBOX_DEVICE_STRUCT_TESTCASE */
 

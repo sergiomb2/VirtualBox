@@ -143,7 +143,6 @@ extern const PDMGICBACKEND g_GicKvmBackend;
         (a_uReg) = ((a_uReg) & ~(a_fRwMask)) | ((uint32_t)(a_uValue) & (uint32_t)(a_fRwMask)); \
     } while (0)
 
-
 /**
  * GIC PDM instance data (per-VM).
  */
@@ -231,6 +230,8 @@ typedef struct GICDEV
     IOMMMIOHANDLE               hMmioReDist;
     /** The interrupt translation service MMIO handle. */
     IOMMMIOHANDLE               hMmioGits;
+    /** The physical address of the ITS. */
+    RTGCPHYS                    GCPhysGits;
     /** @} */
 } GICDEV;
 /** Pointer to a GIC device. */
@@ -350,6 +351,7 @@ DECL_HIDDEN_CALLBACK(VBOXSTRICTRC) gicReDistMmioWrite(PPDMDEVINS pDevIns, void *
 DECL_HIDDEN_CALLBACK(VBOXSTRICTRC) gicItsMmioWrite(PPDMDEVINS pDevIns, void *pvUser, RTGCPHYS off, void const *pv, unsigned cb);
 DECL_HIDDEN_CALLBACK(VBOXSTRICTRC) gicItsMmioRead(PPDMDEVINS pDevIns, void *pvUser, RTGCPHYS off, void *pv, unsigned cb);
 
+DECLHIDDEN(void)                   gicReDistSetLpi(PPDMDEVINS pDevIns, PVMCPUCC pVCpu, uint16_t uIntId, bool fAsserted);
 DECLHIDDEN(void)                   gicDistReadLpiConfigTableFromMem(PPDMDEVINS pDevIns);
 DECLHIDDEN(bool)                   gicDistIsLpiValid(PPDMDEVINS pDevIns, uint16_t uIntId);
 

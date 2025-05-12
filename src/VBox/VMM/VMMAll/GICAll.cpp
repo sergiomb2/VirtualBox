@@ -719,6 +719,16 @@ static void gicReDistReadLpiPendingBitmapFromMem(PPDMDEVINS pDevIns, PVMCPU pVCp
 }
 
 
+DECLHIDDEN(void) gicReDistSetLpi(PPDMDEVINS pDevIns, PVMCPUCC pVCpu, uint16_t uIntId, bool fAsserted)
+{
+    Assert(GIC_CRIT_SECT_IS_OWNER(pDevIns));
+    PGICDEV pGicDev = PDMDEVINS_2_DATA(pDevIns, PGICDEV);
+    NOREF(pGicDev);
+    AssertMsgFailed(("[%u] uIntId=%RU32 fAsserted=%RTbool\n", pVCpu->idCpu, uIntId, fAsserted));
+}
+
+
+
 /**
  * Updates the internal IRQ state and sets or clears the appropriate force action
  * flags.
@@ -1868,7 +1878,7 @@ static uint16_t gicAckHighestPriorityPendingIntr(PGICDEV pGicDev, PVMCPUCC pVCpu
             /* Update the redistributor IRQ state to reflect change to the active interrupt. */
             gicReDistUpdateIrqState(pGicDev, pVCpu);
         }
-        else
+        else if (uIntId < GIC_INTID_RANGE_LPI_START)
         {
             /* Sanity check if the interrupt ID belongs to the distributor. */
             Assert(GIC_IS_INTR_SPI(uIntId) || GIC_IS_INTR_EXT_SPI(uIntId));
@@ -1909,6 +1919,11 @@ static uint16_t gicAckHighestPriorityPendingIntr(PGICDEV pGicDev, PVMCPUCC pVCpu
 
             /* Update the distributor IRQ state to reflect change to the active interrupt. */
             gicDistUpdateIrqState(pVCpu->CTX_SUFF(pVM), pGicDev);
+        }
+        else
+        {
+            /** @todo LPIs. */
+            /* Sanity check if the interrupt ID is an LPIs. */
         }
     }
     else
@@ -2736,6 +2751,35 @@ static DECLCALLBACK(int) gicSetPpi(PVMCPUCC pVCpu, uint32_t uPpiIntId, bool fAss
 
 
 /**
+ * @interface_method_impl{PDMGICBACKEND,pfnSendMsi}
+ */
+DECL_HIDDEN_CALLBACK(int) gicSendMsi(PVMCC pVM, PCIBDF uBusDevFn, PCMSIMSG pMsi, uint32_t uTagSrc)
+{
+    NOREF(uTagSrc); /** @todo Consider setting (on assert) and clearing (on de-assert) if possible later. */
+    AssertPtrReturn(pMsi, VERR_INVALID_PARAMETER);
+    Log4Func(("uBusDevFn=%#RX32 Msi.Addr=%#RX64 Msi.Data=%#RX32\n", uBusDevFn, pMsi->Addr.u64, pMsi->Data.u32));
+
+    PGIC       pGic    = VM_TO_GIC(pVM);
+    PPDMDEVINS pDevIns = pGic->CTX_SUFF(pDevIns);
+    PGICDEV    pGicDev = PDMDEVINS_2_DATA(pDevIns, PGICDEV);
+    Assert(pGicDev->fEnableLpis);
+
+    uint32_t const uEventId = pMsi->Data.u32;
+    uint32_t const uDevId   = uBusDevFn;
+    AssertMsg((pMsi->Addr.u64 & ~(RTGCPHYS)GITS_REG_OFFSET_MASK) == pGicDev->GCPhysGits + GITS_REG_FRAME_SIZE,
+              ("Addr=%#RX64 MMIO frame=%#RX64\n", pMsi->Addr.u64, pGicDev->GCPhysGits));
+    AssertMsg((pMsi->Addr.u64 & GITS_REG_OFFSET_MASK) == GITS_TRANSLATION_REG_TRANSLATER,
+              ("Addr=%#RX64 offset=%#RX32\n", pMsi->Addr.u64, GITS_TRANSLATION_REG_TRANSLATER));
+
+    gitsSetLpi(pDevIns, &pGicDev->Gits, uDevId, uEventId, true /* fAsserted */);
+
+    AssertMsgFailed(("uBusDevFn=%#RX32 (%RTbool) Msi.Addr=%#RX64 Msi.Data=%#RX32\n", uBusDevFn, PCIBDF_IS_VALID(uBusDevFn),
+                     pMsi->Addr.u64, pMsi->Data.u32));
+    return VERR_NOT_IMPLEMENTED;
+}
+
+
+/**
  * Sets the specified software generated interrupt (SGI).
  *
  * @returns Strict VBox status code.
@@ -3530,6 +3574,6 @@ const PDMGICBACKEND g_GicBackend =
     /* .pfnWriteSysReg = */ gicWriteSysReg,
     /* .pfnSetSpi = */      gicSetSpi,
     /* .pfnSetPpi = */      gicSetPpi,
-    /* .pfnSendMsi = */     gitsSendMsi,
+    /* .pfnSendMsi = */     gicSendMsi,
 };
 
