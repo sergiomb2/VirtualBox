@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # $Id$
-# pylint: disable=invalid-name
+# pylint: disable=invalid-name,too-many-lines
 
 """
 ARM BSD specification analyser.
@@ -129,9 +129,9 @@ g_dSpecFeatToCpumFeat = {
     'FEAT_CLRBHB':                  'fClrBhb',
     'FEAT_CMOW':                    'fCmow',
     'FEAT_CMPBR':                   'fCmpBr',
-    'FEAT_CNTSC':                   'fCntsc',
+    #'FEAT_CNTSC':                   'fCntsc',              # needs external registers for detection
     'FEAT_CONSTPACFIELD':           'fConstPacField',
-    'FEAT_CP15DISABLE2':            'fCp15Disable2',
+    #'FEAT_CP15SDISABLE2':           'fCp15SDisable2', - can't be detected?
     'FEAT_CPA':                     'fCpa',
     'FEAT_CPA2':                    'fCpa2',
     'FEAT_CRC32':                   'fCrc32',
@@ -150,7 +150,7 @@ g_dSpecFeatToCpumFeat = {
     'FEAT_Debugv8p9':               'fDebugV8p9',
     'FEAT_DGH':                     'fDgh',
     'FEAT_DIT':                     'fDit',
-    'FEAT_DoPD':                    'fDopd',
+    #'FEAT_DoPD':                    'fDopd',               # needs external registers for detection
     'FEAT_DotProd':                 'fDotProd',
     'FEAT_DoubleFault':             'fDoubleFault',
     'FEAT_DoubleFault2':            'fDoubleFault2',
@@ -165,7 +165,7 @@ g_dSpecFeatToCpumFeat = {
     'FEAT_ECBHB':                   'fEcBhb',
     'FEAT_ECV':                     'fEcv',
     'FEAT_ECV_POFF':                'fEcvPOff',
-    'FEAT_EDHSR':                   'fEdhsr',
+    #'FEAT_EDHSR':                   'fEdhsr',              # needs external registers for detection
     'FEAT_EPAC':                    'fEpac',
     'FEAT_ETE':                     'fEte',
     'FEAT_ETEv1p1':                 'fEteV1p1',
@@ -254,8 +254,8 @@ g_dSpecFeatToCpumFeat = {
     'FEAT_MixedEndEL0':             'fMixedEndEl0',
     'FEAT_MOPS':                    'fMops',
     'FEAT_MPAM':                    'fMpam',
-    'FEAT_MPAM_MSC_DCTRL':          'fMpamMscDCtrl',
-    'FEAT_MPAM_MSC_DOMAINS':        'fMpamMscDomains',
+    #'FEAT_MPAM_MSC_DCTRL':          'fMpamMscDCtrl',       # needs external registers for detection
+    #'FEAT_MPAM_MSC_DOMAINS':        'fMpamMscDomains',     # needs external registers for detection
     'FEAT_MPAM_PE_BW_CTRL':         'fMpamPeBwCtrl',
     'FEAT_MPAMv0p1':                'fMpamV0p1',
     'FEAT_MPAMv1p1':                'fMpamV1p1',
@@ -265,7 +265,7 @@ g_dSpecFeatToCpumFeat = {
     'FEAT_MTE_CANONICAL_TAGS':      'fMteCanonicalTags',
     'FEAT_MTE_NO_ADDRESS_TAGS':     'fMteNoAddressTags',
     'FEAT_MTE_PERM':                'fMtePerm',
-    'FEAT_MTE_PERM_S1':             'fMtePermS1',
+    #'FEAT_MTE_PERM_S1':             'fMtePermS1', # removed?
     'FEAT_MTE_STORE_ONLY':          'fMteStoreOnly',
     'FEAT_MTE_TAGGED_FAR':          'fMteTaggedFar',
     'FEAT_MTE2':                    'fMte2',
@@ -288,16 +288,16 @@ g_dSpecFeatToCpumFeat = {
     'FEAT_PAuth_LR':                'fPAuthLR',
     'FEAT_PAuth2':                  'fPAuth2',
     'FEAT_PCDPHINT':                'fPCDPHint',
-    'FEAT_PCSRv8':                  'fPcsrV8',
-    'FEAT_PCSRv8p2':                'fPcsrV8p2',
-    'FEAT_PCSRv8p9':                'fPcsrV8p9',
+    #'FEAT_PCSRv8':                  'fPcsrV8',             # needs external registers for detection
+    #'FEAT_PCSRv8p2':                'fPcsrV8p2',           # needs external registers for detection
+    #'FEAT_PCSRv8p9':                'fPcsrV8p9',           # needs external registers for detection
     'FEAT_PFAR':                    'fPfar',
     'FEAT_PMULL':                   'fPmull',
     'FEAT_PMUv3':                   'fPmuV3',
     'FEAT_PMUv3_EDGE':              'fPmuV3Edge',
-    'FEAT_PMUv3_EXT':               'fPmuV3Ext',
-    'FEAT_PMUv3_EXT32':             'fPmuV3Ext32',
-    'FEAT_PMUv3_EXT64':             'fPmuV3Ext64',
+    #'FEAT_PMUv3_EXT':               'fPmuV3Ext',           # difficult to detect
+    #'FEAT_PMUv3_EXT32':             'fPmuV3Ext32',         # difficult to detect
+    #'FEAT_PMUv3_EXT64':             'fPmuV3Ext64',         # difficult to detect
     'FEAT_PMUv3_ICNTR':             'fPmuV3Icntr',
     'FEAT_PMUv3_SME':               'fPmuV3Sme',
     'FEAT_PMUv3_SS':                'fPmuV3Ss',
@@ -311,8 +311,8 @@ g_dSpecFeatToCpumFeat = {
     'FEAT_PMUv3p9':                 'fPmuV3p9',
     'FEAT_PRFMSLC':                 'fPrfmSlc',
     'FEAT_RAS':                     'fRas',
-    'FEAT_RASSAv1p1':               'fRassaV1p1',
-    'FEAT_RASSAv2':                 'fRasSaV2',
+    #'FEAT_RASSAv1p1':               'fRassaV1p1',          # difficult to detect
+    #'FEAT_RASSAv2':                 'fRasSaV2',            # difficult to detect
     'FEAT_RASv1p1':                 'fRasV1p1',
     'FEAT_RASv2':                   'fRasV2',
     'FEAT_RDM':                     'fRdm',
@@ -683,16 +683,20 @@ class ArmAstBinaryOp(ArmAstBase):
 
         # 'x IN (y,z,...)' needs rewriting.
         if self.sOp == 'IN':
-            if not isinstance(self.oLeft, ArmAstIdentifier):
-                raise Exception('Unsupported left operand to IN operator: %s' % (self.toString(),));
             if not isinstance(self.oRight, ArmAstSet):
                 raise Exception('Unsupported right operand to IN operator: %s' % (self.toString(),));
-            (sCName, cBitsWidth) = oHelper.getFieldInfo(self.oLeft.sName);
+
+            if isinstance(self.oLeft, ArmAstIdentifier):
+                (sCName, cBitsWidth) = oHelper.getFieldInfo(self.oLeft.sName);
+            elif isinstance(self.oLeft, ArmAstField):
+                (sCName, cBitsWidth) = oHelper.getFieldInfo(self.oLeft.sField, self.oLeft.sName, self.oLeft.sState);
+            else:
+                raise Exception('Unsupported left operand to IN operator: %s' % (self.toString(),));
 
             asTests = [];
             for oValue in self.oRight.aoValues:
                 if isinstance(oValue, ArmAstValue):
-                    (fValue, fFixed, fWildcard) = ArmEncodesetField.parseValue(oValue.sValue, cBitsWidth);
+                    (fValue, fFixed, fWildcard, _) = ArmEncodesetField.parseValue(oValue.sValue, cBitsWidth);
                     fCombined = fValue | fFixed | fWildcard;
                     if fCombined < 0 or fCombined >= (1 << cBitsWidth):
                         raise Exception('Set value out of range: %s, width %u bits (expr: %s)'
@@ -723,9 +727,28 @@ class ArmAstBinaryOp(ArmAstBase):
                 return asTests[0];
             return '(%s)' % (' || '.join(asTests),);
 
-
         raise Exception('Unsupported binary operator: %s (%s)' % (self.sOp, self.toString(),));
 
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        sOpType = self.kdOps[self.sOp];
+        if sOpType in (self.kOpTypeCompare, self.kOpTypeLogical, self.kOpTypeSet):
+            return 1; # boolean result.
+        return -1;
+
+    @staticmethod
+    def andListToTree(aoAndConditions):
+        """ Creates AST tree of AND binary checks from aoAndConditions. """
+        if len(aoAndConditions) <= 1:
+            return aoAndConditions[0].clone();
+        return ArmAstBinaryOp(aoAndConditions[0].clone(), '&&', ArmAstBinaryOp.andListToTree(aoAndConditions[1:]));
+
+    @staticmethod
+    def orListToTree(aoOrConditions):
+        """ Creates AST tree of OR binary checks from aoAndConditions. """
+        if len(aoOrConditions) <= 1:
+            return aoOrConditions[0].clone();
+        return ArmAstBinaryOp(aoOrConditions[0].clone(), '||', ArmAstBinaryOp.orListToTree(aoOrConditions[1:]));
 
 
 class ArmAstUnaryOp(ArmAstBase):
@@ -764,6 +787,11 @@ class ArmAstUnaryOp(ArmAstBase):
             return '%s(%s)' % (self.sOp, self.oExpr.toCExpr(oHelper));
         return '%s%s' % (self.sOp, self.oExpr.toCExpr(oHelper));
 
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        assert self.sOp == '!';
+        return 1;
+
 
 class ArmAstSquareOp(ArmAstBase):
     def __init__(self, oVar, aoValues):
@@ -791,6 +819,10 @@ class ArmAstSquareOp(ArmAstBase):
     def toCExpr(self, oHelper):
         _ = oHelper;
         raise Exception('ArmAstSquareOp does not support conversion to C expression: %s' % (self.toString()));
+
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        return -1;
 
 
 class ArmAstDotAtom(ArmAstBase):
@@ -822,6 +854,9 @@ class ArmAstDotAtom(ArmAstBase):
     #    """ Limited to identifiers separated byt dots """
     #    asValues = sExpr.split('.');
 
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        return -1;
 
 
 class ArmAstConcat(ArmAstBase):
@@ -870,6 +905,17 @@ class ArmAstConcat(ArmAstBase):
         sConcat += ')';
         return sConcat;
 
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        cBitsWidth = 0;
+        for oValue in self.aoValues:
+            cBitsThis = oValue.getWidth(oHelper);
+            if cBitsThis < 0:
+                return -1;
+            cBitsWidth += cBitsThis;
+        return cBitsWidth;
+
+
 class ArmAstFunction(ArmAstBase):
     s_oReValidName = re.compile('^[_A-Za-z][_A-Za-z0-9]+$');
 
@@ -898,6 +944,10 @@ class ArmAstFunction(ArmAstBase):
     def toCExpr(self, oHelper):
         return oHelper.convertFunctionCall(self);
 
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        return -1;
+
 
 class ArmAstIdentifier(ArmAstBase):
     s_oReValidName        = re.compile('^[_A-Za-z][_A-Za-z0-9]*$');
@@ -925,6 +975,10 @@ class ArmAstIdentifier(ArmAstBase):
         (sCName, _) = oHelper.getFieldInfo(self.sName);
         return sCName;
 
+    def getWidth(self, oHelper):
+        (_, cBitsWidth) = oHelper.getFieldInfo(self.sName);
+        return cBitsWidth;
+
 
 class ArmAstBool(ArmAstBase):
     def __init__(self, fValue):
@@ -947,6 +1001,10 @@ class ArmAstBool(ArmAstBase):
     def toCExpr(self, oHelper):
         _ = oHelper;
         return 'true' if self.fValue is True else 'false';
+
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        return 1;
 
 
 class ArmAstInteger(ArmAstBase):
@@ -974,6 +1032,10 @@ class ArmAstInteger(ArmAstBase):
             return 'UINT32_C(%#x)' % (self.iValue,);
         return '%#x' % (self.iValue,);
 
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        return self.iValue.bit_length() + (self.iValue < 0)
+
 
 class ArmAstSet(ArmAstBase):
     def __init__(self, aoValues):
@@ -999,6 +1061,12 @@ class ArmAstSet(ArmAstBase):
         _ = oHelper;
         raise Exception('ArmAstSet does not support conversion to C expression: %s' % (self.toString()));
 
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        if self.aoValues:
+            return max(oValue.getWidth() for oValue in self.aoValues);
+        return -1;
+
 
 class ArmAstValue(ArmAstBase):
     def __init__(self, sValue):
@@ -1019,7 +1087,7 @@ class ArmAstValue(ArmAstBase):
 
     def toCExpr(self, oHelper):
         _ = oHelper;
-        (fValue, _, fWildcard) = ArmEncodesetField.parseValue(self.sValue, 0);
+        (fValue, _, fWildcard, _) = ArmEncodesetField.parseValue(self.sValue, 0);
         if fWildcard:
             raise Exception('Value contains wildcard elements: %s' % (self.sValue,));
         if fValue < 10:
@@ -1027,6 +1095,11 @@ class ArmAstValue(ArmAstBase):
         if fValue & (1<<31):
             return 'UINT32_C(%#x)' % (fValue,);
         return '%#x' % (fValue,);
+
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        (_, _, _, cBitsWidth) = ArmEncodesetField.parseValue(self.sValue, 0);
+        return cBitsWidth;
 
 
 class ArmAstString(ArmAstBase):
@@ -1049,6 +1122,10 @@ class ArmAstString(ArmAstBase):
     def toCExpr(self, oHelper):
         _ = oHelper;
         return '"' + self.sValue.replace('\\', '\\\\').replace('"', '\\"') + '"';
+
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        return -1;
 
 
 class ArmAstField(ArmAstBase):
@@ -1081,6 +1158,12 @@ class ArmAstField(ArmAstBase):
     def toCExpr(self, oHelper):
         (sCName, _) = oHelper.getFieldInfo(self.sField, self.sName, self.sState);
         return sCName;
+
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        (_, cBitsWidth) = oHelper.getFieldInfo(self.sField, self.sName, self.sState);
+        return cBitsWidth;
+
 
 
 #
@@ -1124,14 +1207,15 @@ class ArmEncodesetField(object):
     @staticmethod
     def parseValue(sValue, cBitsWidth):
         """
-        Returns (fValue, fFixed, fWildcard) tuple on success, raises AssertionError otherwise.
+        Returns (fValue, fFixed, fWildcard, cBitsWidth) tuple on success, raises AssertionError otherwise.
         """
         assert sValue[0] == '\'' and sValue[-1] == '\'', sValue;
         sValue = sValue[1:-1];
         assert not cBitsWidth or len(sValue) == cBitsWidth, 'cBitsWidth=%s sValue=%s' % (cBitsWidth, sValue,);
-        fFixed    = 0;
-        fWildcard = 0;
-        fValue    = 0;
+        cBitsWidth = len(sValue);
+        fFixed     = 0;
+        fWildcard  = 0;
+        fValue     = 0;
         for ch in sValue:
             assert ch in 'x10', 'ch=%s' % ch;
             fFixed    <<= 1;
@@ -1143,7 +1227,7 @@ class ArmEncodesetField(object):
                     fValue |= 1;
             else:
                 fWildcard |= 1;
-        return (fValue, fFixed, fWildcard);
+        return (fValue, fFixed, fWildcard, cBitsWidth);
 
     @staticmethod
     def fromJson(oJson):
@@ -1154,7 +1238,7 @@ class ArmEncodesetField(object):
         iFirstBit           = int(oRange['start']);
         cBitsWidth          = int(oRange['width']);
         sName               = oJson['name'] if oJson['_type'] == 'Instruction.Encodeset.Field' else None;
-        (fValue, fFixed, _) = ArmEncodesetField.parseValue(oJson['value']['value'], cBitsWidth);
+        (fValue, fFixed, _, _) = ArmEncodesetField.parseValue(oJson['value']['value'], cBitsWidth);
         return ArmEncodesetField(oJson, iFirstBit, cBitsWidth, fFixed, fValue, sName);
 
     @staticmethod
@@ -1406,37 +1490,132 @@ class ArmInstruction(ArmInstructionBase):
 # Features and their properties.
 #
 
+## To deal with bugs, things we get wrong and, 'missing' stuff.
+g_dArmFeatureSupportExprOverrides = {
+    'FEAT_AA32':    ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL0', 'ID_AA64PFR0_EL1'),]), '==', ArmAstInteger(2)),
+    'FEAT_AA32EL0': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL0', 'ID_AA64PFR0_EL1'),]), '==', ArmAstInteger(2)),
+    'FEAT_AA64EL2': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL2', 'ID_AA64PFR0_EL1'),]), '>=', ArmAstInteger(1)),
+    'FEAT_AA64EL3': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL2', 'ID_AA64PFR0_EL1'),]), '>=', ArmAstInteger(1)),
+
+    # Obsolete/whatever:
+    'FEAT_AA32EL1': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL1', 'ID_AA64PFR0_EL1'),]), '==', ArmAstInteger(2)),
+    'FEAT_AA32EL2': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL2', 'ID_AA64PFR0_EL1'),]), '==', ArmAstInteger(2)),
+    'FEAT_AA32EL3': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL3', 'ID_AA64PFR0_EL1'),]), '==', ArmAstInteger(2)),
+    'FEAT_AA64EL0': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL0', 'ID_AA64PFR0_EL1'),]), '>=', ArmAstInteger(1)),
+    'FEAT_AA64EL1': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL1', 'ID_AA64PFR0_EL1'),]), '>=', ArmAstInteger(1)),
+    'FEAT_AA64':    ArmAstBinaryOp(ArmAstBinaryOp(ArmAstIdentifier('FEAT_AA64EL0'), '||', ArmAstIdentifier('FEAT_AA64EL1')),
+                                   '||',
+                                   ArmAstBinaryOp(ArmAstIdentifier('FEAT_AA64EL2'), '||', ArmAstIdentifier('FEAT_AA64EL3'))),
+
+    # Spec bugs:
+    'FEAT_S2FWB':   ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('FWB', 'ID_AA64MMFR2_EL1'),]), '>=', ArmAstInteger(1)),
+    'FEAT_UAO':     ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('UAO', 'ID_AA64MMFR2_EL1'),]), '>=', ArmAstInteger(1)),
+
+    # Spec bugs in 2024-12:
+    'FEAT_PMUv3_TH2': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EDGE', 'PMMIR_EL1'),]), '>=', ArmAstInteger(2)),
+    'FEAT_PACIMP': ArmAstBinaryOp.andListToTree([
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('GPI', 'ID_AA64ISAR1_EL1'),]), '>=', ArmAstInteger(1)),
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('API', 'ID_AA64ISAR1_EL1'),]), '>=', ArmAstInteger(1)),
+    ]),
+    'FEAT_PACQARMA5': ArmAstBinaryOp.andListToTree([
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('GPA', 'ID_AA64ISAR1_EL1'),]), '>=', ArmAstInteger(1)),
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('APA', 'ID_AA64ISAR1_EL1'),]), '>=', ArmAstInteger(1)),
+    ]),
+    'FEAT_PACQARMA3': ArmAstBinaryOp.andListToTree([
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('GPA3', 'ID_AA64ISAR2_EL1'),]), '>=', ArmAstInteger(1)),
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('APA3', 'ID_AA64ISAR2_EL1'),]), '>=', ArmAstInteger(1)),
+    ]),
+
+    # Missing info:
+    'FEAT_F8F16MM': ArmAstField('F8MM4', 'ID_AA64FPFR0_EL1'),
+    'FEAT_F8F32MM': ArmAstField('F8MM8', 'ID_AA64FPFR0_EL1'),
+    'FEAT_SVE_F16F32MM': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('F16MM', 'ID_AA64ZFR0_EL1'),]),
+                                        '>=', ArmAstInteger(1)),
+    'FEAT_PAuth':   ArmAstBinaryOp.orListToTree([
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('API',  'ID_AA64ISAR1_EL1'),]), '>=', ArmAstInteger(1)),
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('APA',  'ID_AA64ISAR1_EL1'),]), '>=', ArmAstInteger(1)),
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('APA3', 'ID_AA64ISAR2_EL1'),]), '>=', ArmAstInteger(1)),
+    ]),
+
+    ## @todo FEAT_GICv3, FEAT_GICv3p, FEAT_GICv4 & FEAT_GICv4p1 detection is most probably incomplete or wrong.
+    'FEAT_GICv3':   ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('GIC', 'ID_AA64PFR0_EL1'),]), '>=', ArmAstInteger(1)),
+    'FEAT_GICv3p1': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('GIC', 'ID_AA64PFR0_EL1'),]), '>=', ArmAstInteger(1)),
+    'FEAT_GICv4':   ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('GIC', 'ID_AA64PFR0_EL1'),]), '>=', ArmAstInteger(1)),
+    'FEAT_GICv4p1': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('GIC', 'ID_AA64PFR0_EL1'),]), '>=', ArmAstInteger(3)),
+    'FEAT_GICv3_NMI':  ArmAstBinaryOp(ArmAstIdentifier('FEAT_GICv3'), '&&', ArmAstIdentifier('FEAT_NMI')), # ?? from linux patch
+    'FEAT_GICv3_TDIR': ArmAstBinaryOp(ArmAstIdentifier('FEAT_GICv3'), '&&', ArmAstField('TDS', 'ICH_VTR_EL2'),), # ??
+
+    # Missing in 2024-12:
+    'FEAT_SSVE_FEXPA': ArmAstField('SFEXPA', 'ID_AA64SMFR0_EL1'),
+
+    # Odd ones:
+    'FEAT_CHK':     ArmAstIdentifier('FEAT_GCS'),
+    'FEAT_ETE':     ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('TraceVer', 'ID_AA64DFR0_EL1'),]),
+                                   '>=', ArmAstInteger(1)),
+    'FEAT_ETEv1p1': ArmAstBinaryOp(ArmAstIdentifier('FEAT_ETE'), '&&',
+                                   ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('REVISION', 'TRCDEVARCH'),]),
+                                                  '>=', ArmAstInteger(1))),
+    'FEAT_ETEv1p2': ArmAstBinaryOp(ArmAstIdentifier('FEAT_ETE'), '&&',
+                                   ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('REVISION', 'TRCDEVARCH'),]),
+                                                  '>=', ArmAstInteger(2))),
+    'FEAT_ETEv1p3': ArmAstBinaryOp(ArmAstIdentifier('FEAT_ETE'), '&&',
+                                   ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('REVISION', 'TRCDEVARCH'),]),
+                                                  '>=', ArmAstInteger(3))),
+
+    'FEAT_ETMv4':   ArmAstBinaryOp.andListToTree([ # See 7.3.22 in IHI0064H_b_etm_v4_architecture_specification.pdf
+            ArmAstIdentifier('FEAT_ETE'),
+            ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('PRESENT',   'TRCDEVARCH'),]), '==', ArmAstInteger(1)),
+            ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('ARCHITECT', 'TRCDEVARCH'),]), '==', ArmAstInteger(0x23b)),
+            ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('ARCHVER',   'TRCDEVARCH'),]), '==', ArmAstInteger(4)),
+            ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('ARCHPART',  'TRCDEVARCH'),]), '==', ArmAstInteger(0xa13)),
+        ]),
+    'FEAT_ETMv4p1': ArmAstBinaryOp.andListToTree([
+        ArmAstIdentifier('FEAT_ETMv4'),
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('REVISION', 'TRCDEVARCH'),]), '>=', ArmAstInteger(1)),
+    ]),
+    'FEAT_ETMv4p2': ArmAstBinaryOp.andListToTree([
+        ArmAstIdentifier('FEAT_ETMv4'),
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('REVISION', 'TRCDEVARCH'),]), '>=', ArmAstInteger(2)),
+    ]),
+    'FEAT_ETMv4p3': ArmAstBinaryOp.andListToTree([
+        ArmAstIdentifier('FEAT_ETMv4'),
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('REVISION', 'TRCDEVARCH'),]), '>=', ArmAstInteger(3)),
+    ]),
+    'FEAT_ETMv4p4': ArmAstBinaryOp.andListToTree([
+        ArmAstIdentifier('FEAT_ETMv4'),
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('REVISION', 'TRCDEVARCH'),]), '>=', ArmAstInteger(4)),
+    ]),
+    'FEAT_ETMv4p5': ArmAstBinaryOp.andListToTree([
+        ArmAstIdentifier('FEAT_ETMv4'),
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('REVISION', 'TRCDEVARCH'),]), '>=', ArmAstInteger(5)),
+    ]),
+    'FEAT_ETMv4p6': ArmAstBinaryOp.andListToTree([
+        ArmAstIdentifier('FEAT_ETMv4'),
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('REVISION', 'TRCDEVARCH'),]), '>=', ArmAstInteger(6)),
+    ]),
+    'FEAT_VPIPT': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('L1Ip', 'CTR_EL0'),]), '==', ArmAstInteger(2)), # removed
+    #'FEAT_RASSAv1p1': ArmAstIdentifier('FEAT_RASv1p1'), # Incomplete detection. ARMv8.4 implies this, but optional back to v8.2.
+
+    # Too complex detection logic.
+    'FEAT_LPA2': ArmAstBinaryOp.orListToTree([ # Possible that OR is slightly wrong here, but it's the simpler way out...
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('TGran4',    'ID_AA64MMFR0_EL1'),]), '>=', ArmAstInteger(1)),
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('TGran16',   'ID_AA64MMFR0_EL1'),]), '>=', ArmAstInteger(2)),
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('TGran4_2',  'ID_AA64MMFR0_EL1'),]), '>=', ArmAstInteger(3)),
+        ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('TGran16_2', 'ID_AA64MMFR0_EL1'),]), '>=', ArmAstInteger(3)),
+    ]),
+    'FEAT_SME2p2': ArmAstBinaryOp.andListToTree([ ArmAstIdentifier('FEAT_SME'), ArmAstIdentifier('FEAT_SVE2p2'), ]),
+};
+
 class ArmFeature(object):
     """
     ARM instruction set feature.
     """
 
-    ## To deal with bugs, things we get wrong and, 'missing' stuff.
-    s_dSupportExprOverrides = {
-        'FEAT_AA32':    ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL0', 'ID_AA64PFR0_EL1'),]), '==', ArmAstInteger(2)),
-        'FEAT_AA32EL0': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL0', 'ID_AA64PFR0_EL1'),]), '==', ArmAstInteger(2)),
-        'FEAT_AA64EL2': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL2', 'ID_AA64PFR0_EL1'),]), '>=', ArmAstInteger(1)),
-        'FEAT_AA64EL3': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL2', 'ID_AA64PFR0_EL1'),]), '>=', ArmAstInteger(1)),
-
-        # Obsolete/whatever:
-        'FEAT_AA32EL1': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL1', 'ID_AA64PFR0_EL1'),]), '==', ArmAstInteger(2)),
-        'FEAT_AA32EL2': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL2', 'ID_AA64PFR0_EL1'),]), '==', ArmAstInteger(2)),
-        'FEAT_AA32EL3': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL3', 'ID_AA64PFR0_EL1'),]), '==', ArmAstInteger(2)),
-        'FEAT_AA64EL0': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL0', 'ID_AA64PFR0_EL1'),]), '>=', ArmAstInteger(1)),
-        'FEAT_AA64EL1': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('EL1', 'ID_AA64PFR0_EL1'),]), '>=', ArmAstInteger(1)),
-        'FEAT_AA64':    ArmAstBinaryOp(ArmAstBinaryOp(ArmAstIdentifier('FEAT_AA64EL0'), '||', ArmAstIdentifier('FEAT_AA64EL1')),
-                                       '||',
-                                       ArmAstBinaryOp(ArmAstIdentifier('FEAT_AA64EL2'), '||', ArmAstIdentifier('FEAT_AA64EL3'))),
-
-        # Spec bugs:
-        'FEAT_S2FWB': ArmAstBinaryOp(ArmAstFunction('UInt', [ArmAstField('FWB', 'ID_AA64MMFR2_EL1'),]), '>=', ArmAstInteger(1)),
-    };
-
-    def __init__(self, oJson, sName, sType, aoConstraints):
+    def __init__(self, oJson, sName, aoConstraints, sType = 'Parameters.Boolean'):
         self.oJson          = oJson;
         self.sName          = sName;
-        self.sType          = sType;
         self.aoConstraints  = aoConstraints;
+        self.sType          = sType;
 
         # Find the best is-supported expression, prioritizing registers in the
         # AArch64 set over AArch32 and ext.
@@ -1447,9 +1626,9 @@ class ArmFeature(object):
                 dSupportExpr[oExpr.toString()] = oExpr;
 
         def CalcWeight(sStr):
-            iRet = 10 if sStr.find('AArch64.') >= 0 else int(sStr.find('ext.') >= 0);
-            if sStr.find('AArch32.') >= 0:
-                iRet -= 1;
+            iRet = 10 if sStr.find('AArch64.') >= 0 else 0;
+            if sStr.find('AArch32.') >= 0: iRet -= 1;
+            if sStr.find('ext.') >= 0:     iRet -= 2;
             return iRet;
 
         def CmpExpr(sExpr1, sExpr2):
@@ -1465,8 +1644,8 @@ class ArmFeature(object):
         self.oSupportExpr = dSupportExpr[asKeys[0]] if asKeys else None;
 
         # Manual overrides and fixes.
-        if sName in ArmFeature.s_dSupportExprOverrides:
-            self.oSupportExpr = ArmFeature.s_dSupportExprOverrides[sName];
+        if sName in g_dArmFeatureSupportExprOverrides:
+            self.oSupportExpr = g_dArmFeatureSupportExprOverrides[sName];
 
         # Find the variables in the expression (for optimizing explosion).
         self.asSupportExprVars = sorted(set(ArmFeature.extractVariables(self.oSupportExpr)));
@@ -1529,7 +1708,7 @@ class ArmFeature(object):
         assert sType in ('Parameters.Boolean', 'Parameters.Integer',), '_type=%s' % (oJson['_type'],);
         sName         = oJson['name'];
         aoConstraints = [ArmAstBase.fromJson(oItem, ArmAstBase.ksModeConstraints) for oItem in oJson['constraints']];
-        return ArmFeature(oJson, sName, sType, aoConstraints);
+        return ArmFeature(oJson, sName, aoConstraints, sType);
 
 
 #
@@ -1546,7 +1725,8 @@ class ArmRange(object):
 class ArmFieldsBase(object):
     """ Base class for all fields. """
 
-    def __init__(self, aoRanges, sName):
+    def __init__(self, oParent, aoRanges, sName):
+        self.oParent  = oParent;
         self.aoRanges = aoRanges    # Type: List[ArmRange]
         self.sName    = sName;
 
@@ -1586,51 +1766,53 @@ class ArmFieldsBase(object):
 
     kAttribSetReserved = frozenset(['_type', 'description', 'rangeset', 'value']);
     @staticmethod
-    def fromJsonReserved(dJson):
+    def fromJsonReserved(dJson, oParent):
         ArmFieldsBase.assertAttribsInSet(dJson, ArmFieldsBase.kAttribSetReserved);
-        return ArmFieldsReserved(ArmFieldsBase.rangesFromJson(dJson['rangeset']));
+        return ArmFieldsReserved(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']));
 
 
     kAttribSetImplementationDefined = frozenset(['_type', 'constraints', 'description', 'display', 'name',
                                                  'rangeset', 'resets', 'volatile']);
     @staticmethod
-    def fromJsonImplementationDefined(dJson):
+    def fromJsonImplementationDefined(dJson, oParent):
         ArmFieldsBase.assertAttribsInSet(dJson, ArmFieldsBase.kAttribSetImplementationDefined);
-        return ArmFieldsImplementationDefined(ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name']);
+        return ArmFieldsImplementationDefined(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name']);
 
 
     kAttribSetField = frozenset(['_type', 'access', 'description', 'display', 'name',
                                  'rangeset', 'resets', 'values', 'volatile']);
     @staticmethod
-    def fromJsonField(dJson):
+    def fromJsonField(dJson, oParent):
         ArmFieldsBase.assertAttribsInSet(dJson, ArmFieldsBase.kAttribSetField);
-        return ArmFieldsField(ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name']);
+        return ArmFieldsField(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name']);
+
 
     kAttribSetConditionalField = frozenset(['_type', 'description', 'display', 'fields', 'name',
                                  'rangeset', 'reservedtype', 'resets', 'volatile']);
     kAttribSetConditionalFieldEntry = frozenset(['condition', 'field']);
     @staticmethod
-    def fromJsonConditionalField(dJson):
+    def fromJsonConditionalField(dJson, oParent):
         ArmFieldsBase.assertAttribsInSet(dJson, ArmFieldsBase.kAttribSetConditionalField);
         atCondFields = [];
+        oNew = ArmFieldsConditionalField(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name'], atCondFields);
         for dJsonField in dJson['fields']:
             ArmFieldsBase.assertAttribsInSet(dJsonField, ArmFieldsBase.kAttribSetConditionalFieldEntry);
             atCondFields.append((ArmAstBase.fromJson(dJsonField['condition'], ArmAstBase.ksModeConstraints),
-                                 ArmFieldsBase.fromJson(dJsonField['field'])));
-        return ArmFieldsConditionalField(ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name'], atCondFields);
+                                 ArmFieldsBase.fromJson(dJsonField['field'], oNew)));
+        return oNew;
 
 
     kAttribSetConstantField = frozenset(['_type', 'access', 'description', 'name', 'rangeset', 'value']);
     @staticmethod
-    def fromJsonConstantField(dJson):
+    def fromJsonConstantField(dJson, oParent):
         ArmFieldsBase.assertAttribsInSet(dJson, ArmFieldsBase.kAttribSetConstantField);
-        return ArmFieldsConstantField(ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name']);
+        return ArmFieldsConstantField(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name']);
 
 
     kAttribSetArray = frozenset(['_type', 'access', 'description', 'display', 'index_variable', 'indexes', 'name',
                                  'rangeset', 'resets' , 'values', 'volatile']);
     @staticmethod
-    def fromJsonArray(dJson):
+    def fromJsonArray(dJson, oParent):
         ArmFieldsBase.assertAttribsInSet(dJson, ArmFieldsBase.kAttribSetArray);
         aoIndexes = ArmFieldsArray.Index.fromJsonArray(dJson['indexes']);
         aoRanges  = ArmFieldsBase.rangesFromJson(dJson['rangeset']);
@@ -1642,12 +1824,12 @@ class ArmFieldsBase(object):
         cBitsPerEntry = cBitsRanges // cIndexSteps;
         assert cBitsPerEntry * cIndexSteps == cBitsRanges;
 
-        return ArmFieldsArray(aoRanges, dJson['name'], dJson['index_variable'], aoIndexes, cIndexSteps, cBitsPerEntry);
+        return ArmFieldsArray(oParent, aoRanges, dJson['name'], dJson['index_variable'], aoIndexes, cIndexSteps, cBitsPerEntry);
 
 
     kAttribSetVector = frozenset(['reserved_type', 'size',]) | kAttribSetArray;
     @staticmethod
-    def fromJsonVector(dJson):
+    def fromJsonVector(dJson, oParent):
         ArmFieldsBase.assertAttribsInSet(dJson, ArmFieldsBase.kAttribSetVector);
         aoIndexes = ArmFieldsArray.Index.fromJsonArray(dJson['indexes']);
         aoRanges  = ArmFieldsBase.rangesFromJson(dJson['rangeset']);
@@ -1664,15 +1846,15 @@ class ArmFieldsBase(object):
             atCondSizes.append((ArmAstBase.fromJson(dJsonSize['condition']),
                                 ArmAstBase.fromJson(dJsonSize['value'], ArmAstBase.ksModeConstraints))); ## @todo hackish mode
 
-        return ArmFieldsVector(aoRanges, dJson['name'], dJson['index_variable'], aoIndexes, cIndexSteps, cBitsPerEntry,
-                               atCondSizes);
+        return ArmFieldsVector(oParent, aoRanges, dJson['name'], dJson['index_variable'], aoIndexes, cIndexSteps,
+                               cBitsPerEntry, atCondSizes);
 
 
     kAttribSetDynamic = frozenset(['_type', 'description', 'display', 'instances', 'name', 'rangeset', 'resets', 'volatile']);
     @staticmethod
-    def fromJsonDynamic(dJson):
+    def fromJsonDynamic(dJson, oParent):
         ArmFieldsBase.assertAttribsInSet(dJson, ArmFieldsBase.kAttribSetDynamic);
-        return ArmFieldsDynamic(ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name'],
+        return ArmFieldsDynamic(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name'],
                                 [ArmFieldset.fromJson(dJsonFieldSet) for dJsonFieldSet in dJson['instances']]);
 
 
@@ -1688,40 +1870,40 @@ class ArmFieldsBase(object):
     };
 
     @staticmethod
-    def fromJson(dJson):
+    def fromJson(dJson, oParent = None):
         """ Decodes a field. """
-        return ArmFieldsBase.kfnTypeMap[dJson['_type']](dJson);
+        return ArmFieldsBase.kfnTypeMap[dJson['_type']](dJson, oParent);
 
 
 class ArmFieldsReserved(ArmFieldsBase):
     """ Fields.Reserved """
-    def __init__(self, aoRanges):
-        ArmFieldsBase.__init__(self, aoRanges, None);
+    def __init__(self, oParent, aoRanges):
+        ArmFieldsBase.__init__(self, oParent, aoRanges, None);
 
 
 class ArmFieldsField(ArmFieldsBase):
     """ Fields.Field """
-    def __init__(self, aoRanges, sName):
-        ArmFieldsBase.__init__(self, aoRanges, sName);
+    def __init__(self, oParent, aoRanges, sName):
+        ArmFieldsBase.__init__(self, oParent, aoRanges, sName);
 
 
 class ArmFieldsImplementationDefined(ArmFieldsBase):
     """ Fields.ImplementationDefined """
-    def __init__(self, aoRanges, sName):
-        ArmFieldsBase.__init__(self, aoRanges, sName);
+    def __init__(self, oParent, aoRanges, sName):
+        ArmFieldsBase.__init__(self, oParent, aoRanges, sName);
 
 
 class ArmFieldsConditionalField(ArmFieldsBase):
     """ Fields.ConditionalField """
-    def __init__(self, aoRanges, sName, atCondFields):
-        ArmFieldsBase.__init__(self, aoRanges, sName);
+    def __init__(self, oParent, aoRanges, sName, atCondFields):
+        ArmFieldsBase.__init__(self, oParent, aoRanges, sName);
         self.atCondFields = atCondFields        # Type: List[Tuple(ArmAstBase,ArmFieldsBase)]
 
 
 class ArmFieldsConstantField(ArmFieldsBase):
     """ Fields.ConstantField """
-    def __init__(self, aoRanges, sName):
-        ArmFieldsBase.__init__(self, aoRanges, sName);
+    def __init__(self, oParent, aoRanges, sName):
+        ArmFieldsBase.__init__(self, oParent, aoRanges, sName);
 
 
 class ArmFieldsArray(ArmFieldsBase):
@@ -1743,8 +1925,8 @@ class ArmFieldsArray(ArmFieldsBase):
         def fromJsonArray(adJson):
             return [ArmFieldsArray.Index.fromJson(dJsonEntry) for dJsonEntry in adJson];
 
-    def __init__(self, aoRanges, sName, sIdxVarNm, aoIndexes, cEntries, cBitsPerEntry):
-        ArmFieldsBase.__init__(self, aoRanges, sName);
+    def __init__(self, oParent, aoRanges, sName, sIdxVarNm, aoIndexes, cEntries, cBitsPerEntry):
+        ArmFieldsBase.__init__(self, oParent, aoRanges, sName);
         self.sIdxVarNm     = sIdxVarNm;
         self.aoIndexes     = aoIndexes      # Type: List[ArmFieldsArray.Index]
         self.cEntries      = cEntries;
@@ -1754,15 +1936,15 @@ class ArmFieldsArray(ArmFieldsBase):
 class ArmFieldsVector(ArmFieldsArray):
     """ Fields.Vector """
 
-    def __init__(self, aoRanges, sName, sIdxVarNm, aoIndexes, cEntries, cBitsPerEntry, atCondSizes):
-        ArmFieldsArray.__init__(self, aoRanges, sName, sIdxVarNm, aoIndexes, cEntries, cBitsPerEntry);
+    def __init__(self, oParent, aoRanges, sName, sIdxVarNm, aoIndexes, cEntries, cBitsPerEntry, atCondSizes):
+        ArmFieldsArray.__init__(self, oParent, aoRanges, sName, sIdxVarNm, aoIndexes, cEntries, cBitsPerEntry);
         self.atCondSizes   = atCondSizes    # Type: List[Tuple[ArmAstBase,ArmAstBase]] # tuple(condition, size-expr)
 
 
 class ArmFieldsDynamic(ArmFieldsBase):
     """ Fields.Dynamic """
-    def __init__(self, aoRanges, sName, aoFieldsets):
-        ArmFieldsBase.__init__(self, aoRanges, sName);
+    def __init__(self, oParent, aoRanges, sName, aoFieldsets):
+        ArmFieldsBase.__init__(self, oParent, aoRanges, sName);
         self.aoFieldsets = aoFieldsets      # Type: List[ArmFieldset]
 
 
@@ -1781,10 +1963,9 @@ class ArmFieldset(object):
     @staticmethod
     def fromJson(dJson):
         assert dJson['_type'] == 'Fieldset', '_type=%s' % (dJson['_type'],);
-        cBitsWidth = int(dJson['width'])
-        sName      = dJson['name'];
-        aoFields   = [ArmFieldsBase.fromJson(dJsonField) for dJsonField in dJson['values']];
-        return ArmFieldset(dJson, cBitsWidth, aoFields, sName);
+        oNew = ArmFieldset(dJson, int(dJson['width']), [], dJson['name']);
+        oNew.aoFields = [ArmFieldsBase.fromJson(dJsonField, oNew) for dJsonField in dJson['values']];
+        return oNew;
 
 
 class ArmRegister(object):
@@ -1804,6 +1985,13 @@ class ArmRegister(object):
         for oFieldset in aoFieldsets:
             ArmFieldsBase.addFieldListToLookupDict(self.daoFields, oFieldset.aoFields);
 
+    def getVBoxConstant(self):
+        """
+        Returns the VBox constant for the register.
+
+        For instance: ARMV8_AARCH64_SYSREG_ID_AA64ZFR0_EL1
+        """
+        return 'ARMV8_' + self.sState.upper() + '_SYSREG_' + self.sName.upper();
 
     @staticmethod
     def fromJson(dJson, sStatePrefix = ''):
@@ -2191,7 +2379,7 @@ def transferConditionsToEncoding(oCondition, aoFields, dPendingNotEq, sInstrNm, 
 
                         # ArmAstValue.
                         assert isinstance(oValue, ArmAstValue);
-                        (fValue, fFixed, _) = ArmEncodesetField.parseValue(oValue.sValue, oField.cBitsWidth);
+                        (fValue, fFixed, _, _) = ArmEncodesetField.parseValue(oValue.sValue, oField.cBitsWidth);
 
                         if oCondition.sOp == '!=' and oField.cBitsWidth > 1 and (fFixed & (fFixed - 1)) != 0:
                             dPendingNotEq[oField.sName] += [(oField, fValue, fFixed, oCondition)];
@@ -2268,13 +2456,24 @@ def parseFeatures(aoJson, fVerbose = False):
     """
     global g_aoAllArmFeatures;
     g_aoAllArmFeatures = [ArmFeature.fromJson(oJson) for oJson in aoJson];
-    g_aoAllArmFeatures = sorted(g_aoAllArmFeatures, key = operator.attrgetter('sName'));
 
     #global g_dAllArmFeaturesByName;
     for oFeature in g_aoAllArmFeatures:
         if oFeature.sName in g_dAllArmFeaturesByName:
             raise Exception('Feature %s is listed twice!' % (oFeature.sName,))
         g_dAllArmFeaturesByName[oFeature.sName] = oFeature;
+
+    for sFeature in ('FEAT_ETMv4p1', 'FEAT_ETMv4p2', 'FEAT_ETMv4p3', 'FEAT_ETMv4p4', 'FEAT_ETMv4p5', 'FEAT_ETMv4p6',
+                     'FEAT_GICv3', 'FEAT_GICv3p1', 'FEAT_GICv4', 'FEAT_GICv4p1', 'FEAT_GICv3_NMI', 'FEAT_GICv3_TDIR',
+                     'FEAT_VPIPT',
+                     'FEAT_AA64', 'FEAT_AA32', 'FEAT_SSVE_FEXPA', # Missing in 2024-12:
+                     ):
+        if sFeature not in g_dAllArmFeaturesByName:
+            oFeature = ArmFeature(None, sFeature, []);
+            g_aoAllArmFeatures.append(oFeature);
+            g_dAllArmFeaturesByName[sFeature] = oFeature;
+
+    g_aoAllArmFeatures = sorted(g_aoAllArmFeatures, key = operator.attrgetter('sName'));
 
     if fVerbose:
         # print the features.
@@ -3496,33 +3695,57 @@ class IEMArmGenerator(object):
         # FEAT_XXXX references (relies on sorting order).
         #
         aoFeatures = [oFeature for oFeature in g_aoAllArmFeatures
-                      if oFeature.sName.startswith('FEAT_')
+                      if    oFeature.sName.startswith('FEAT_')
+                        and oFeature.sName not in ('FEAT_EL0', 'FEAT_EL1', 'FEAT_EL2', 'FEAT_EL3') # removed in 2025
                         and oFeature.oSupportExpr
-                        and not oFeature.asSupportExprVars[0].startswith('PMU.')
-                        and not oFeature.asSupportExprVars[0].startswith('AMU.') ];
+                        and oFeature.asSupportExprVars[0].split('.')[0] not in ('AArch32', 'PMU', 'AMU', 'ext', 'uext') ];
         aoFeatures = sorted(aoFeatures, key = lambda oFeature: (len(oFeature.asSupportExprVars), oFeature.asSupportExprVars));
 
-        asLines += [
-            '',
-            'DECLHIDDEN(int) cpumCpuIdExplodeFeaturesArmV8FromSysRegs(PCSUPARMSYSREGVAL paSysRegs, uint32_t cSysRegs,',
-            '                                                         CPUMFEATURESARMV8 *pFeatures)',
-            '{',
-        ];
 
         class CExprHelperFeatures(object):
+            """ Helper class for creating C-expressions from the is-supported AST expressions. """
             def __init__(self, fFromSysRegs):
                 self.fFromSysRegs = fFromSysRegs;
                 self.dVars        = {}      # Type: Dict[str, ArmRegister]
                 self.idxFeatures  = 0;
 
+            # Mapping register names to CPUMARMV8IDREGS members.
+            kdRegNmToStructMember = {
+                'ID_AA64PFR0_EL1':  'u64RegIdAa64Pfr0El1',
+                'ID_AA64PFR1_EL1':  'u64RegIdAa64Pfr1El1',
+                'ID_AA64DFR0_EL1':  'u64RegIdAa64Dfr0El1',
+                'ID_AA64DFR1_EL1':  'u64RegIdAa64Dfr1El1',
+                'ID_AA64AFR0_EL1':  'u64RegIdAa64Afr0El1',
+                'ID_AA64AFR1_EL1':  'u64RegIdAa64Afr1El1',
+                'ID_AA64ISAR0_EL1': 'u64RegIdAa64Isar0El1',
+                'ID_AA64ISAR1_EL1': 'u64RegIdAa64Isar1El1',
+                'ID_AA64ISAR2_EL1': 'u64RegIdAa64Isar2El1',
+                'ID_AA64MMFR0_EL1': 'u64RegIdAa64Mmfr0El1',
+                'ID_AA64MMFR1_EL1': 'u64RegIdAa64Mmfr1El1',
+                'ID_AA64MMFR2_EL1': 'u64RegIdAa64Mmfr2El1',
+                'CLIDR_EL1':        'u64RegClidrEl1',
+                'CTR_EL0':          'u64RegCtrEl0',
+                'DCZID_EL0':        'u64RegDczidEl0',
+            };
+
+            def _lookupSysRegValueExpr(self, oReg):
+                if self.fFromSysRegs:
+                    return 'cpumCpuIdLookupSysReg(paSysRegs, cSysRegs, %s)' % (oReg.getVBoxConstant());
+                if oReg.sState == 'AArch64' and oReg.sName in self.kdRegNmToStructMember:
+                    return 'pIdRegs->%s' % (self.kdRegNmToStructMember[oReg.sName]);
+                return '0 /* %s is not part of CPUMARMV8IDREGS */' % (oReg.sName,);
+
             def getFieldInfo(self, sName, sVar = '', sNamespace = ''):
                 if sNamespace and sVar:
                     sCVarNm = 'u%s_%s' % (sNamespace, sVar)
-                    if sCVarNm not in self.dVars:
-                        self.dVars[sCVarNm] = g_ddoAllArmRegistersByStateByName[sNamespace][sVar];
+                    oReg    = self.dVars.get(sCVarNm) # Type: ArmRegister
+                    if not oReg:
+                        oReg = g_ddoAllArmRegistersByStateByName[sNamespace][sVar];
+                        self.dVars[sCVarNm] = oReg;
+                        # Warning! We're appending lines the output here!
                         asLines.append('');
-                        asLines.append('    uint64_t const %s = 0;' % (sCVarNm,));
-                    oReg = self.dVars[sCVarNm] # Type: ArmRegister
+                        asLines.append('    uint64_t const %s = %s;' % (sCVarNm, self._lookupSysRegValueExpr(oReg),));
+
                     aoFields = oReg.daoFields.get(sName);
                     if not aoFields:
                         raise Exception('Field %s was not found in register %s.%s (known fields: %s)'
@@ -3530,12 +3753,20 @@ class IEMArmGenerator(object):
                     if len(aoFields) > 1:
                         raise Exception('Ambigious field %s was in register %s.%s: %s' % (sName, sNamespace, sVar, aoFields,));
                     oField = aoFields[0]    # Type: ArmFieldsBase
+
                     if len(oField.aoRanges) != 1:
                         raise Exception('TODO: Using complicated field %s in register %s.%s: %s'
                                         % (sName, sNamespace, sVar, oField.aoRanges,));
-                    return ('((%s >> %2u) & %#x /*%s*/)'
-                            % (sCVarNm, oField.aoRanges[0].iFirstBit, (1 << oField.aoRanges[0].cBitsWidth) - 1, sName,)
-                            , oField.aoRanges[0].cBitsWidth);
+                    iFirstBit  = oField.aoRanges[0].iFirstBit;
+                    cBitsWidth = oField.aoRanges[0].cBitsWidth;
+                    if oField.oParent and isinstance(oField.oParent, ArmFieldsConditionalField): # Relative to parent range.
+                        if len(oField.oParent.aoRanges) != 1:
+                            raise Exception('TODO: Using complicated conditional field %s in register %s.%s: %s'
+                                            % (sName, sNamespace, sVar, oField.oParent.aoRanges,));
+                        iFirstBit += oField.oParent.aoRanges[0].iFirstBit;
+                        assert cBitsWidth <= oField.oParent.aoRanges[0].cBitsWidth;
+
+                    return ('((%s >> %2u) & %#x /*%s*/)' % (sCVarNm, iFirstBit, (1 << cBitsWidth) - 1, sName,) , cBitsWidth);
 
                 # We can deal with feature references, provided they're already initialized.
                 # The sorting should take care of this, but we check. :)
@@ -3555,36 +3786,170 @@ class IEMArmGenerator(object):
 
             def convertFunctionCall(self, oCall):
                 if oCall.sName in ('UInt', 'SInt'):
-                    if len(oCall.aoArgs) == 1:
-                        return '(%s)(%s)' % ('unsigned' if oCall.sName == 'UInt' else 'int', oCall.aoArgs[0].toCExpr(self),);
-                    raise Exception('Unexpected argument count for UInt call: %s' % (oCall.aoArgs,));
+                    if len(oCall.aoArgs) != 1:
+                        raise Exception('Unexpected argument count for UInt call: %s' % (oCall.aoArgs,));
+                    oArg = oCall.aoArgs[0] # ArmAstBase
+                    if oCall.sName == 'UInt':
+                        return '(uint32_t)(%s)' % (oArg.toCExpr(self),);
+                    # Sign-extending a bit field requires us to know its size...
+                    cBitsWidth = oArg.getWidth(self);
+                    if cBitsWidth <= 0 or cBitsWidth >= 32:
+                        raise Exception('Unexpected getWidth result for SInt argument: %s (%s)' % (cBitsWidth, oArg.toString()));
+                    return '((int32_t)((uint32_t)(%s) << %u) >> %u)' % (oArg.toCExpr(self), 32 - cBitsWidth, 32 - cBitsWidth);
+
                 raise Exception('Call to unsupported function: %s (%s)' % (oCall.sName, oCall.aoArgs,));
 
+        asLines += [
+            '',
+            '/**',
+            ' * Helper that looks up a system register value in an array.',
+            ' */',
+            'DECLINLINE(uint64_t) cpumCpuIdLookupSysReg(PCSUPARMSYSREGVAL paSysRegs, uint32_t cSysRegs, uint32_t idReg)',
+            '{',
+            '    for (uint32_t i = 0 ; i < cSysRegs; i++)',
+            '        if (idReg == paSysRegs[i].idReg)',
+            '            return paSysRegs[i].uValue;',
+            '    return 0;',
+            '}',
+            '',
+            '',
+            '/**',
+            ' * Explodes ARMv8+ features from an array of system register values.',
+            ' *',
+            ' * @returns VBox status code',
+            ' * @param   paSysRegs   The system registers and their values.',
+            ' * @param   cSysRegs    Number of system register values.',
+            ' * @param   paFeatures  The structure to explode the features into.',
+            ' */',
+            'DECLHIDDEN(int) cpumCpuIdExplodeFeaturesArmV8FromSysRegs(PCSUPARMSYSREGVAL paSysRegs, uint32_t cSysRegs,',
+            '                                                         CPUMFEATURESARMV8 *pFeatures)',
+            '{',
+            '    int rcRet = VINF_SUCCESS;',
+        ];
         asTodo  = []
         oHelper = CExprHelperFeatures(True);
         for oHelper.idxFeatures, oFeature in enumerate(aoFeatures):
-            if oHelper.idxFeatures == 0: continue; # TMP HACK for 'IN' operator
-
             sFeatureMemberNm = g_dSpecFeatToCpumFeat.get(oFeature.sName, oFeature.sName);
             if sFeatureMemberNm is oFeature.sName:
                 asTodo.append(oFeature.sName);
 
             print('debug: %s/%s <-> %s' % (oFeature.sName, sFeatureMemberNm, oFeature.oSupportExpr.toString()))
-            #try:
-            sExpr = oFeature.oSupportExpr.toCExpr(oHelper);
-
-            #except Exception:
-            #    sExpr = 'fixme'
-            #    pass
-
-            asLines += [
-                '    pFeatures->%-22s = %s;' % (sFeatureMemberNm, sExpr,),
-            ];
-
+            sLine = '    pFeatures->%-22s = %s;' % (sFeatureMemberNm, oFeature.oSupportExpr.toCExpr(oHelper),)
+            sLine = '%-116s /* %s */' % (sLine, oFeature.sName,);
+            asLines.append(sLine);
         if asTodo:
             print('Error! Please add the features: %s' % (', '.join(asTodo),));
+            for sFeature in asTodo:
+                print('Error!   %-25s: %s -- %s'
+                      % (sFeature, g_dAllArmFeaturesByName[sFeature].asSupportExprVars,
+                         ';  '.join(['#%u: %s' % (iExpr, oExpr.toString())
+                                              for iExpr, oExpr in enumerate(g_dAllArmFeaturesByName[sFeature].aoConstraints)]),));
+
+        # Did we miss any features in CPUMFEATURESARMV8?
+        asMissing = [];
+        hsMissingFeatures = set(g_dSpecFeatToCpumFeat) - set({oFeature.sName for oFeature in aoFeatures});
+        if hsMissingFeatures:
+            print('Error! The following CPUMFEATURESARMV8 members have not been initialized: %s'
+                  % (', '.join(hsMissingFeatures),));
+            asMissing += [
+                '',
+                '    /* Initializing "missing" members: */',
+            ];
+            for sFeature in sorted(hsMissingFeatures):
+                oFeature = g_dAllArmFeaturesByName.get(sFeature)
+                if oFeature:
+                    sExtra = ' (%s)' % ('; '.join(['#%u: %s' % (iExpr, oExpr.toString())
+                                                   for iExpr, oExpr in enumerate(oFeature.aoConstraints)]),);
+                else:
+                    sExtra = '';
+                asMissing.append('    pFeatures->%-22s = 0; /* %s%s */' % (g_dSpecFeatToCpumFeat[sFeature], sFeature, sExtra));
+
+        asLines += asMissing;
 
         asLines += [
+            '',
+            '    return rcRet;',
+            '}'
+        ];
+
+        #
+        # Same again, but with CPUMARMV8IDREGS as input.
+        #
+        asLines += [
+            '',
+            '',
+            '/**',
+            ' * Explodes ARMv8+ features from an CPUMARMV8IDREGS structure.',
+            ' *',
+            ' * @returns VBox status code',
+            ' * @param   pIdRegs     The system register values.',
+            ' * @param   paFeatures  The structure to explode the features into.',
+            ' */',
+            'DECLHIDDEN(int) cpumCpuIdExplodeFeaturesArmV8FromIdRegs(PCCPUMARMV8IDREGS pIdRegs, CPUMFEATURESARMV8 *pFeatures)',
+            '{',
+            '    int rcRet = VINF_SUCCESS;',
+        ];
+        asTodo  = []
+        oHelper = CExprHelperFeatures(False);
+        for oHelper.idxFeatures, oFeature in enumerate(aoFeatures):
+            sFeatureMemberNm = g_dSpecFeatToCpumFeat.get(oFeature.sName, oFeature.sName);
+            sLine = '    pFeatures->%-22s = %s;' % (sFeatureMemberNm, oFeature.oSupportExpr.toCExpr(oHelper),)
+            sLine = '%-116s /* %s */' % (sLine, oFeature.sName,);
+            asLines.append(sLine);
+        asLines += asMissing;
+        asLines += [
+            '',
+            '    return rcRet;',
+            '}'
+        ];
+
+        #
+        # Write a dumper function for the CPUMFEATURESARMV8 structure.
+        #
+        cchMaxFeatNm = max(len(sKey) for sKey in g_dSpecFeatToCpumFeat);
+        asLines += [
+            '',
+            '',
+            '#ifdef IN_RING3',
+            '',
+            '# include <VBox/vmm/dbgf.h> /* DBGFINFOHLP */',
+            '',
+            '/**',
+            ' * Prints the ARMv8+ features in @a pFeatures.',
+            ' *',
+            ' * @param   pHlp            The output callback helper.',
+            ' * @param   pFeatures       The features to dump',
+            ' * @param   pszLabel        The label.',
+            ' * @param   pSecondary      Optional secondary feature set to compare with.',
+            ' * @param   pszSecondary    The label for the secondary feature set.',
+            ' */',
+            'VMMR3DECL(void) CPUMR3CpuIdPrintArmV8Features(PCDBGFINFOHLP pHlp,',
+            '                                              CPUMFEATURESARMV8 const *pFeatures, const char *pszLabel,',
+            '                                              CPUMFEATURESARMV8 const *pSecondary, const char *pszSecondary)',
+            '{',
+            '    if (pSecondary)',
+            '        pHlp->pfnPrintf(pHlp, "  %%%us = %%s (%%s)\\n", "Features", pszLabel, pszSecondary);' % (cchMaxFeatNm,),
+            '    else',
+            '        pHlp->pfnPrintf(pHlp, "  %%%us = %%s\\n", "Features", pszLabel);' % (cchMaxFeatNm,),
+            '#define PRINT_FEATURE(a_Name, a_Member) do { \\',
+            '            if (pSecondary) \\',
+            '                pHlp->pfnPrintf(pHlp, "  %%%us = %%u (%%u)\\n", \\' % (cchMaxFeatNm,),
+            '                                #a_Name, pFeatures->a_Member, pSecondary->a_Member); \\',
+            '            else \\',
+            '                pHlp->pfnPrintf(pHlp, "  %%%us = %%u\\n", #a_Name, pFeatures->a_Member); \\' % (cchMaxFeatNm,),
+            '        } while (0)',
+        ];
+
+        asLines.extend(['    PRINT_FEATURE(%-*s %s);' % (cchMaxFeatNm + 1, sFeature + ',', g_dSpecFeatToCpumFeat[sFeature])
+                        for sFeature in sorted(g_dSpecFeatToCpumFeat.keys())]);
+        asLines += [
+            '}',
+            '#endif /* IN_RING3 */',
+        ];
+
+
+        asLines += [
+            '',
             '#endif /* !VMM_INCLUDED_SRC_VMMR3_target_armv8_%s */' % (sBlockerName,),
             '',
         ];
