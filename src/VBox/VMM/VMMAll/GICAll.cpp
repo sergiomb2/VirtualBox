@@ -722,8 +722,7 @@ static void gicReDistReadLpiPendingBitmapFromMem(PPDMDEVINS pDevIns, PVMCPU pVCp
 DECLHIDDEN(void) gicReDistSetLpi(PPDMDEVINS pDevIns, PVMCPUCC pVCpu, uint16_t uIntId, bool fAsserted)
 {
     Assert(GIC_CRIT_SECT_IS_OWNER(pDevIns));
-    PGICDEV pGicDev = PDMDEVINS_2_DATA(pDevIns, PGICDEV);
-    NOREF(pGicDev);
+    RT_NOREF4(pDevIns, pVCpu, uIntId, fAsserted);
     AssertMsgFailed(("[%u] uIntId=%RU32 fAsserted=%RTbool\n", pVCpu->idCpu, uIntId, fAsserted));
 }
 
