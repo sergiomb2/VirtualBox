@@ -243,6 +243,7 @@ static DECLCALLBACK(void) gicR3DbgInfoReDist(PVM pVM, PCDBGFINFOHLP pHlp, const 
     pHlp->pfnPrintf(pHlp, "  bBinaryPtGroup1     = %#x\n",     pGicCpu->bBinaryPtGroup1);
     pHlp->pfnPrintf(pHlp, "  idxRunningPriority  = %#x\n",     pGicCpu->idxRunningPriority);
     pHlp->pfnPrintf(pHlp, "  Running priority    = %#x\n",     pGicCpu->abRunningPriorities[pGicCpu->idxRunningPriority]);
+    pHlp->pfnPrintf(pHlp, "  Priority mask       = %#x\n",     pGicCpu->bIntrPriorityMask);
 
     /* Running interrupt priorities. */
     {
