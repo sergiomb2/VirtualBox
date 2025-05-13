@@ -94,7 +94,7 @@ RTDECL(int) RTLocaleQueryNormalizedBaseLocaleName(char *pszName, size_t cbName)
             pszLocale = strchr(pszEnd + 1, '=');
             if (!pszLocale)
                 break;
-            pszLocal++;
+            pszLocale++;
         }
 
         if (fSeenC || fSeenPOSIX)
