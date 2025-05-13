@@ -94,7 +94,7 @@ enum UIActionIndexMN
     UIActionIndexMN_M_Group_M_Tools_T_Details,
     UIActionIndexMN_M_Group_M_Tools_T_Snapshots,
     UIActionIndexMN_M_Group_M_Tools_T_Logs,
-    UIActionIndexMN_M_Group_M_Tools_T_Activity,
+    UIActionIndexMN_M_Group_M_Tools_T_ResourceUtilization,
     UIActionIndexMN_M_Group_M_Tools_T_FileManager,
     UIActionIndexMN_M_Group_S_Discard,
     UIActionIndexMN_M_Group_S_Refresh,
@@ -208,7 +208,7 @@ enum UIActionIndexMN
     /* Resource Dashboard actions: */
     UIActionIndexMN_M_ResourceDashboard,
     UIActionIndexMN_M_ResourceDashboard_M_Columns,
-    UIActionIndexMN_M_ResourceDashboard_S_SwitchToMachineActivity,
+    UIActionIndexMN_M_ResourceDashboard_S_SwitchToResourceUtilization,
 
     /* Maximum index: */
     UIActionIndexMN_Max

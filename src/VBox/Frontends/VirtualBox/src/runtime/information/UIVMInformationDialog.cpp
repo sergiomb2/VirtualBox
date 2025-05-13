@@ -77,7 +77,7 @@ void UIVMInformationDialog::sltRetranslateUI()
     /* Translate tabs: */
     m_pTabWidget->setTabText(Tabs_ConfigurationDetails, tr("Configuration &Details"));
     m_pTabWidget->setTabText(Tabs_RuntimeInformation, tr("&Runtime Information"));
-    m_pTabWidget->setTabText(Tabs_ActivityMonitor, tr("VM &Activity"));
+    m_pTabWidget->setTabText(Tabs_ActivityMonitor, tr("Resource &Utilization"));
     m_pTabWidget->setTabText(3, tr("&Guest Control"));
 
     /* Retranslate button box buttons: */

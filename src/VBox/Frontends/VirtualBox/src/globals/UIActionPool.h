@@ -627,8 +627,8 @@ protected:
     void updateMenuLogViewer();
     /** Updates 'Log Viewer' @a pMenu. */
     void updateMenuLogViewerWrapper(UIMenu *pMenu);
-    /** Updates 'Performance Monitor' menu. */
-    void updateMenuVMActivityMonitor();
+    /** Updates 'Resource Utilization' menu. */
+    void updateMenuResourceUtilization();
     /** Updates 'File Manager' menu. */
     void updateMenuFileManager();
     /** Updates 'File Manager' @a pMenu. */

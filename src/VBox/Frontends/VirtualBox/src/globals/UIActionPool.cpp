@@ -2998,7 +2998,7 @@ protected:
     }
 };
 
-/** Menu action extension, used as 'Activity' menu class. */
+/** Menu action extension, used as 'Resource Utilization' menu class. */
 class UIActionMenuSelectorResourceUtilization : public UIActionMenu
 {
     Q_OBJECT;
@@ -3015,7 +3015,7 @@ protected:
     /** Handles translation event. */
     virtual void retranslateUi() RT_OVERRIDE
     {
-        setName(QApplication::translate("UIActionPool", "&Activity"));
+        setName(QApplication::translate("UIActionPool", "&Resource"));
     }
 };
 
@@ -3082,7 +3082,7 @@ protected:
     virtual void retranslateUi() RT_OVERRIDE
     {
         setName(QApplication::translate("UIActionPool", "&Resource Dashboard..."));
-        setShortcutScope(QApplication::translate("UIActionPool", "Activity Monitor"));
+        setShortcutScope(QApplication::translate("UIActionPool", "Resource Utilization"));
         setStatusTip(QApplication::translate("UIActionPool", "Navigate to the resource dashboard"));
         setToolTip(  QApplication::translate("UIActionPool", "Navigate to Resource Dashboard")
                    + (shortcut().isEmpty() ? QString() : QString(" (%1)").arg(shortcut().toString())));
@@ -3090,14 +3090,14 @@ protected:
 };
 
 /** Simple action extension, used as 'Toggle Pane Preferences' action class. */
-class UIActionMenuActivityPreferences : public UIActionToggle
+class UIActionMenuResourceUtilityPreferences : public UIActionToggle
 {
     Q_OBJECT;
 
 public:
 
     /** Constructs action passing @a pParent to the base-class. */
-    UIActionMenuActivityPreferences(UIActionPool *pParent)
+    UIActionMenuResourceUtilityPreferences(UIActionPool *pParent)
         : UIActionToggle(pParent)
     {
         setShortcutContext(Qt::WidgetWithChildrenShortcut);
@@ -3110,7 +3110,7 @@ protected:
     /** Returns shortcut extra-data ID. */
     virtual QString shortcutExtraDataID() const RT_OVERRIDE
     {
-        return QString("ToggleActivityMonitorPreferences");
+        return QString("ToggleResourceUtilityMonitorPreferences");
     }
 
     /** Returns default shortcut. */
@@ -3123,8 +3123,8 @@ protected:
     virtual void retranslateUi() RT_OVERRIDE
     {
         setName(QApplication::translate("UIActionPool", "&Preferences"));
-        setShortcutScope(QApplication::translate("UIActionPool", "Activity Monitor"));
-        setStatusTip(QApplication::translate("UIActionPool", "Open pane with activity monitor preferences"));
+        setShortcutScope(QApplication::translate("UIActionPool", "Resource Utility"));
+        setStatusTip(QApplication::translate("UIActionPool", "Open pane with resource utility preferences"));
         setToolTip(  QApplication::translate("UIActionPool", "Open Preferences Pane")
                    + (shortcut().isEmpty() ? QString() : QString(" (%1)").arg(shortcut().toString())));
     }
@@ -3377,7 +3377,7 @@ void UIActionPool::preparePool()
     m_pool[UIActionIndex_M_ResourceUtilization] = new UIActionMenuSelectorResourceUtilization(this);
     m_pool[UIActionIndex_M_ResourceUtilization_S_Export] = new UIActionMenuSelectorResourceUtilizationPerformExport(this);
     m_pool[UIActionIndex_M_ResourceUtilization_S_ToResourceDashboard] = new UIActionMenuSelectorResourceUtilizationToResourceDashboard(this);
-    m_pool[UIActionIndex_M_ResourceUtilization_T_Preferences] = new UIActionMenuActivityPreferences(this);
+    m_pool[UIActionIndex_M_ResourceUtilization_T_Preferences] = new UIActionMenuResourceUtilityPreferences(this);
 
     /* Create 'File Manager' actions: */
     m_pool[UIActionIndex_M_FileManager] = new UIActionMenuFileManager(this);
@@ -3459,7 +3459,7 @@ void UIActionPool::preparePool()
     m_menuUpdateHandlers[UIActionIndex_Menu_Help].ptf = &UIActionPool::updateMenuHelp;
     m_menuUpdateHandlers[UIActionIndex_M_LogWindow].ptf = &UIActionPool::updateMenuLogViewerWindow;
     m_menuUpdateHandlers[UIActionIndex_M_Log].ptf = &UIActionPool::updateMenuLogViewer;
-    m_menuUpdateHandlers[UIActionIndex_M_ResourceUtilization].ptf = &UIActionPool::updateMenuVMActivityMonitor;
+    m_menuUpdateHandlers[UIActionIndex_M_ResourceUtilization].ptf = &UIActionPool::updateMenuResourceUtilization;
     m_menuUpdateHandlers[UIActionIndex_M_FileManager].ptf = &UIActionPool::updateMenuFileManager;
 
     /* Invalidate all known menus: */
@@ -3850,7 +3850,7 @@ void UIActionPool::updateMenuLogViewerWrapper(UIMenu *pMenu)
     Q_UNUSED(fSeparator);
 }
 
-void UIActionPool::updateMenuVMActivityMonitor()
+void UIActionPool::updateMenuResourceUtilization()
 {
     /* Get corresponding menu: */
     UIMenu *pMenu = action(UIActionIndex_M_ResourceUtilization)->menu();

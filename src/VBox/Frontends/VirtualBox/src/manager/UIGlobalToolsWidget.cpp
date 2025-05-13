@@ -172,7 +172,7 @@ void UIGlobalToolsWidget::sltHandleCloudProfileStateChange(const QString &, cons
 {
     /* If Global Activities tool is currently chosen: */
     AssertPtrReturnVoid(toolPane());
-    if (toolPane()->currentTool() == UIToolType_Activities)
+    if (toolPane()->currentTool() == UIToolType_ResourceDashboard)
     {
         /* Propagate a set of cloud machine items to Management tool-pane: */
         toolPane()->setCloudMachineItems(chooser()->cloudMachineItems());
@@ -221,7 +221,7 @@ void UIGlobalToolsWidget::sltHandleToolsMenuIndexChange(UIToolType enmType)
 
         /* Special handling for Activities Global tool,
          * start unconditionally updating all cloud VMs: */
-        if (enmType == UIToolType_Activities)
+        if (enmType == UIToolType_ResourceDashboard)
         {
             chooser()->setKeepCloudNodesUpdated(true);
             toolPane()->setCloudMachineItems(chooser()->cloudMachineItems());
@@ -238,12 +238,12 @@ void UIGlobalToolsWidget::sltSwitchToVMActivityTool(const QUuid &uMachineId)
     AssertPtrReturnVoid(chooser());
     chooser()->setCurrentMachine(uMachineId);
     setMenuToolType(UIToolType_Machines);
-    machineToolsWidget()->setMenuToolType(UIToolType_VMActivity);
+    machineToolsWidget()->setMenuToolType(UIToolType_ResourceUtilization);
 }
 
 void UIGlobalToolsWidget::sltSwitchToActivitiesTool()
 {
-    setMenuToolType(UIToolType_Activities);
+    setMenuToolType(UIToolType_ResourceDashboard);
 }
 
 void UIGlobalToolsWidget::prepare()

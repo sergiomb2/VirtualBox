@@ -296,13 +296,13 @@ UIToolClass UIToolStuff::castTypeToClass(UIToolType enmType)
         case UIToolType_Network:
         case UIToolType_Cloud:
         case UIToolType_CloudConsole:
-        case UIToolType_Activities:
+        case UIToolType_ResourceDashboard:
             return UIToolClass_Global;
         case UIToolType_Error:
         case UIToolType_Details:
         case UIToolType_Snapshots:
         case UIToolType_Logs:
-        case UIToolType_VMActivity:
+        case UIToolType_ResourceUtilization:
         case UIToolType_FileManager:
             return UIToolClass_Machine;
         default:

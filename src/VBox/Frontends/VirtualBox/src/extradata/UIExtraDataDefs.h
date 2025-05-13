@@ -974,13 +974,13 @@ enum UIToolType
     UIToolType_Network,
     UIToolType_Cloud,
     UIToolType_CloudConsole,
-    UIToolType_Activities,
+    UIToolType_ResourceDashboard,
     /* Machine types: */
     UIToolType_Error,
     UIToolType_Details,
     UIToolType_Snapshots,
     UIToolType_Logs,
-    UIToolType_VMActivity,
+    UIToolType_ResourceUtilization,
     UIToolType_FileManager
 };
 Q_DECLARE_METATYPE(UIToolType);

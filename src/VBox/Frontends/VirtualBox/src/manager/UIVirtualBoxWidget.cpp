@@ -590,7 +590,7 @@ void UIVirtualBoxWidget::updateToolbar()
                 m_pToolBar->addAction(actionPool()->action(UIActionIndexMN_M_Machine_S_Show));
             break;
         }
-        case UIToolType_VMActivity:
+        case UIToolType_ResourceUtilization:
         {
             m_pToolBar->addAction(actionPool()->action(UIActionIndex_M_ResourceUtilization_S_Export));
             m_pToolBar->addAction(actionPool()->action(UIActionIndex_M_ResourceUtilization_S_ToResourceDashboard));
@@ -672,10 +672,10 @@ void UIVirtualBoxWidget::updateToolbar()
             m_pToolBar->addAction(actionPool()->action(UIActionIndexMN_M_Cloud_S_Help));
             break;
         }
-        case UIToolType_Activities:
+        case UIToolType_ResourceDashboard:
         {
             m_pToolBar->addAction(actionPool()->action(UIActionIndexMN_M_ResourceDashboard_M_Columns));
-            m_pToolBar->addAction(actionPool()->action(UIActionIndexMN_M_ResourceDashboard_S_SwitchToMachineActivity));
+            m_pToolBar->addAction(actionPool()->action(UIActionIndexMN_M_ResourceDashboard_S_SwitchToResourceUtilization));
             QToolButton *pButton =
                 qobject_cast<QToolButton*>(m_pToolBar->widgetForAction(actionPool()->action(UIActionIndexMN_M_ResourceDashboard_M_Columns)));
             if (pButton)
