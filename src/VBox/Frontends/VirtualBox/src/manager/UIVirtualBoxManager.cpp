@@ -3569,7 +3569,7 @@ void UIVirtualBoxManager::updateActionsVisibility()
     actionPool()->action(UIActionIndexMN_M_Cloud)->setVisible(fCloudMenuShown);
     /* Determine whether Activities menu should be visible: */
     const bool fResourcesMenuShown = fGlobalToolShown && m_pWidget->currentGlobalTool() == UIToolType_Activities;
-    actionPool()->action(UIActionIndexMN_M_VMActivityOverview)->setVisible(fResourcesMenuShown);
+    actionPool()->action(UIActionIndexMN_M_ResourceDashboard)->setVisible(fResourcesMenuShown);
 
     /* Determine whether Snapshots menu should be visible: */
     const bool fSnapshotMenuShown = (fMachineMenuShown || fGroupMenuShown) &&
@@ -3582,7 +3582,7 @@ void UIVirtualBoxManager::updateActionsVisibility()
     /* Determine whether Performance menu should be visible: */
     const bool fPerformanceMenuShown = (fMachineMenuShown || fGroupMenuShown) &&
                                        m_pWidget->currentMachineTool() == UIToolType_VMActivity;
-    actionPool()->action(UIActionIndex_M_Activity)->setVisible(fPerformanceMenuShown);
+    actionPool()->action(UIActionIndex_M_ResourceUtilization)->setVisible(fPerformanceMenuShown);
     /* Determine whether File Manager menu item should be visible: */
     const bool fFileManagerMenuShown = (fMachineMenuShown || fGroupMenuShown) &&
                                        m_pWidget->currentMachineTool() == UIToolType_FileManager;
@@ -3756,7 +3756,7 @@ void UIVirtualBoxManager::updateActionsAppearance()
             }
             case UIToolType_Activities:
             {
-                actionPool()->action(UIActionIndexMN_M_File_M_Tools_T_VMActivityOverview)->setChecked(true);
+                actionPool()->action(UIActionIndexMN_M_File_M_Tools_T_ResourceDashboard)->setChecked(true);
                 break;
             }
             default:
@@ -3786,7 +3786,7 @@ void UIVirtualBoxManager::updateActionsAppearance()
             case UIToolType_VMActivity:
             {
                 actionPool()->action(UIActionIndexMN_M_Group_M_Tools_T_Activity)->setChecked(true);
-                actionPool()->action(UIActionIndexMN_M_Machine_M_Tools_T_Activity)->setChecked(true);
+                actionPool()->action(UIActionIndexMN_M_Machine_M_Tools_T_ResourceUtilization)->setChecked(true);
                 break;
             }
             case UIToolType_FileManager:

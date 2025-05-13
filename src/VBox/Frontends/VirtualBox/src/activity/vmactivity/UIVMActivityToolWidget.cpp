@@ -123,7 +123,7 @@ void UIVMActivityToolWidget::setMachines(const QList<UIVirtualMachineItem*> &mac
 void UIVMActivityToolWidget::prepareActions()
 {
     QAction *pToResourcesAction =
-        m_pActionPool->action(UIActionIndex_M_Activity_S_ToVMActivityOverview);
+        m_pActionPool->action(UIActionIndex_M_ResourceUtilization_S_ToResourceDashboard);
     if (pToResourcesAction)
         connect(pToResourcesAction, &QAction::triggered, this, &UIVMActivityToolWidget::sigSwitchToActivityOverviewPane);
 }

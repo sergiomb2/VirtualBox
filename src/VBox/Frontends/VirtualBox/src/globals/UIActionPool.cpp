@@ -2999,14 +2999,14 @@ protected:
 };
 
 /** Menu action extension, used as 'Activity' menu class. */
-class UIActionMenuSelectorActivity : public UIActionMenu
+class UIActionMenuSelectorResourceUtilization : public UIActionMenu
 {
     Q_OBJECT;
 
 public:
 
     /** Constructs action passing @a pParent to the base-class. */
-    UIActionMenuSelectorActivity(UIActionPool *pParent)
+    UIActionMenuSelectorResourceUtilization(UIActionPool *pParent)
         : UIActionMenu(pParent)
     {}
 
@@ -3020,14 +3020,14 @@ protected:
 };
 
 /** Simple action extension, used as 'Perform Export' action class. */
-class UIActionMenuSelectorActivityPerformExport : public UIActionSimple
+class UIActionMenuSelectorResourceUtilizationPerformExport : public UIActionSimple
 {
     Q_OBJECT;
 
 public:
 
     /** Constructs action passing @a pParent to the base-class. */
-    UIActionMenuSelectorActivityPerformExport(UIActionPool *pParent)
+    UIActionMenuSelectorResourceUtilizationPerformExport(UIActionPool *pParent)
         : UIActionSimple(pParent,
                          ":/performance_monitor_export_32px.png", ":/performance_monitor_export_16px.png",
                          ":/performance_monitor_export_disabled_32px.png", ":/performance_monitor_export_disabled_16px.png")
@@ -3040,29 +3040,29 @@ protected:
     /** Returns shortcut extra-data ID. */
     virtual QString shortcutExtraDataID() const RT_OVERRIDE
     {
-        return QString("VMActivityMonitorExportCharts");
+        return QString("ResourceUtilizationExportCharts");
     }
 
     /** Handles translation event. */
     virtual void retranslateUi() RT_OVERRIDE
     {
         setName(QApplication::translate("UIActionPool", "&Export..."));
-        setShortcutScope(QApplication::translate("UIActionPool", "VM Activity Monitor"));
+        setShortcutScope(QApplication::translate("UIActionPool", "Resource Utilization"));
         setStatusTip(QApplication::translate("UIActionPool", "Export the chart data into a text file"));
         setToolTip(  QApplication::translate("UIActionPool", "Export Data to File")
                    + (shortcut().isEmpty() ? QString() : QString(" (%1)").arg(shortcut().toString())));
     }
 };
 
-/** Simple action extension, used as 'To VM Activity Overview' action class. */
-class UIActionMenuSelectorActivityToVMActivityOverview : public UIActionSimple
+/** Simple action extension, used as 'To Resource Dashboard' action class. */
+class UIActionMenuSelectorResourceUtilizationToResourceDashboard : public UIActionSimple
 {
     Q_OBJECT;
 
 public:
 
     /** Constructs action passing @a pParent to the base-class. */
-    UIActionMenuSelectorActivityToVMActivityOverview(UIActionPool *pParent)
+    UIActionMenuSelectorResourceUtilizationToResourceDashboard(UIActionPool *pParent)
         : UIActionSimple(pParent,
                          ":/resources_monitor_24px.png", ":/resource_monitor_16px.png",
                          ":/resource_monitor_disabled_24px.png", ":/resource_monitor_disabled_16px.png")
@@ -3075,16 +3075,16 @@ protected:
     /** Returns shortcut extra-data ID. */
     virtual QString shortcutExtraDataID() const RT_OVERRIDE
     {
-        return QString("ToVMActivityOverview");
+        return QString("ToResourceDashboard");
     }
 
     /** Handles translation event. */
     virtual void retranslateUi() RT_OVERRIDE
     {
-        setName(QApplication::translate("UIActionPool", "&Activity Overview..."));
+        setName(QApplication::translate("UIActionPool", "&Resource Dashboard..."));
         setShortcutScope(QApplication::translate("UIActionPool", "Activity Monitor"));
-        setStatusTip(QApplication::translate("UIActionPool", "Navigate to the vm activity overview"));
-        setToolTip(  QApplication::translate("UIActionPool", "Navigate to VM Activity Overview")
+        setStatusTip(QApplication::translate("UIActionPool", "Navigate to the resource dashboard"));
+        setToolTip(  QApplication::translate("UIActionPool", "Navigate to Resource Dashboard")
                    + (shortcut().isEmpty() ? QString() : QString(" (%1)").arg(shortcut().toString())));
     }
 };
@@ -3373,11 +3373,11 @@ void UIActionPool::preparePool()
     m_pool[UIActionIndex_M_Log_S_Reload] = new UIActionMenuSelectorLogPerformReload(this);
     m_pool[UIActionIndex_M_Log_S_Save] = new UIActionMenuSelectorLogPerformSave(this);
 
-    /* Create 'Performance Monitor' actions: */
-    m_pool[UIActionIndex_M_Activity] = new UIActionMenuSelectorActivity(this);
-    m_pool[UIActionIndex_M_Activity_S_Export] = new UIActionMenuSelectorActivityPerformExport(this);
-    m_pool[UIActionIndex_M_Activity_S_ToVMActivityOverview] = new UIActionMenuSelectorActivityToVMActivityOverview(this);
-    m_pool[UIActionIndex_M_Activity_T_Preferences] = new UIActionMenuActivityPreferences(this);
+    /* Create 'Performance Utilization' actions: */
+    m_pool[UIActionIndex_M_ResourceUtilization] = new UIActionMenuSelectorResourceUtilization(this);
+    m_pool[UIActionIndex_M_ResourceUtilization_S_Export] = new UIActionMenuSelectorResourceUtilizationPerformExport(this);
+    m_pool[UIActionIndex_M_ResourceUtilization_S_ToResourceDashboard] = new UIActionMenuSelectorResourceUtilizationToResourceDashboard(this);
+    m_pool[UIActionIndex_M_ResourceUtilization_T_Preferences] = new UIActionMenuActivityPreferences(this);
 
     /* Create 'File Manager' actions: */
     m_pool[UIActionIndex_M_FileManager] = new UIActionMenuFileManager(this);
@@ -3459,7 +3459,7 @@ void UIActionPool::preparePool()
     m_menuUpdateHandlers[UIActionIndex_Menu_Help].ptf = &UIActionPool::updateMenuHelp;
     m_menuUpdateHandlers[UIActionIndex_M_LogWindow].ptf = &UIActionPool::updateMenuLogViewerWindow;
     m_menuUpdateHandlers[UIActionIndex_M_Log].ptf = &UIActionPool::updateMenuLogViewer;
-    m_menuUpdateHandlers[UIActionIndex_M_Activity].ptf = &UIActionPool::updateMenuVMActivityMonitor;
+    m_menuUpdateHandlers[UIActionIndex_M_ResourceUtilization].ptf = &UIActionPool::updateMenuVMActivityMonitor;
     m_menuUpdateHandlers[UIActionIndex_M_FileManager].ptf = &UIActionPool::updateMenuFileManager;
 
     /* Invalidate all known menus: */
@@ -3853,19 +3853,19 @@ void UIActionPool::updateMenuLogViewerWrapper(UIMenu *pMenu)
 void UIActionPool::updateMenuVMActivityMonitor()
 {
     /* Get corresponding menu: */
-    UIMenu *pMenu = action(UIActionIndex_M_Activity)->menu();
+    UIMenu *pMenu = action(UIActionIndex_M_ResourceUtilization)->menu();
     AssertPtrReturnVoid(pMenu);
     /* Clear contents: */
     pMenu->clear();
 
-    /* 'Export' and 'Switch to VM Activity Overview" actions: */
-    pMenu->addAction(action(UIActionIndex_M_Activity_S_Export));
-    pMenu->addAction(action(UIActionIndex_M_Activity_S_ToVMActivityOverview));
+    /* 'Export' and 'Switch to Resource Dashboard" actions: */
+    pMenu->addAction(action(UIActionIndex_M_ResourceUtilization_S_Export));
+    pMenu->addAction(action(UIActionIndex_M_ResourceUtilization_S_ToResourceDashboard));
     /* 'Preferences' action: */
-    pMenu->addAction(action(UIActionIndex_M_Activity_T_Preferences));
+    pMenu->addAction(action(UIActionIndex_M_ResourceUtilization_T_Preferences));
 
     /* Mark menu as valid: */
-    m_invalidations.remove(UIActionIndex_M_Activity);
+    m_invalidations.remove(UIActionIndex_M_ResourceUtilization);
 }
 
 void UIActionPool::updateMenuFileManager()
