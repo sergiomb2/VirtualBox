@@ -891,9 +891,9 @@ DECL_HIDDEN_CALLBACK(int) gitsR3CmdQueueProcess(PPDMDEVINS pDevIns, PGITSDEV pGi
                                 uint8_t const cEventIdBits = RT_BF_GET(pGitsDev->uTypeReg.u, GITS_BF_CTRL_REG_TYPER_ID_BITS) + 1;
                                 if (cDevIdBits <= cEventIdBits)
                                 {
-                                    uint64_t const uDte = RT_BF_MAKE(GITS_BF_DTE_VALID,    1)
-                                                        | RT_BF_MAKE(GITS_BF_DTE_ITT_RANGE, cDevIdBits)
-                                                        | (GCPhysItt & GITS_BF_DTE_ITT_ADDR_MASK);
+                                    GITSDTE const uDte = RT_BF_MAKE(GITS_BF_DTE_VALID,     1)
+                                                       | RT_BF_MAKE(GITS_BF_DTE_ITT_RANGE, cDevIdBits)
+                                                       | (GCPhysItt & GITS_BF_DTE_ITT_ADDR_MASK);
 
                                     GIC_CRIT_SECT_ENTER(pDevIns);
                                     rc = gitsR3DteWrite(pDevIns, pGitsDev, uDevId, uDte);
