@@ -1042,6 +1042,8 @@ check_status_kernel()
             # Do not spoil $?.
             true
         fi
+    else
+        false
     fi
 
     # Module vboxvideo is optional and expected to be loaded only when VM is
