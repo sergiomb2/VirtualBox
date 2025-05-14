@@ -14,8 +14,6 @@
 # define LWIP_TIMEVAL_PRIVATE 0
 #endif
 
-typedef uintptr_t mem_ptr_t;
-
 #ifdef _MSC_VER
 # define PACK_STRUCT_FIELD(x) x
 # define PACK_STRUCT_STRUCT
