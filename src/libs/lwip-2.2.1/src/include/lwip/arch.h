@@ -203,6 +203,14 @@ typedef uintptr_t mem_ptr_t;
 typedef int ssize_t;
 #define SSIZE_MAX INT_MAX
 #endif /* SSIZE_MAX */
+
+# ifdef RT_OS_WINDOWS
+#  ifdef HC_ARCH_BITS != 64
+#   error "Only 64-bit hosts are supported"
+#  endif
+#  define SSIZE_MAX INT64_MAX
+# endif
+
 #endif /* VBOX */
 
 /* some maximum values needed in lwip code */
