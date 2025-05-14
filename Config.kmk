@@ -5288,6 +5288,10 @@ if (defined(VBOX_WITH_INIP) || defined(VBOX_WITH_NAT_SERVICE))
  	$(PATH_ROOT)/src/libs/lwip-2.2.1/vbox/include
  SDK_VBoxLwip_INCS             ?= $(SDK_VBoxLwip_DEFAULT_INCS)
  SDK_VBoxLwip_LIBS             ?= $(PATH_STAGE_LIB)/VBox-lwip$(VBOX_SUFF_LIB)
+
+ SDK_VBoxLwipDhcp              := Special lwip for the DHCP service.
+ SDK_VBoxLwipDhcp_EXTENDS      := VBoxLwip
+ SDK_VBoxLwipDhcp_LIBS         ?= $(PATH_STAGE_LIB)/VBox-lwip-dhcp$(VBOX_SUFF_LIB)
 endif
 
 #

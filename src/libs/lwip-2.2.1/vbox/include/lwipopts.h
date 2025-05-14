@@ -123,7 +123,6 @@
 
 #define LWIP_TCPIP_CORE_LOCKING_INPUT 0
 #define LWIP_TCPIP_CORE_LOCKING 0
-#define LWIP_TCP 1
 #define LWIP_SOCKET 1
 #define LWIP_ARP 1
 #define ARP_PROXY 0
@@ -131,6 +130,7 @@
 #define LWIP_COMPAT_SOCKETS 0
 #define LWIP_COMPAT_MUTEX 1
 
+#define LWIP_IPV4 1
 #define LWIP_IPV6 1
 #define LWIP_IPV6_FORWARD 0
 #define LWIP_ND6_PROXY 0
@@ -149,10 +149,6 @@
 
 #define LWIP_RAW                        1
 
-/**
- * aka Slirp mode.
- */
-#define LWIP_CONNECTION_PROXY 0
 #define IP_FORWARD            0
 
 /* MEMP_NUM_SYS_TIMEOUT: the number of simultaneously active
@@ -182,6 +178,13 @@
 #endif
 
 #define IPV6_FRAG_COPYHEADER 1
+
+#ifdef VBOX_LWIP_DHCP
+/* accept any->broadcast */
+# define LWIP_IP_ACCEPT_UDP_PORT(port) ((port) == PP_NTOHS(/*DHCP_SERVER_PORT*/ 67))
+#else
+# define LWIP_TCP 1
+#endif
 
 #include "lwip-namespace.h"
 

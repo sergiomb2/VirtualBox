@@ -94,4 +94,8 @@ VBox-lwip_SOURCES = \
 	vbox/sys_arch.c \
 	vbox/VBoxLwipCore.cpp
 
+LIBRARIES += VBox-lwip-dhcp
+VBox-lwip-dhcp_EXTENDS := VBox-lwip
+VBox-lwip-dhcp_DEFS += VBOX_LWIP_DHCP
+
 include $(FILE_KBUILD_SUB_FOOTER)
