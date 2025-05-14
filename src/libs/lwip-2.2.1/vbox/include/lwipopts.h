@@ -163,12 +163,6 @@
 /* this is required for IPv6 and IGMP needs */
 #define LWIP_RAND() RTRandU32()
 
-/* Debugging stuff. */
-#ifdef DEBUG
-# define LWIP_DEBUG
-# include "lwip-log.h"
-#endif /* DEBUG */
-
 /* printf formatter definitions */
 #define U16_F "hu"
 #define S16_F "hd"

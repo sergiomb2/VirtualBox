@@ -139,7 +139,6 @@
 #undef LWIP_DEBUG
 #endif
 
-#ifndef VBOX
 #ifdef LWIP_DEBUG
 #define LWIP_DEBUG_ENABLED(debug) (((debug) & LWIP_DBG_ON) && \
                                    ((debug) & LWIP_DBG_TYPES_ON) && \
@@ -158,6 +157,5 @@
 #define LWIP_DEBUG_ENABLED(debug) 0
 #define LWIP_DEBUGF(debug, message)
 #endif /* LWIP_DEBUG */
-#endif /* VBOX */
 
 #endif /* LWIP_HDR_DEBUG_H */
