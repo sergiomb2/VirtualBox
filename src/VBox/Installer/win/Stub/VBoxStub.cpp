@@ -355,8 +355,8 @@ static int GetTempFileAlloc(const char  *pszTempPath,
  *
  * @param   pszResourceName     The resource name to extract.
  * @param   pszTempFile         The full file path + name to extract the resource to.
- * @param   hFile               Handle to pszTempFile if RTFileCreateUnique was
- *                              used to generate the name, otherwise NIL_RTFILE.
+ * @param   hFile               Handle to pszTempFile if a custom file handle was used to
+ *                              open / create the file, otherwise NIL_RTFILE.
  * @param   idxPackage          The package index for annotating the cleanup
  *                              record with (HACK ALERT).
  */
@@ -467,8 +467,8 @@ static int ExtractFile(const char *pszResourceName, const char *pszTempFile, RTF
  *
  * @param   pPackage            Pointer to a VBOXSTUBPKG struct that contains the resource.
  * @param   pszTempFile         The full file path + name to extract the resource to.
- * @param   hFile               Handle to pszTempFile if RTFileCreateUnique was
- *                              used to generate the name, otherwise NIL_RTFILE.
+ * @param   hFile               Handle to pszTempFile if a custom file handle was used to
+ *                              open / create the file, otherwise NIL_RTFILE.
  * @param   idxPackage          The package index for annotating the cleanup
  *                              record with (HACK ALERT).
  */
@@ -1079,35 +1079,12 @@ static RTEXITCODE ExtractFiles(unsigned cPackages, const char *pszDstDir, bool f
 
         if (fExtractOnly || PackageIsNeeded(pPackage))
         {
-            /* If we only extract or if it's a common file, use the original file name,
-               otherwise generate a random name with the same file extension (@bugref{10201}). */
-            RTFILE hFile = NIL_RTFILE;
-            char   szDstFile[RTPATH_MAX];
-            if (fExtractOnly || pPackage->enmArch == VBOXSTUBPKGARCH_ALL)
-                rc = RTPathJoin(szDstFile, sizeof(szDstFile), pszDstDir, pPackage->szFilename);
-            else
-            {
-                rc = RTPathJoin(szDstFile, sizeof(szDstFile), pszDstDir, "XXXXXXXXXXXXXXXXXXXXXXXX");
-                if (RT_SUCCESS(rc))
-                {
-                    const char *pszSuffix = RTPathSuffix(pPackage->szFilename);
-                    if (pszSuffix)
-                        rc = RTStrCat(szDstFile, sizeof(szDstFile), pszSuffix);
-                    if (RT_SUCCESS(rc))
-                    {
-                        rc = RTFileCreateUnique(&hFile, szDstFile,
-                                                RTFILE_O_CREATE | RTFILE_O_WRITE | RTFILE_O_DENY_WRITE
-                                                | (0700 << RTFILE_O_CREATE_MODE_SHIFT));
-                        if (RT_FAILURE(rc))
-                            return ShowError("Failed to create unique filename for '%s' in '%s': %Rrc",
-                                             pPackage->szFilename, pszDstDir, rc);
-                    }
-                }
-            }
+            char szDstFile[RTPATH_MAX];
+            rc = RTPathJoin(szDstFile, sizeof(szDstFile), pszDstDir, pPackage->szFilename);
             if (RT_FAILURE(rc))
                 return ShowError("Internal error: Build extraction file name failed: %Rrc", rc);
 
-            rc = Extract(pPackage, szDstFile, hFile, k);
+            rc = Extract(pPackage, szDstFile, NIL_RTFILE /* Custom file handle, not used (anymore) */, k);
             if (RT_FAILURE(rc))
                 return ShowError("Error extracting package #%u (%s): %Rrc", k, pPackage->szFilename, rc);
         }
