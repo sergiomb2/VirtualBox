@@ -539,16 +539,10 @@ if !defined(VBOX_ONLY_EXTPACKS) && "$(intersects $(KBUILD_TARGET_ARCH),$(VBOX_SU
  # --- Networking bits. ---
 
  ifdef VBOX_WITH_INIP
-  ifndef LWIP_SOURCES
-   include $(PATH_SUB_CURRENT)/Network/lwip-new/Config.kmk
-  endif
   VBoxDD_DEFS           += VBOX_WITH_INIP
   VBoxDD_SOURCES        += \
-  	Network/DevINIP.cpp \
-  	$(addprefix Network/lwip-new/,$(LWIP_SOURCES))
-  VBoxDD_INCS           += \
-  	Network \
-  	$(addprefix Network/lwip-new/,$(LWIP_INCS))
+  	Network/DevINIP.cpp
+  VBoxDD_SDKS           += VBoxLwip
  endif # VBOX_WITH_INIP
 
  ifdef VBOX_WITH_E1000
@@ -669,11 +663,6 @@ if !defined(VBOX_ONLY_EXTPACKS) && "$(intersects $(KBUILD_TARGET_ARCH),$(VBOX_SU
   VBoxDD_DEFS           += VBOX_WITH_SCSI
   VBoxDD_SOURCES        += \
   	Storage/DrvSCSI.cpp
- endif
-
- ifdef VBOX_WITH_ISCSI
-  $(eval $(call def_vbox_lwip_flags, \
-                    VBoxDD, Storage/DrvVD.cpp, Network/lwip-new))
  endif
 
  ifdef VBOX_WITH_DRV_DISK_INTEGRITY

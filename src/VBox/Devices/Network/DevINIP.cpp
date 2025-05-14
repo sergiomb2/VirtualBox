@@ -44,9 +44,8 @@ RT_C_DECLS_BEGIN
 #include "lwip/pbuf.h"
 #include "lwip/netif.h"
 #include "lwip/api.h"
-#include "lwip/tcp_impl.h"
 # if LWIP_IPV6
-#  include "ipv6/lwip/ethip6.h"
+#  include "lwip/ethip6.h"
 # endif
 #include "lwip/udp.h"
 #include "lwip/tcp.h"
@@ -271,7 +270,7 @@ static err_t devINIPInterface(struct netif *netif) RT_NOTHROW_DEF
     netif_ip6_addr_set_state(netif, 0, IP6_ADDR_VALID);
     netif->output_ip6 = ethip6_output;
     netif->ip6_autoconfig_enabled=1;
-    LogFunc(("netif: ipv6:%RTnaipv6\n", &netif->ip6_addr[0].addr[0]));
+    LogFunc(("netif: ipv6:%RTnaipv6\n", &netif->ip6_addr[0].u_addr.ip6.addr[0]));
 #endif
 
     netif->output = lwip_etharp_output;
@@ -438,7 +437,7 @@ static DECLCALLBACK(void) devINIPTcpipInitDone(void *arg)
     pThis->IntNetIF.name[0] = 'I';
     pThis->IntNetIF.name[1] = 'N';
 
-    struct netif *ret = netif_add(&pThis->IntNetIF, &ipaddr, &netmask, &gw, NULL, devINIPInterface, lwip_tcpip_input);
+    struct netif *ret = netif_add(&pThis->IntNetIF, ip_2_ip4(&ipaddr), ip_2_ip4(&netmask), ip_2_ip4(&gw), NULL, devINIPInterface, lwip_tcpip_input);
     if (!ret)
     {
 

@@ -56,9 +56,6 @@ RT_C_DECLS_BEGIN
 #include <lwip/inet.h>
 #include <lwip/tcp.h>
 #include <lwip/sockets.h>
-# if LWIP_IPV6
-#  include <lwip/inet6.h>
-# endif
 RT_C_DECLS_END
 #endif /* VBOX_WITH_INIP */
 
