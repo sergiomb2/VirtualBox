@@ -5280,6 +5280,16 @@ if1of ($(KBUILD_TARGET), os2 win) # Not required on solaris.
  SDK_VBoxZlibStatic_LATE_LIBS ?= $(PATH_STAGE_LIB)/VBox-zlib-static$(VBOX_SUFF_LIB)
 endif
 
+if (defined(VBOX_WITH_INIP))
+ SDK_VBoxLwip                  := lwip for dll linking.
+ SDK_VBoxLwip_DEFAULT_INCS     := \
+       $(PATH_ROOT)/src/libs/lwip-2.2.1/src/include \
+       $(PATH_ROOT)/src/libs/lwip-2.2.1/vbox \
+       $(PATH_ROOT)/src/libs/lwip-2.2.1/vbox/include
+ SDK_VBoxLwip_INCS             ?= $(SDK_VBoxLwip_DEFAULT_INCS)
+ SDK_VBoxLwip_LIBS             ?= $(PATH_STAGE_LIB)/VBox-lwip$(VBOX_SUFF_LIB)
+endif
+
 #
 # Special SDK for the problematic NTDLL.LIB.
 #

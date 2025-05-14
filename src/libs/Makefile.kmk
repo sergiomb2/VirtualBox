@@ -139,6 +139,14 @@ if   defined(VBOX_WITH_LIBLZMA) \
 endif
 
 
+# lwip is used by DevINIP and the DHCP server.
+if   (   defined(VBOX_WITH_INIP) \
+      || defined(VBOX_WITH_NAT_SERVICE)) \
+  && !defined(VBOX_ONLY_SDK)
+ include $(PATH_SUB_CURRENT)/lwip-2.2.1/Makefile.kmk
+endif
+
+
 #
 # Main related things - XPCOM and XSLT.
 #
