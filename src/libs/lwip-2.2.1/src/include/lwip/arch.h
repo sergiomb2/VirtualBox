@@ -207,7 +207,7 @@ typedef int ssize_t;
 #else
 
 # ifdef RT_OS_WINDOWS
-#  ifdef HC_ARCH_BITS != 64
+#  if HC_ARCH_BITS != 64
 #   error "Only 64-bit hosts are supported"
 #  endif
 #  define SSIZE_MAX INT64_MAX
