@@ -408,8 +408,8 @@ static DECLCALLBACK(void) devINIPTcpipInitDone(void *arg)
         PDMDEV_SET_ERROR(pThis->pDevIns, pThis->rcInitialization, N_("Configuration error: Invalid \"IP\" value"));
         return;
     }
-    struct ip_addr ipaddr;
-    memcpy(&ipaddr, &ip, sizeof(ipaddr));
+    struct ip4_addr ipaddr;
+    inet_addr_to_ip4addr(&ipaddr, &ip);
 
     if (!inet_aton(pThis->pszNetmask, &ip))
     {
@@ -417,8 +417,8 @@ static DECLCALLBACK(void) devINIPTcpipInitDone(void *arg)
         PDMDEV_SET_ERROR(pThis->pDevIns, pThis->rcInitialization, N_("Configuration error: Invalid \"Netmask\" value"));
         return;
     }
-    struct ip_addr netmask;
-    memcpy(&netmask, &ip, sizeof(netmask));
+    struct ip4_addr netmask;
+    inet_addr_to_ip4addr(&netmask, &ip);
 
     if (pThis->pszGateway)
     {
@@ -431,13 +431,13 @@ static DECLCALLBACK(void) devINIPTcpipInitDone(void *arg)
     }
     else
         inet_aton(pThis->pszIP, &ip);
-    struct ip_addr gw;
-    memcpy(&gw, &ip, sizeof(gw));
+    struct ip4_addr gw;
+    inet_addr_to_ip4addr(&gw, &ip);
 
     pThis->IntNetIF.name[0] = 'I';
     pThis->IntNetIF.name[1] = 'N';
 
-    struct netif *ret = netif_add(&pThis->IntNetIF, ip_2_ip4(&ipaddr), ip_2_ip4(&netmask), ip_2_ip4(&gw), NULL, devINIPInterface, lwip_tcpip_input);
+    struct netif *ret = netif_add(&pThis->IntNetIF, &ipaddr, &netmask, &gw, NULL, devINIPInterface, lwip_tcpip_input);
     if (!ret)
     {
 
