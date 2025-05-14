@@ -174,7 +174,6 @@ ifndef VBOX_EFI_FIRMWARE_EFI_MODULES_KMK_INCLUDED
  	ArmPkg/Drivers/CpuPei/CpuPei/$(VBOX_EFI_DEBUG_DIR.arm64)/CpuPei \
  	ArmPkg/Drivers/TimerDxe/TimerDxe/$(VBOX_EFI_DEBUG_DIR.arm64)/ArmTimerDxe \
  	ArmPlatformPkg/PlatformPei/PlatformPeim/$(VBOX_EFI_DEBUG_DIR.arm64)/PlatformPei \
- 	ArmPlatformPkg/PrePeiCore/PrePeiCoreUniCore/$(VBOX_EFI_DEBUG_DIR.arm64)/ArmPlatformPrePeiCore \
  	ArmVirtPkg/MemoryInitPei/MemoryInitPeim/$(VBOX_EFI_DEBUG_DIR.arm64)/MemoryInit \
  	EmbeddedPkg/Drivers/FdtClientDxe/FdtClientDxe/$(VBOX_EFI_DEBUG_DIR.arm64)/FdtClientDxe \
  	EmbeddedPkg/MetronomeDxe/MetronomeDxe/$(VBOX_EFI_DEBUG_DIR.arm64)/MetronomeDxe \

@@ -10,8 +10,10 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 # ifdef VBOX
 // RUNTIME_FUNCTION typedef conflicts; just use EFI headers
 # else
+#define RUNTIME_FUNCTION  _WINNT_DUP_RUNTIME_FUNCTION
 #include <windows.h>
-#endif
+#undef RUNTIME_FUNCTION
+# endif
 #include <io.h>
 #include <sys/types.h>
 #include <sys/stat.h>
