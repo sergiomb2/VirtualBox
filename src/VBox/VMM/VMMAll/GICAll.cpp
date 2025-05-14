@@ -1854,7 +1854,7 @@ static uint16_t gicAckHighestPriorityPendingIntr(PGICDEV pGicDev, PVMCPUCC pVCpu
             if (fGroup1)
                 ASMBitSet(&pGicCpu->bmActivePriorityGroup1[0], idxPreemptionLevel);
 
-            /* Drop priority. */
+            /* Set priority of the running interrupt. */
             if (RT_LIKELY(pGicCpu->idxRunningPriority < RT_ELEMENTS(pGicCpu->abRunningPriorities) - 1))
             {
                 LogFlowFunc(("Dropping interrupt priority from %u -> %u (idxRunningPriority: %u -> %u)\n",
@@ -1896,7 +1896,7 @@ static uint16_t gicAckHighestPriorityPendingIntr(PGICDEV pGicDev, PVMCPUCC pVCpu
             if (fGroup1)
                 ASMBitSet(&pGicCpu->bmActivePriorityGroup1[0], idxPreemptionLevel);
 
-            /* Drop priority. */
+            /* Set priority of the running priority. */
             if (RT_LIKELY(pGicCpu->idxRunningPriority < RT_ELEMENTS(pGicCpu->abRunningPriorities) - 1))
             {
                 LogFlowFunc(("Dropping interrupt priority from %u -> %u (idxRunningPriority: %u -> %u)\n",
@@ -2957,7 +2957,7 @@ static DECLCALLBACK(VBOXSTRICTRC) gicReadSysReg(PVMCPUCC pVCpu, uint32_t u32Reg,
             AssertReleaseFailed();
             break;
         case ARMV8_AARCH64_SYSREG_ICC_RPR_EL1:
-            *pu64Value = pGicCpu->abRunningPriorities[pGicCpu->idxRunningPriority];
+            *pu64Value = pGicCpu->abRunningPriorities[pGicCpu->idxRunningPriority] & 0xfe;
             break;
         case ARMV8_AARCH64_SYSREG_ICC_SGI1R_EL1:
             AssertReleaseFailed();
@@ -3140,7 +3140,7 @@ static DECLCALLBACK(VBOXSTRICTRC) gicWriteSysReg(PVMCPUCC pVCpu, uint32_t u32Reg
             /*
              * Drop priority by restoring previous interrupt.
              */
-            if (RT_LIKELY(pGicCpu->idxRunningPriority))
+            if (RT_LIKELY(pGicCpu->idxRunningPriority > 0))
             {
                 LogFlowFunc(("Restoring interrupt priority from %u -> %u (idxRunningPriority: %u -> %u)\n",
                              pGicCpu->abRunningPriorities[pGicCpu->idxRunningPriority],
