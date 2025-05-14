@@ -141,7 +141,7 @@ endif
 
 # lwip is used by DevINIP and the DHCP server.
 if   (   defined(VBOX_WITH_INIP) \
-      || defined(VBOX_WITH_NAT_SERVICE)) \
+  || defined(VBOX_WITH_NAT_SERVICE)) \
   && "$(intersects $(KBUILD_TARGET_ARCH),$(VBOX_SUPPORTED_HOST_ARCHS))" != "" \
   && !defined(VBOX_ONLY_SDK)
  include $(PATH_SUB_CURRENT)/lwip-2.2.1/Makefile.kmk
