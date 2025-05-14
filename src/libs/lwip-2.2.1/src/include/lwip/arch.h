@@ -185,6 +185,7 @@ typedef uintptr_t mem_ptr_t;
 #include <limits.h>
 #endif
 
+#ifndef VBOX
 /* Do we need to define ssize_t? This is a compatibility hack:
  * Unfortunately, this type seems to be unavailable on some systems (even if
  * sys/types or unistd.h are available).
@@ -202,6 +203,7 @@ typedef uintptr_t mem_ptr_t;
 typedef int ssize_t;
 #define SSIZE_MAX INT_MAX
 #endif /* SSIZE_MAX */
+#endif /* VBOX */
 
 /* some maximum values needed in lwip code */
 #define LWIP_UINT32_MAX 0xffffffff
