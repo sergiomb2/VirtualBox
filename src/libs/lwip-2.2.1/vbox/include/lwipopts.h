@@ -160,12 +160,24 @@
 #define LWIP_RAND() RTRandU32()
 
 /* printf formatter definitions */
-#define U16_F "hu"
-#define S16_F "hd"
-#define X16_F "hx"
-#define U32_F "u"
-#define S32_F "d"
-#define X32_F "x"
+#ifndef U16_F
+# define U16_F "hu"
+#endif
+#ifndef S16_F
+# define S16_F "hd"
+#endif
+#ifndef X16_F
+# define X16_F "hx"
+#endif
+#ifndef U32_F
+# define U32_F "u"
+#endif
+#ifndef S32_F
+# define S32_F "d"
+#endif
+#ifndef X32_F
+# define X32_F "x"
+#endif
 
 /* Redirect libc memory alloc functions to IPRT. */
 #define malloc(x) RTMemAlloc(x)
