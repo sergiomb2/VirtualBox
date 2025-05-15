@@ -33,7 +33,7 @@ Class=Mouse
 DriverPackageType=ClassFilter
 ;edit-DriverVer=08/26/2008,2.00.0000
 ;cat CatalogFile=VBoxMouse.cat
-;PnpLockdown=1
+PnpLockdown=1
 
 [SourceDisksNames]
 1 = %VBoxMouse_DiskDesc%,,,
