@@ -50,7 +50,7 @@ PnpLockdown=1
 VBoxUSB.sys = 1
 
 [DestinationDirs]
-DefaultDestDir = 10,System32\Drivers
+DefaultDestDir = 12
 
 [Manufacturer]
 %ORACLE%=VBoxUSB@COMMA-NT-ARCH@
