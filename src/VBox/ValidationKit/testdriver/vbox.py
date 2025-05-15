@@ -1852,7 +1852,7 @@ class TestDriver(base.TestDriver):                                              
         """
         Returns the installed Guest Additions (SVN) revision.
 
-        Returns revision as a string (e.g. "123456"), or None if not found / on error.
+        Returns revision as an integer, or None if not found / on error.
         """
         assert oSession is not None;
         try:
