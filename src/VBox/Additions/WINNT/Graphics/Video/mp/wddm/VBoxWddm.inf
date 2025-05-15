@@ -33,6 +33,7 @@ Class=Display
 DriverPackageType=PlugAndPlay
 ;edit-DriverVer=02/26/2010,1.00.0000
 ;cat CatalogFile = VBoxWddm.cat
+PnpLockdown=1
 
 [DestinationDirs]
 DefaultDestDir=11
