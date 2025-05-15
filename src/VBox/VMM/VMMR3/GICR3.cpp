@@ -163,23 +163,36 @@ static DECLCALLBACK(void) gicR3DbgInfoDist(PVM pVM, PCDBGFINFOHLP pHlp, const ch
 
     /* Interrupt routing.*/
     {
-        /** @todo Interrupt rounting mode. */
         uint32_t const cRouting = RT_ELEMENTS(pGicDev->au32IntrRouting);
         AssertCompile(!(cRouting % 16));
         pHlp->pfnPrintf(pHlp, "  Interrupt routing:\n");
         for (uint32_t i = 0; i < cRouting; i += 16)
-            pHlp->pfnPrintf(pHlp, "    IntId[%4u..%-4u] = %3u %3u %3u %3u %3u %3u %3u %3u"
-                                  "    IntId[%4u..%-4u] = %3u %3u %3u %3u %3u %3u %3u %3u\n",
-                                  gicDistGetIntIdFromIndex(i),      gicDistGetIntIdFromIndex(i + 7),
-                                  pGicDev->au32IntrRouting[i],      pGicDev->au32IntrRouting[i + 1],
-                                  pGicDev->au32IntrRouting[i + 2],  pGicDev->au32IntrRouting[i + 3],
-                                  pGicDev->au32IntrRouting[i + 4],  pGicDev->au32IntrRouting[i + 5],
-                                  pGicDev->au32IntrRouting[i + 6],  pGicDev->au32IntrRouting[i + 7],
-                                  gicDistGetIntIdFromIndex(i + 8),  gicDistGetIntIdFromIndex(i + 15),
-                                  pGicDev->au32IntrRouting[i + 8],  pGicDev->au32IntrRouting[i + 9],
-                                  pGicDev->au32IntrRouting[i + 10], pGicDev->au32IntrRouting[i + 11],
-                                  pGicDev->au32IntrRouting[i + 12], pGicDev->au32IntrRouting[i + 13],
-                                  pGicDev->au32IntrRouting[i + 14], pGicDev->au32IntrRouting[i + 15]);
+        {
+            uint8_t const cBits  = sizeof(pGicDev->bmIntrRoutingMode[0]) * 8;
+            uint8_t const idxIrm = i / cBits;
+            uint8_t const iBit   = i % cBits;
+            Assert(idxIrm < RT_ELEMENTS(pGicDev->bmIntrRoutingMode));   /* Paranoia. */
+            pHlp->pfnPrintf(pHlp, "    IntId[%4u..%-4u] = %u:%-3u %u:%-3u %u:%-3u %u:%-3u %u:%-3u %u:%-3u %u:%-3u %u:%-3u"
+                                  "    IntId[%4u..%-4u] = %u:%-3u %u:%-3u %u:%-3u %u:%-3u %u:%-3u %u:%-3u %u:%-3u %u:%-3u\n",
+                                  gicDistGetIntIdFromIndex(i),                                 gicDistGetIntIdFromIndex(i + 7),
+                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 0),   pGicDev->au32IntrRouting[i],
+                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 1),   pGicDev->au32IntrRouting[i + 1],
+                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 2),   pGicDev->au32IntrRouting[i + 2],
+                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 3),   pGicDev->au32IntrRouting[i + 3],
+                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 4),   pGicDev->au32IntrRouting[i + 4],
+                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 5),   pGicDev->au32IntrRouting[i + 5],
+                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 6),   pGicDev->au32IntrRouting[i + 6],
+                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 7),   pGicDev->au32IntrRouting[i + 7],
+                                  gicDistGetIntIdFromIndex(i + 8),                             gicDistGetIntIdFromIndex(i + 15),
+                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 8),   pGicDev->au32IntrRouting[i + 8],
+                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 9),   pGicDev->au32IntrRouting[i + 9],
+                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 10),  pGicDev->au32IntrRouting[i + 10],
+                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 11),  pGicDev->au32IntrRouting[i + 11],
+                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 12),  pGicDev->au32IntrRouting[i + 12],
+                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 13),  pGicDev->au32IntrRouting[i + 13],
+                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 14),  pGicDev->au32IntrRouting[i + 14],
+                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 15),  pGicDev->au32IntrRouting[i + 15]);
+        }
     }
 
 #undef GIC_DBGFINFO_DIST_INTR_BITMAP
