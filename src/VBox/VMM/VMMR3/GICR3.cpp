@@ -174,24 +174,24 @@ static DECLCALLBACK(void) gicR3DbgInfoDist(PVM pVM, PCDBGFINFOHLP pHlp, const ch
             Assert(idxIrm < RT_ELEMENTS(pGicDev->bmIntrRoutingMode));   /* Paranoia. */
             pHlp->pfnPrintf(pHlp, "    IntId[%4u..%-4u] = %u:%-3u %u:%-3u %u:%-3u %u:%-3u %u:%-3u %u:%-3u %u:%-3u %u:%-3u"
                                   "    IntId[%4u..%-4u] = %u:%-3u %u:%-3u %u:%-3u %u:%-3u %u:%-3u %u:%-3u %u:%-3u %u:%-3u\n",
-                                  gicDistGetIntIdFromIndex(i),                                 gicDistGetIntIdFromIndex(i + 7),
-                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 0),   pGicDev->au32IntrRouting[i],
-                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 1),   pGicDev->au32IntrRouting[i + 1],
-                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 2),   pGicDev->au32IntrRouting[i + 2],
-                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 3),   pGicDev->au32IntrRouting[i + 3],
-                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 4),   pGicDev->au32IntrRouting[i + 4],
-                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 5),   pGicDev->au32IntrRouting[i + 5],
-                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 6),   pGicDev->au32IntrRouting[i + 6],
-                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 7),   pGicDev->au32IntrRouting[i + 7],
-                                  gicDistGetIntIdFromIndex(i + 8),                             gicDistGetIntIdFromIndex(i + 15),
-                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 8),   pGicDev->au32IntrRouting[i + 8],
-                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 9),   pGicDev->au32IntrRouting[i + 9],
-                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 10),  pGicDev->au32IntrRouting[i + 10],
-                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 11),  pGicDev->au32IntrRouting[i + 11],
-                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 12),  pGicDev->au32IntrRouting[i + 12],
-                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 13),  pGicDev->au32IntrRouting[i + 13],
-                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 14),  pGicDev->au32IntrRouting[i + 14],
-                                  ASMBitTest(&pGicDev->bmIntrRoutingMode[idxIrm], iBit + 15),  pGicDev->au32IntrRouting[i + 15]);
+                                  gicDistGetIntIdFromIndex(i),                            gicDistGetIntIdFromIndex(i + 7),
+                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 0),  pGicDev->au32IntrRouting[i],
+                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 1),  pGicDev->au32IntrRouting[i + 1],
+                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 2),  pGicDev->au32IntrRouting[i + 2],
+                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 3),  pGicDev->au32IntrRouting[i + 3],
+                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 4),  pGicDev->au32IntrRouting[i + 4],
+                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 5),  pGicDev->au32IntrRouting[i + 5],
+                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 6),  pGicDev->au32IntrRouting[i + 6],
+                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 7),  pGicDev->au32IntrRouting[i + 7],
+                                  gicDistGetIntIdFromIndex(i + 8),                        gicDistGetIntIdFromIndex(i + 15),
+                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 8),  pGicDev->au32IntrRouting[i + 8],
+                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 9),  pGicDev->au32IntrRouting[i + 9],
+                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 10), pGicDev->au32IntrRouting[i + 10],
+                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 11), pGicDev->au32IntrRouting[i + 11],
+                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 12), pGicDev->au32IntrRouting[i + 12],
+                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 13), pGicDev->au32IntrRouting[i + 13],
+                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 14), pGicDev->au32IntrRouting[i + 14],
+                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 15), pGicDev->au32IntrRouting[i + 15]);
         }
     }
 
