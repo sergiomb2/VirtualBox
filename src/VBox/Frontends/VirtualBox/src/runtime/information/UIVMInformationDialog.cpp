@@ -77,7 +77,7 @@ void UIVMInformationDialog::sltRetranslateUI()
     /* Translate tabs: */
     m_pTabWidget->setTabText(Tabs_ConfigurationDetails, tr("Configuration &Details"));
     m_pTabWidget->setTabText(Tabs_RuntimeInformation, tr("&Runtime Information"));
-    m_pTabWidget->setTabText(Tabs_ActivityMonitor, tr("Resource &Utilization"));
+    m_pTabWidget->setTabText(Tabs_VMResourceUse, tr("VM Resource &Use"));
     m_pTabWidget->setTabText(3, tr("&Guest Control"));
 
     /* Retranslate button box buttons: */
@@ -154,7 +154,7 @@ void UIVMInformationDialog::sltAdditionsStateChange()
     if (!m_pTabWidget)
         return;
     UIVMActivityMonitorContainer *pVMActivityMonitorContainer =
-        qobject_cast<UIVMActivityMonitorContainer*>(m_pTabWidget->widget(Tabs_ActivityMonitor));
+        qobject_cast<UIVMActivityMonitorContainer*>(m_pTabWidget->widget(Tabs_VMResourceUse));
     if (!pVMActivityMonitorContainer)
         return;
     pVMActivityMonitorContainer->guestAdditionsStateChange(uiCommon().managedVMUuid());
@@ -243,8 +243,8 @@ void UIVMInformationDialog::prepareTabWidget()
         if (pVMActivityMonitorContainer)
         {
             pVMActivityMonitorContainer->addLocalMachine(gpMachine->uisession()->machine());
-            m_tabs.insert(Tabs_ActivityMonitor, pVMActivityMonitorContainer);
-            m_pTabWidget->addTab(m_tabs.value(Tabs_ActivityMonitor), QString());
+            m_tabs.insert(Tabs_VMResourceUse, pVMActivityMonitorContainer);
+            m_pTabWidget->addTab(m_tabs.value(Tabs_VMResourceUse), QString());
         }
 #ifdef DEBUG
         /* Create Guest Process Control tab: */
@@ -257,7 +257,7 @@ void UIVMInformationDialog::prepareTabWidget()
             m_pTabWidget->addTab(m_tabs.value(3), QString());
         }
 #endif
-        m_pTabWidget->setCurrentIndex(Tabs_ActivityMonitor);
+        m_pTabWidget->setCurrentIndex(Tabs_VMResourceUse);
 
         /* Assign tab-widget page change handler: */
         connect(m_pTabWidget, &QITabWidget::currentChanged, this, &UIVMInformationDialog::sltHandlePageChanged);

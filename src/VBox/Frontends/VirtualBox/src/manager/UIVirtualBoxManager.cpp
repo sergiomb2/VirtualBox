@@ -3581,8 +3581,8 @@ void UIVirtualBoxManager::updateActionsVisibility()
     actionPool()->action(UIActionIndex_M_Log)->setVisible(fLogViewerMenuShown);
     /* Determine whether Performance menu should be visible: */
     const bool fPerformanceMenuShown = (fMachineMenuShown || fGroupMenuShown) &&
-                                       m_pWidget->currentMachineTool() == UIToolType_ResourceUtilization;
-    actionPool()->action(UIActionIndex_M_ResourceUtilization)->setVisible(fPerformanceMenuShown);
+                                       m_pWidget->currentMachineTool() == UIToolType_VMResourceUse;
+    actionPool()->action(UIActionIndex_M_VMResourceUse)->setVisible(fPerformanceMenuShown);
     /* Determine whether File Manager menu item should be visible: */
     const bool fFileManagerMenuShown = (fMachineMenuShown || fGroupMenuShown) &&
                                        m_pWidget->currentMachineTool() == UIToolType_FileManager;
@@ -3783,10 +3783,10 @@ void UIVirtualBoxManager::updateActionsAppearance()
                 actionPool()->action(UIActionIndexMN_M_Machine_M_Tools_T_Logs)->setChecked(true);
                 break;
             }
-            case UIToolType_ResourceUtilization:
+            case UIToolType_VMResourceUse:
             {
-                actionPool()->action(UIActionIndexMN_M_Group_M_Tools_T_ResourceUtilization)->setChecked(true);
-                actionPool()->action(UIActionIndexMN_M_Machine_M_Tools_T_ResourceUtilization)->setChecked(true);
+                actionPool()->action(UIActionIndexMN_M_Group_M_Tools_T_VMResourceUse)->setChecked(true);
+                actionPool()->action(UIActionIndexMN_M_Machine_M_Tools_T_VMResourceUse)->setChecked(true);
                 break;
             }
             case UIToolType_FileManager:

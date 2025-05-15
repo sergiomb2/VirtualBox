@@ -232,12 +232,12 @@ void UIVMActivityMonitorContainer::prepare()
             this, &UIVMActivityMonitorContainer::sltCurrentTabChanged);
     connect(m_pPaneContainer, &UIVMActivityMonitorPaneContainer::sigColorChanged,
             this, &UIVMActivityMonitorContainer::sltDataSeriesColorChanged);
-    m_pExportToFileAction = m_pActionPool->action(UIActionIndex_M_ResourceUtilization_S_Export);
+    m_pExportToFileAction = m_pActionPool->action(UIActionIndex_M_VMResourceUse_S_Export);
     if (m_pExportToFileAction)
         connect(m_pExportToFileAction, &QAction::triggered, this, &UIVMActivityMonitorContainer::sltExportToFile);
 
-    if (m_pActionPool->action(UIActionIndex_M_ResourceUtilization_T_Preferences))
-        connect(m_pActionPool->action(UIActionIndex_M_ResourceUtilization_T_Preferences), &QAction::toggled,
+    if (m_pActionPool->action(UIActionIndex_M_VMResourceUse_T_Preferences))
+        connect(m_pActionPool->action(UIActionIndex_M_VMResourceUse_T_Preferences), &QAction::toggled,
                 this, &UIVMActivityMonitorContainer::sltTogglePreferencesPane);
 }
 

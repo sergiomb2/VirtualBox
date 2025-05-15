@@ -590,11 +590,11 @@ void UIVirtualBoxWidget::updateToolbar()
                 m_pToolBar->addAction(actionPool()->action(UIActionIndexMN_M_Machine_S_Show));
             break;
         }
-        case UIToolType_ResourceUtilization:
+        case UIToolType_VMResourceUse:
         {
-            m_pToolBar->addAction(actionPool()->action(UIActionIndex_M_ResourceUtilization_S_Export));
-            m_pToolBar->addAction(actionPool()->action(UIActionIndex_M_ResourceUtilization_S_ToResourceDashboard));
-            m_pToolBar->addAction(actionPool()->action(UIActionIndex_M_ResourceUtilization_T_Preferences));
+            m_pToolBar->addAction(actionPool()->action(UIActionIndex_M_VMResourceUse_S_Export));
+            m_pToolBar->addAction(actionPool()->action(UIActionIndex_M_VMResourceUse_S_ToResourceDashboard));
+            m_pToolBar->addAction(actionPool()->action(UIActionIndex_M_VMResourceUse_T_Preferences));
             m_pToolBar->addSeparator();
             m_pToolBar->addAction(actionPool()->action(UIActionIndexMN_M_Machine_S_Settings));
             m_pToolBar->addAction(actionPool()->action(UIActionIndexMN_M_Machine_S_Discard));
@@ -675,7 +675,7 @@ void UIVirtualBoxWidget::updateToolbar()
         case UIToolType_ResourceDashboard:
         {
             m_pToolBar->addAction(actionPool()->action(UIActionIndexMN_M_ResourceDashboard_M_Columns));
-            m_pToolBar->addAction(actionPool()->action(UIActionIndexMN_M_ResourceDashboard_S_SwitchToResourceUtilization));
+            m_pToolBar->addAction(actionPool()->action(UIActionIndexMN_M_ResourceDashboard_S_SwitchToVMResourceUse));
             QToolButton *pButton =
                 qobject_cast<QToolButton*>(m_pToolBar->widgetForAction(actionPool()->action(UIActionIndexMN_M_ResourceDashboard_M_Columns)));
             if (pButton)

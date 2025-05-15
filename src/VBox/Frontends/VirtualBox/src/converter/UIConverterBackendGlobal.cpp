@@ -1703,7 +1703,7 @@ template<> SHARED_LIBRARY_STUFF QString UIConverter::toInternalString(const UITo
         case UIToolType_Details:      strResult = "Details"; break;
         case UIToolType_Snapshots:    strResult = "Snapshots"; break;
         case UIToolType_Logs:         strResult = "Logs"; break;
-        case UIToolType_ResourceUtilization:   strResult = "Activity"; break;
+        case UIToolType_VMResourceUse:   strResult = "Activity"; break;
         case UIToolType_FileManager:  strResult = "FileManager"; break;
         default:
         {
@@ -1740,7 +1740,7 @@ template<> SHARED_LIBRARY_STUFF UIToolType UIConverter::fromInternalString<UIToo
     if (strToolType.compare("Logs", Qt::CaseInsensitive) == 0)
         return UIToolType_Logs;
     if (strToolType.compare("Activity", Qt::CaseInsensitive) == 0)
-        return UIToolType_ResourceUtilization;
+        return UIToolType_VMResourceUse;
     if (strToolType.compare("FileManager", Qt::CaseInsensitive) == 0)
         return UIToolType_FileManager;
     return UIToolType_Invalid;

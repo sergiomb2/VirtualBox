@@ -1189,7 +1189,7 @@ void UIVMActivityOverviewWidget::prepareActions()
 {
     updateColumnsMenu();
     m_pVMActivityMonitorAction =
-        m_pActionPool->action(UIActionIndexMN_M_ResourceDashboard_S_SwitchToResourceUtilization);
+        m_pActionPool->action(UIActionIndexMN_M_ResourceDashboard_S_SwitchToVMResourceUse);
 
     if (m_pVMActivityMonitorAction)
         connect(m_pVMActivityMonitorAction, &QAction::triggered, this, &UIVMActivityOverviewWidget::sltHandleShowVMActivityMonitor);

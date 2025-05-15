@@ -142,7 +142,7 @@ private slots:
 
         /** Handles signal requesting switch to Activities tool. */
         void sltSwitchToActivitiesTool();
-        /** Handles signal requesting switch to Resource Utilization tool. */
+        /** Handles signal requesting switch to VM Resource Use tool. */
         void sltSwitchToVMActivityTool(const QUuid &uMachineId);
     /** @} */
 
