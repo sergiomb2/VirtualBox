@@ -113,6 +113,7 @@ static CPUMDBENTRYARM const g_Entry_ARM_Apple_M2_Max =
         /*.enmVendor    = */ CPUMCPUVENDOR_APPLE,
         /*.enmMicroarch = */ kCpumMicroarch_Apple_M2,
         /*.fFlags       = */ 0,
+        /*.enmEntryType = */ CPUMDBENTRYTYPE_ARM,
     },
     /*.paSysRegCmnVals  = */ NULL_ALONE(g_aCmnSysRegVals_ARM_Apple_M2_Max),
     /*.cSysRegCmnVals   = */ ZERO_ALONE(RT_ELEMENTS(g_aCmnSysRegVals_ARM_Apple_M2_Max)),

@@ -113,6 +113,7 @@ static CPUMDBENTRYARM const g_Entry_ARM_Qualcomm_Snapdragon_X =
         /*.enmVendor    = */ CPUMCPUVENDOR_QUALCOMM,
         /*.enmMicroarch = */ kCpumMicroarch_Qualcomm_Oryon,
         /*.fFlags       = */ 0,
+        /*.enmEntryType = */ CPUMDBENTRYTYPE_ARM,
     },
     /*.paSysRegCmnVals  = */ NULL_ALONE(g_aCmnSysRegVals_ARM_Qualcomm_Snapdragon_X),
     /*.cSysRegCmnVals   = */ ZERO_ALONE(RT_ELEMENTS(g_aCmnSysRegVals_ARM_Qualcomm_Snapdragon_X)),
