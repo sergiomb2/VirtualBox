@@ -2301,6 +2301,11 @@ static int rtProcPosixCreateInner(const char *pszNativeExec, const char * const 
                 /* This can happen when trying to start a shell script without the magic #!/bin/sh */
                 RTAssertMsg2Weak("Cannot execute this binary format!\n");
             }
+            else if (errno == EACCES)
+            {
+                /* This can happen if file isn't marked as being executable or SELinux is enabled for prohibits using execve.*/
+                RTAssertMsg2Weak("Permission denied executing this binary -- check execute permissions and/or SELinux policies!\n");
+            }
             else
                 RTAssertMsg2Weak("execve returns %d errno=%d (%s)\n", rc, errno, pszNativeExec);
             RTAssertReleasePanic();
