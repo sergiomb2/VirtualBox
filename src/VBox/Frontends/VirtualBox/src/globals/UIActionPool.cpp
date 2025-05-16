@@ -2450,7 +2450,7 @@ public:
     /** Constructs action passing @a pParent to the base-class. */
     UIActionSimpleVISOCreatorOpen(UIActionPool *pParent)
         : UIActionSimple(pParent,
-                         ":/cd_remove_16px.png", ":/cd_remove_32px.png")
+                         ":/cd_open_16px.png", ":/cd_open_32px.png")
     {
         setShortcutContext(Qt::WidgetWithChildrenShortcut);
     }
@@ -2803,8 +2803,8 @@ public:
 
     /** Constructs action passing @a pParent to the base-class. */
     UIActionMenuMediumSelectorEditCD(UIActionPool *pParent)
-        : UIActionSimple(pParent, ":/cd_modify_32px.png",  ":/cd_modify_16px.png",
-                         ":/cd_modify_disabled_32px.png", ":/cd_modify_disabled_16px.png")
+        : UIActionSimple(pParent, ":/cd_edit_32px.png",  ":/cd_edit_16px.png",
+                         ":/cd_edit_disabled_32px.png", ":/cd_edit_disabled_16px.png")
     {
         setShortcutContext(Qt::WidgetWithChildrenShortcut);
     }
