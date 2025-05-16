@@ -112,6 +112,14 @@ ifdef VBOX_SIGNING_MODE
 endif
 
 
+#
+# CPU profile
+#
+PROGRAMS += VBoxCpuProfile
+VBoxCpuProfile_TEMPLATE := VBoxR3Tool
+VBoxCpuProfile_SOURCES  := VBoxCpuProfile.cpp
+
+
 
 include $(FILE_KBUILD_SUB_FOOTER)
 

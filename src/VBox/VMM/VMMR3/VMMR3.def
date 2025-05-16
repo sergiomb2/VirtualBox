@@ -108,6 +108,10 @@ EXPORTS
     CPUMGetHostMicroarch
     CPUMGetGuestArch
     CPUMGetGuestMicroarch
+    CPUMR3DbGetEntries
+    CPUMR3DbGetEntryByIndex
+    CPUMR3DbGetEntryByName
+    CPUMR3DbGetBestEntryByName
 
     DBGCCreate
 
