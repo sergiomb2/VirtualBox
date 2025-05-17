@@ -2340,7 +2340,6 @@ VMMDECL(int) CPUMCpuIdCollectIdSysRegsFromArmV8Host(PSUPARMSYSREGVAL *ppaSysRegs
     int32_t idxMidr = (int32_t)cSysRegs - 1;
     while (idxMidr >= 0 && paSysRegs[idxMidr].idReg != ARMV8_AARCH64_SYSREG_MIDR_EL1)
         idxMidr--;
-RT_BREAKPOINT();
     if (idxMidr >= 0 && (paSysRegs[idxMidr].uValue & UINT32_C(0x00f0fff0)) != 0)
         pDbEntry = CPUMR3DbGetBestEntryByArm64MainId(paSysRegs[idxMidr].uValue, &uScore);
     else
