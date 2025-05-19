@@ -460,8 +460,8 @@ void UIMachineSettingsGeneral::setOrderAfter(QWidget *pWidget)
 
 void UIMachineSettingsGeneral::sltRetranslateUI()
 {
-    m_pTabWidget->setTabText(m_pTabWidget->indexOf(m_pTabBasic), tr("Basi&c"));
-    m_pTabWidget->setTabText(m_pTabWidget->indexOf(m_pTabAdvanced), tr("A&dvanced"));
+    m_pTabWidget->setTabText(m_pTabWidget->indexOf(m_pTabBasic), tr("&Identity"));
+    m_pTabWidget->setTabText(m_pTabWidget->indexOf(m_pTabAdvanced), tr("&Features"));
     m_pTabWidget->setTabText(m_pTabWidget->indexOf(m_pTabDescription), tr("D&escription"));
     m_pTabWidget->setTabText(m_pTabWidget->indexOf(m_pTabEncryption), tr("Disk Enc&ryption"));
 

@@ -90,10 +90,9 @@ void UISnapshotFolderEditor::setMinimumLayoutIndent(int iIndent)
 void UISnapshotFolderEditor::sltRetranslateUI()
 {
     if (m_pLabel)
-        m_pLabel->setText(tr("S&napshot Folder:"));
+        m_pLabel->setText(tr("S&napshot Folder"));
     if (m_pSelector)
-        m_pSelector->setToolTip(tr("Holds the path where snapshots of this virtual machine will be stored. "
-                                   "Be aware that snapshots can take quite a lot of storage space."));
+        m_pSelector->setToolTip(tr("Folder where snapshots of this VM are saved"));
 }
 
 void UISnapshotFolderEditor::prepare()

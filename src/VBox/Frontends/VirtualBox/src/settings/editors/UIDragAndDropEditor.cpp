@@ -79,7 +79,7 @@ void UIDragAndDropEditor::setMinimumLayoutIndent(int iIndent)
 void UIDragAndDropEditor::sltRetranslateUI()
 {
     if (m_pLabel)
-        m_pLabel->setText(tr("D&rag'n'Drop:"));
+        m_pLabel->setText(tr("D&rag-and-Drop"));
     if (m_pCombo)
     {
         for (int i = 0; i < m_pCombo->count(); ++i)
@@ -87,8 +87,7 @@ void UIDragAndDropEditor::sltRetranslateUI()
             const KDnDMode enmType = m_pCombo->itemData(i).value<KDnDMode>();
             m_pCombo->setItemText(i, gpConverter->toString(enmType));
         }
-        m_pCombo->setToolTip(tr("Holds which data will be copied between the guest and the host OS by drag'n'drop. "
-                                "This feature requires Guest Additions to be installed in the guest OS."));
+        m_pCombo->setToolTip(tr("Enable the dragging method of copying data between file manager tools"));
     }
 }
 
