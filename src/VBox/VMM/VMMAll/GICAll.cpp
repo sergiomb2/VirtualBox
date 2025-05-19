@@ -697,6 +697,7 @@ static void gicDistHasIrqPendingForVCpu(PCGICDEV pGicDev, PCVMCPUCC pVCpu, VMCPU
         {
             AssertCompile(RT_ELEMENTS(pGicDev->abIntrPriority) == RT_ELEMENTS(pGicDev->au32IntrRouting));
             Assert((uint32_t)idxIntr < RT_ELEMENTS(pGicDev->abIntrPriority));
+            Assert(idxIntr > GIC_INTID_RANGE_PPI_LAST);
             Assert(idxIntr < GIC_INTID_RANGE_SPECIAL_START || idxIntr > GIC_INTID_RANGE_SPECIAL_LAST);
             uint8_t const bIntrPriority = pGicDev->abIntrPriority[idxIntr];
             bool const    fInGroup1     = ASMBitTest(&pGicDev->bmIntrGroup[0], idxIntr);
