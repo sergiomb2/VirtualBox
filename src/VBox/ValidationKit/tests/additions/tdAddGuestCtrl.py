@@ -1778,6 +1778,11 @@ class SubTstDrvAddGuestCtrl(base.SubTestDriverBase):
             asArgs = [ sCmdChPasswd ];
             self.oTstDrv.txsRunTestStdIn(oTxsSession, sCmdChPasswd, 5 * 60 * 1000, sCmdChPasswd, asArgs,
                                          sStdIn = 'vbox:password\n', fIgnoreErrors = True);
+            # Show SELinux status (ignore errors, might not be available).
+            sCmdSEStatus = oTestVm.pathJoin(self.oTstDrv.getGuestSystemAdminDir(oTestVm, sPathPrefix = '/usr'), 'sestatus');
+            asArgs = [ sCmdSEStatus ];
+            self.oTstDrv.txsRunTest(oTxsSession, sCmdSEStatus, 5 * 60 * 1000, sCmdSEStatus, asArgs,
+                                    fCheckSessionStatus = False);
 
         #
         # Enable VBoxService verbose logging.
