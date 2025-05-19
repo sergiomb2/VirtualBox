@@ -1785,7 +1785,7 @@ class SubTstDrvAddGuestCtrl(base.SubTestDriverBase):
             ];
             fSELinuxFound = False;
             for sCmdSELinuxSts in asCmdSELinuxSts:
-                fSELinuxFound = self.oTstDrv.txsIsFile(oSession, oTxsSession, sCmdSELinuxSts, fIgnoreErrors = True):
+                fSELinuxFound = self.oTstDrv.txsIsFile(oSession, oTxsSession, sCmdSELinuxSts, fIgnoreErrors = True);
                 if fSELinuxFound:
                     reporter.log('SELinux found:');
                     asArgs = [ sCmdSELinuxSts ];
