@@ -1137,6 +1137,8 @@ DECLCALLBACK(int) gicR3Construct(PPDMDEVINS pDevIns, int iInstance, PCFGMNODE pC
         GICCPU_REG_COUNTER(&pGicCpu->StatSetSpi,      "%u/SetSpi",       "Number of set SPI callbacks.");
         GICCPU_REG_COUNTER(&pGicCpu->StatSetPpi,      "%u/SetPpi",       "Number of set PPI callbacks.");
         GICCPU_REG_COUNTER(&pGicCpu->StatSetSgi,      "%u/SetSgi",       "Number of SGIs generated.");
+        GICCPU_REG_COUNTER(&pGicCpu->StatIntrAck,     "%u/IntrAck",      "Number of interrupts acknowledged.");
+        GICCPU_REG_COUNTER(&pGicCpu->StatIntrEoi,     "%u/IntrEoi",      "Number of interrupts EOI'd.");
 
         GICCPU_PROF_COUNTER(&pGicCpu->StatProfIntrAck, "%u/Prof/IntrAck", "Profiling of interrupt acknowledge (IAR).");
         GICCPU_PROF_COUNTER(&pGicCpu->StatProfSetSpi,  "%u/Prof/SetSpi",  "Profiling of set SPI callback.");

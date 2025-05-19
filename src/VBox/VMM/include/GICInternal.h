@@ -324,6 +324,10 @@ typedef struct GICCPU
     STAMCOUNTER                 StatSetPpi;
     /** Number of SGIs generated. */
     STAMCOUNTER                 StatSetSgi;
+    /** Number of interrupts acknowledged. */
+    STAMCOUNTER                 StatIntrAck;
+    /** Number of interrupts EOI'd. */
+    STAMCOUNTER                 StatIntrEoi;
 
     /** Profiling of interrupt acknowledge (IAR). */
     STAMPROFILE                 StatProfIntrAck;
