@@ -271,7 +271,7 @@ static RTEXITCODE cmdHost(const char *pszCmd)
     if (RT_FAILURE(rc))
         return RTMsgErrorExitFailure("%s: CPUMCpuIdCollectLeavesFromX86Host failed: %Rrc", pszCmd, rc);
 
-    CPUMFEATURESX86 Features = {0};
+    CPUMFEATURESX86 Features;
     rc = g_pfnCPUMCpuIdExplodeFeaturesX86(paIdValues, cIdValues, &Features);
     if (RT_FAILURE(rc))
         return RTMsgErrorExitFailure("%s: CPUMCpuIdExplodeFeaturesX86 failed: %Rrc", pszCmd, rc);
