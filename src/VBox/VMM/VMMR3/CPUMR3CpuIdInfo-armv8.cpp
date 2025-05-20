@@ -332,11 +332,9 @@ static PCSUPARMSYSREGVAL cpumR3CpuIdInfoArmLookup2(PCPUMCPUIDINFOSTATEARMV8 pThi
 
 
 /**
- * Display the guest CpuId leaves.
+ * Display most ARMv8 ID registers.
  *
- * @param   pVM         The cross context VM structure.
- * @param   pHlp        The info helper functions.
- * @param   pszArgs     "terse", "default" or "verbose".
+ * @param   pThis       The argument package.
  */
 VMMR3DECL(void) CPUMR3CpuIdInfoArmV8(PCPUMCPUIDINFOSTATEARMV8 pThis)
 {

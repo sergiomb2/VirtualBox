@@ -867,11 +867,9 @@ static PCCPUMCPUIDLEAF cpumR3CpuIdInfoRawSubLeafs(PCPUMCPUIDINFOSTATEX86 pThis, 
 
 
 /**
- * Display the guest CpuId leaves.
+ * Display the x86 CPUID leaves.
  *
- * @param   pVM         The cross context VM structure.
- * @param   pHlp        The info helper functions.
- * @param   pszArgs     "terse", "default" or "verbose".
+ * @param   pThis       The argument package.
  */
 VMMR3DECL(void) CPUMR3CpuIdInfoX86(PCPUMCPUIDINFOSTATEX86 pThis)
 {
