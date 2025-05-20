@@ -1780,8 +1780,8 @@ class SubTstDrvAddGuestCtrl(base.SubTestDriverBase):
                                          sStdIn = 'vbox:password\n', fIgnoreErrors = True);
             # Show SELinux status (might not be available everywhere, so check for binary first).
             asCmdSELinuxSts = [
-                ( oTestVm.pathJoin(self.oTstDrv.getGuestSystemAdminDir(oTestVm, sPathPrefix = '/usr'), 'sestatus'), ),
-                ( oTestVm.pathJoin(self.oTstDrv.getGuestSystemAdminDir(oTestVm, sPathPrefix = '/usr/local'), 'sestatus'), ),
+                oTestVm.pathJoin(self.oTstDrv.getGuestSystemAdminDir(oTestVm, sPathPrefix = '/usr'),       'sestatus'),
+                oTestVm.pathJoin(self.oTstDrv.getGuestSystemAdminDir(oTestVm, sPathPrefix = '/usr/local'), 'sestatus'),
             ];
             fSELinuxFound = False;
             for sCmdSELinuxSts in asCmdSELinuxSts:
