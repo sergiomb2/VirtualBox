@@ -1674,7 +1674,7 @@ void cpumCpuIdExplodeFeaturesX86SetSummaryBits(CPUMFEATURESX86 *pFeatures)
 }
 
 
-int cpumCpuIdExplodeFeaturesX86(PCCPUMCPUIDLEAF paLeaves, uint32_t cLeaves, CPUMFEATURESX86 *pFeatures)
+VMMDECL(int) CPUMCpuIdExplodeFeaturesX86(PCCPUMCPUIDLEAF paLeaves, uint32_t cLeaves, CPUMFEATURESX86 *pFeatures)
 {
     RT_ZERO(*pFeatures);
     if (cLeaves >= 2)

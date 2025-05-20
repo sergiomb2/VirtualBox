@@ -56,8 +56,8 @@ DECLINLINE(uint64_t) cpumCpuIdLookupSysReg(PCSUPARMSYSREGVAL paSysRegs, uint32_t
  * @param   cSysRegs    Number of system register values.
  * @param   paFeatures  The structure to explode the features into.
  */
-DECLHIDDEN(int) cpumCpuIdExplodeFeaturesArmV8FromSysRegs(PCSUPARMSYSREGVAL paSysRegs, uint32_t cSysRegs,
-                                                         CPUMFEATURESARMV8 *pFeatures)
+VMMR3DECL(int) CPUMCpuIdExplodeFeaturesArmV8FromSysRegs(PCSUPARMSYSREGVAL paSysRegs, uint32_t cSysRegs,
+                                                        CPUMFEATURESARMV8 *pFeatures)
 {
     int rcRet = VINF_SUCCESS;
 

@@ -112,6 +112,8 @@ struc CPUM
     .cMsrReadsUnknown           resq    1
 
     .fHostMxCsrMask             resd    1
+    .cHostLeaves                resd    1
+    .paHostLeavesR3             resq    1
      alignb 8
 endstruc
 

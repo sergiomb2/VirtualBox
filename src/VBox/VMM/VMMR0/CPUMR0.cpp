@@ -155,7 +155,7 @@ VMMR0_INT_DECL(int) CPUMR0ModuleInit(void)
     /*
      * Populate the host CPU feature global variable.
      */
-    rc = cpumCpuIdExplodeFeaturesX86(paLeaves, cLeaves, &g_CpumHostFeatures.s);
+    rc = CPUMCpuIdExplodeFeaturesX86(paLeaves, cLeaves, &g_CpumHostFeatures.s);
     RTMemFree(paLeaves);
     AssertLogRelRCReturn(rc, rc);
     if (g_CpumHostFeatures.s.fVmx)

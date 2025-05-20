@@ -3821,8 +3821,8 @@ class IEMArmGenerator(object):
             ' * @param   cSysRegs    Number of system register values.',
             ' * @param   paFeatures  The structure to explode the features into.',
             ' */',
-            'DECLHIDDEN(int) cpumCpuIdExplodeFeaturesArmV8FromSysRegs(PCSUPARMSYSREGVAL paSysRegs, uint32_t cSysRegs,',
-            '                                                         CPUMFEATURESARMV8 *pFeatures)',
+            'VMMDECL(int) CPUMCpuIdExplodeFeaturesArmV8FromSysRegs(PCSUPARMSYSREGVAL paSysRegs, uint32_t cSysRegs,',
+            '                                                      CPUMFEATURESARMV8 *pFeatures)',
             '{',
             '    int rcRet = VINF_SUCCESS;',
         ];
