@@ -87,7 +87,7 @@ private:
     {
         Tabs_ConfigurationDetails = 0,
         Tabs_RuntimeInformation,
-        Tabs_VMResourceUse,
+        Tabs_ActivityMonitor,
         Tabs_GuestControl
     };
     /** Prepares all. */

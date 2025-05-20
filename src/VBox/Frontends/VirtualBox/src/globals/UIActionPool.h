@@ -102,10 +102,10 @@ enum UIActionIndex
     UIActionIndex_M_Log_S_Save,
 
     /* 'Performance' menu actions: */
-    UIActionIndex_M_VMResourceUse,
-    UIActionIndex_M_VMResourceUse_S_Export,
-    UIActionIndex_M_VMResourceUse_S_ToResourceDashboard,
-    UIActionIndex_M_VMResourceUse_T_Preferences,
+    UIActionIndex_M_Activity,
+    UIActionIndex_M_Activity_S_Export,
+    UIActionIndex_M_Activity_S_ToVMActivityOverview,
+    UIActionIndex_M_Activity_T_Preferences,
 
     /* File Manager actions: */
     UIActionIndex_M_FileManager,
@@ -627,8 +627,8 @@ protected:
     void updateMenuLogViewer();
     /** Updates 'Log Viewer' @a pMenu. */
     void updateMenuLogViewerWrapper(UIMenu *pMenu);
-    /** Updates 'VM Resource Use' menu. */
-    void updateMenuVMResourceUse();
+    /** Updates 'Performance Monitor' menu. */
+    void updateMenuVMActivityMonitor();
     /** Updates 'File Manager' menu. */
     void updateMenuFileManager();
     /** Updates 'File Manager' @a pMenu. */
