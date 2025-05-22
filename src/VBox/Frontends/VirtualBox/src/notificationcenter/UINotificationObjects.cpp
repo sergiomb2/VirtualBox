@@ -84,6 +84,9 @@
 #include "CUpdateAgent.h"
 #include "CVRDEServer.h"
 #include "CVRDEServerInfo.h"
+#ifdef VBOX_WITH_DRAG_AND_DROP
+# include "CDnDTarget.h"
+#endif
 
 /* Other VBox stuff: */
 #ifdef VBOX_WS_NIX
@@ -1817,6 +1820,24 @@ void UINotificationMessage::cannotToggleVRDEServer(const CVRDEServer &comServer,
                                    .arg(strMachineName)) +
         UIErrorString::formatErrorInfo(comServer));
 }
+
+#ifdef VBOX_WITH_DRAG_AND_DROP
+/* static */
+void UINotificationMessage::cannotDropDataToGuest(const CDnDTarget &comDndTarget)
+{
+    createMessage(
+        QApplication::translate("UIMessageCenter", "Can't drop data to guest ..."),
+        UIErrorString::formatErrorInfo(comDndTarget));
+}
+
+/* static */
+void UINotificationMessage::cannotDropDataToGuest(const CProgress &comProgress)
+{
+    createMessage(
+        QApplication::translate("UIMessageCenter", "Can't drop data to guest ..."),
+        UIErrorString::formatErrorInfo(comProgress));
+}
+#endif /* VBOX_WITH_DRAG_AND_DROP */
 
 UINotificationMessage::UINotificationMessage(const QString &strName,
                                              const QString &strDetails,

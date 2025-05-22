@@ -433,8 +433,6 @@ public:
 
 #ifdef VBOX_WITH_DRAG_AND_DROP
         /// @todo move to notification-center as progress notification .. one day :)
-        void cannotDropDataToGuest(const CDnDTarget &dndTarget, QWidget *pParent = 0) const;
-        void cannotDropDataToGuest(const CProgress &progress, QWidget *pParent = 0) const;
         void cannotDropDataToHost(const CDnDSource &dndSource, QWidget *pParent = 0) const;
         void cannotDropDataToHost(const CProgress &progress, QWidget *pParent = 0) const;
 #endif /* VBOX_WITH_DRAG_AND_DROP */

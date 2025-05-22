@@ -1973,20 +1973,6 @@ void UIMessageCenter::cannotSwitchScreenInSeamless(quint64 uMinVRAM) const
 }
 
 #ifdef VBOX_WITH_DRAG_AND_DROP
-void UIMessageCenter::cannotDropDataToGuest(const CDnDTarget &dndTarget, QWidget *pParent /* = 0 */) const
-{
-    error(pParent, MessageType_Error,
-          tr("Drag and drop operation from host to guest failed."),
-          UIErrorString::formatErrorInfo(dndTarget));
-}
-
-void UIMessageCenter::cannotDropDataToGuest(const CProgress &progress, QWidget *pParent /* = 0 */) const
-{
-    error(pParent, MessageType_Error,
-          tr("Drag and drop operation from host to guest failed."),
-          UIErrorString::formatErrorInfo(progress));
-}
-
 void UIMessageCenter::cannotDropDataToHost(const CDnDSource &dndSource, QWidget *pParent /* = 0 */) const
 {
     error(pParent, MessageType_Error,
