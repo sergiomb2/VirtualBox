@@ -161,6 +161,8 @@ typedef struct GICDEV
     uint32_t                    bmIntrPending[64];
     /** Interrupt active bitmap. */
     uint32_t                    bmIntrActive[64];
+    /** Interrupt line-level bitmap. */
+    uint32_t                    bmIntrLevel[64];
     /** Interrupt priorities. */
     uint8_t                     abIntrPriority[2048];
     /** Interrupt routing info. */
@@ -273,6 +275,8 @@ typedef struct GICCPU
     uint32_t                    bmIntrPending[3];
     /** Interrupt active bitmap. */
     uint32_t                    bmIntrActive[3];
+    /** Interrupt line-level bitmap. */
+    uint32_t                    bmIntrLevel[64];
     /** Interrupt priorities. */
     uint8_t                     abIntrPriority[96];
     /** @} */
@@ -299,6 +303,8 @@ typedef struct GICCPU
     bool                        fIntrGroup0Enabled;
     /** Flag whether group 1 interrupts are enabled. */
     bool                        fIntrGroup1Enabled;
+    /** The INTID of the running interrupts (for debugging). */
+    uint16_t                    abRunningIntId[256];
     /** @} */
 
     /** @name LPIs.
