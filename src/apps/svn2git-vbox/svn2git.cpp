@@ -130,7 +130,7 @@ typedef struct S2GCTX
     svn_repos_t     *pSvnRepos;
     /** The filesystem layer handle for the repository. */
     svn_fs_t        *pSvnFs;
-    /** @} */ 
+    /** @} */
 } S2GCTX;
 /** Pointer to an svn -> git conversion context. */
 typedef S2GCTX *PS2GCTX;
@@ -513,7 +513,7 @@ int main(int argc, char *argv[])
             if (rcExit == RTEXITCODE_SUCCESS)
             {
                 rcExit = s2gSvnExport(&This);
-            } 
+            }
         }
     }
     s2gCtxDestroy(&This);
