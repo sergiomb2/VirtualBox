@@ -78,12 +78,12 @@ void UIDisplayScreenFeaturesEditor::setMinimumLayoutIndent(int iIndent)
 void UIDisplayScreenFeaturesEditor::sltRetranslateUI()
 {
     if (m_pLabel)
-        m_pLabel->setText(tr("Extended Features:"));
+        m_pLabel->setText(tr("Use These Features"));
     if (m_pCheckBoxEnable3DAcceleration)
     {
-        m_pCheckBoxEnable3DAcceleration->setText(tr("Enable &3D Acceleration"));
-        m_pCheckBoxEnable3DAcceleration->setToolTip(tr("When checked, the virtual machine will be given access "
-                                                       "to the 3D graphics capabilities available on the host."));
+        m_pCheckBoxEnable3DAcceleration->setText(tr("&3D Acceleration"));
+        m_pCheckBoxEnable3DAcceleration->setToolTip(tr("The virtual machine will be given access "
+                                                       "to the 3D graphics capabilities available on the host"));
     }
 }
 
