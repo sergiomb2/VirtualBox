@@ -443,7 +443,6 @@ static RTEXITCODE s2gSvnDumpBlob(PCS2GCTX pThis, PS2GSVNREV pRev, const char *ps
                     }
 
                     /* When doing substitutions we need to determine the new stream length as substitutions change that. */
-                    
                 }
             }
         }
