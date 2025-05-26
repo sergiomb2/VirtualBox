@@ -1,4 +1,4 @@
-/* $Id$ $Revision$ */
+/* $Id$ */
 /** @file
  * vboxraw header file
  */

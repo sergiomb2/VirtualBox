@@ -1,5 +1,4 @@
-/* $Id$ $Revision$ */
-
+/* $Id$ */
 /** @file
  * vboximgCypto.cpp - Disk Image Flattening FUSE Program.
  */

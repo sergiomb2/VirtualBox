@@ -1,3 +1,4 @@
+/* $Id$ */
 /** @file
  * Stubs for dynamically loading libfuse/libosxfuse and the symbols which are needed by
  * VirtualBox.

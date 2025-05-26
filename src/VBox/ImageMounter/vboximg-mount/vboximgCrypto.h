@@ -1,5 +1,4 @@
-/* $Id$ $Revision$ $Date$ $Author$ */
-
+/* $Id$ */
 /** @file
  * vboximgCrypto.h
  */

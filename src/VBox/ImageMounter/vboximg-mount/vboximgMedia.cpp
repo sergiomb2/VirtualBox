@@ -1,4 +1,4 @@
-/* $Id$ $Revision$ */
+/* $Id$ */
 /** @file
  * vboximgMedia.cpp - Disk Image Flattening FUSE Program.
  */

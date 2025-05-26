@@ -1,6 +1,4 @@
-
-/* $Id$ $Revision$ $Date$ $Author$ */
-
+/* $Id$ */
 /** @file
  * vboximgOpts.h
  */
