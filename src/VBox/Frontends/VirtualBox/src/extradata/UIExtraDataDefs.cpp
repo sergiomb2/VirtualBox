@@ -296,7 +296,7 @@ UIToolClass UIToolStuff::castTypeToClass(UIToolType enmType)
         case UIToolType_Network:
         case UIToolType_Cloud:
         case UIToolType_CloudConsole:
-        case UIToolType_Activities:
+        case UIToolType_Resources:
             return UIToolClass_Global;
         case UIToolType_Error:
         case UIToolType_Details:
