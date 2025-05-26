@@ -37,9 +37,14 @@ svn2git-vbox_SOURCES = \
 	../../VBox/Runtime/common/misc/json.cpp
 svn2git-vbox_INCS = \
 	$(PATH_ROOT)/src/VBox/Runtime/include
+svn2git-vbox_INCS.linux = \
+	/usr/include/subversion-1 \
+	/usr/include/apr-1
 svn2git-vbox_INCS.darwin = \
 	/opt/homebrew/include/subversion-1 \
 	/opt/homebrew/Cellar/apr/1.7.6/include/apr-1
+svn2git-vbox_LIBPATH.linux = \
+	/usr/lib
 svn2git-vbox_LIBPATH.darwin = \
 	/opt/homebrew/lib \
 	/opt/homebrew/Cellar/apr/1.7.6/lib
