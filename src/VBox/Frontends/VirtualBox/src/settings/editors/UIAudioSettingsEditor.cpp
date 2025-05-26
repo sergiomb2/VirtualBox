@@ -137,8 +137,8 @@ void UIAudioSettingsEditor::sltRetranslateUI()
     if (m_pCheckboxFeature)
     {
         m_pCheckboxFeature->setText(tr("Enable &Audio"));
-        m_pCheckboxFeature->setToolTip(tr("When checked, a virtual PCI audio card will be plugged into the virtual machine "
-                                          "and will communicate with the host audio system using the specified driver."));
+        m_pCheckboxFeature->setToolTip(tr("A virtual PCI audio card will be plugged into the virtual machine "
+                                          "and will communicate with the host audio system using the specified driver"));
     }
 
     updateMinimumLayoutHint();
