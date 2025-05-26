@@ -1893,7 +1893,7 @@ protected:
     }
 };
 
-/** Simple action extension, used as 'Show VM Activity Monitor' action class. */
+/** Simple action extension, used as 'Show VM Activity Tool' action class. */
 class UIActionToggleManagerToolsMachineShowActivity : public UIActionToggle
 {
     Q_OBJECT;

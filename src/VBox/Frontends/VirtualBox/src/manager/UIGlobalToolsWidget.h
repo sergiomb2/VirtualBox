@@ -140,10 +140,10 @@ private slots:
           * @param  enmType  Brings current tool type. */
         void sltHandleToolsMenuIndexChange(UIToolType enmType);
 
-        /** Handles signal requesting switch to Activities tool. */
-        void sltSwitchToActivitiesTool();
-        /** Handles signal requesting switch to VM Activity tool. */
-        void sltSwitchToVMActivityTool(const QUuid &uMachineId);
+        /** Handles signal requesting switch to Resources tool. */
+        void sltSwitchToResourcesTool();
+        /** Handles signal requesting switch to Resource Use tool. */
+        void sltSwitchToResourceUseTool(const QUuid &uMachineId);
     /** @} */
 
 private:
