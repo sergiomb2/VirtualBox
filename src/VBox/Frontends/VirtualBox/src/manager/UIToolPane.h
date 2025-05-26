@@ -131,6 +131,9 @@ public:
       * @{ */
         /** Returns the Machine Tools Widget instance. */
         UIMachineToolsWidget *machineToolsWidget() const;
+
+        /** Defines the @a cloudItems. */
+        void setCloudMachineItems(const QList<UIVirtualMachineItemCloud*> &cloudItems);
     /** @} */
 
     /** @name Machine tool stuff.
@@ -145,12 +148,6 @@ public:
         bool isCurrentStateItemSelected() const;
         /** Returns currently selected snapshot ID if any. */
         QUuid currentSnapshotId();
-    /** @} */
-
-    /** @name Manager tool stuff.
-      * @{ */
-        /** Defines the @a cloudItems. */
-        void setCloudMachineItems(const QList<UIVirtualMachineItemCloud*> &cloudItems);
     /** @} */
 
 private slots:
@@ -190,7 +187,20 @@ private:
         UIHomePane *m_pPaneHome;
 
         /** Holds the Machine Tools Widget instance. */
-        UIMachineToolsWidget *m_pPaneMachines;
+        UIMachineToolsWidget         *m_pPaneMachines;
+        /** Holds the Extension Pack Manager instance. */
+        UIExtensionPackManagerWidget *m_pPaneExtensions;
+        /** Holds the Virtual Media Manager instance. */
+        UIMediumManagerWidget        *m_pPaneMedia;
+        /** Holds the Network Manager instance. */
+        UINetworkManagerWidget       *m_pPaneNetwork;
+        /** Holds the Cloud Profile Manager instance. */
+        UICloudProfileManagerWidget  *m_pPaneCloud;
+        /** Holds the VM Activity Overview instance. */
+        UIVMActivityOverviewWidget   *m_pPaneVMActivityOverview;
+
+        /** Holds the cache of passed cloud machine items. */
+        QList<UIVirtualMachineItemCloud*>  m_cloudItems;
     /** @} */
 
     /** @name Machine tool stuff.
@@ -210,23 +220,6 @@ private:
 
         /** Holds the cache of passed machine items. */
         QList<UIVirtualMachineItem*>  m_items;
-    /** @} */
-
-    /** @name Manager tool stuff.
-      * @{ */
-        /** Holds the Extension Pack Manager instance. */
-        UIExtensionPackManagerWidget *m_pPaneExtensions;
-        /** Holds the Virtual Media Manager instance. */
-        UIMediumManagerWidget        *m_pPaneMedia;
-        /** Holds the Network Manager instance. */
-        UINetworkManagerWidget       *m_pPaneNetwork;
-        /** Holds the Cloud Profile Manager instance. */
-        UICloudProfileManagerWidget  *m_pPaneCloud;
-        /** Holds the VM Activity Overview instance. */
-        UIVMActivityOverviewWidget   *m_pPaneVMActivityOverview;
-
-        /** Holds the cache of passed cloud machine items. */
-        QList<UIVirtualMachineItemCloud*>  m_cloudItems;
     /** @} */
 };
 
