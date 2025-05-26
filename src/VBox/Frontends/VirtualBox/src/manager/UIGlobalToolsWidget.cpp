@@ -238,7 +238,7 @@ void UIGlobalToolsWidget::sltSwitchToVMActivityTool(const QUuid &uMachineId)
     AssertPtrReturnVoid(chooser());
     chooser()->setCurrentMachine(uMachineId);
     setMenuToolType(UIToolType_Machines);
-    machineToolsWidget()->setMenuToolType(UIToolType_VMActivity);
+    machineToolsWidget()->setMenuToolType(UIToolType_ResourceUse);
 }
 
 void UIGlobalToolsWidget::sltSwitchToActivitiesTool()

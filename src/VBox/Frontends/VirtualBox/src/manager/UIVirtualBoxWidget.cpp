@@ -590,7 +590,7 @@ void UIVirtualBoxWidget::updateToolbar()
                 m_pToolBar->addAction(actionPool()->action(UIActionIndexMN_M_Machine_S_Show));
             break;
         }
-        case UIToolType_VMActivity:
+        case UIToolType_ResourceUse:
         {
             m_pToolBar->addAction(actionPool()->action(UIActionIndex_M_Activity_S_Export));
             m_pToolBar->addAction(actionPool()->action(UIActionIndex_M_Activity_S_ToVMActivityOverview));

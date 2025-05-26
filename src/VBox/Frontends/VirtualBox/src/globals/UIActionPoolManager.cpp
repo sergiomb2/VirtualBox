@@ -1904,7 +1904,7 @@ public:
     UIActionToggleManagerToolsMachineShowActivity(UIActionPool *pParent)
         : UIActionToggle(pParent)
     {
-        setProperty("UIToolType", QVariant::fromValue(UIToolType_VMActivity));
+        setProperty("UIToolType", QVariant::fromValue(UIToolType_ResourceUse));
         /// @todo use icons with check-boxes
         setIcon(UIIconPool::iconSetFull(":/performance_monitor_32px.png", ":/performance_monitor_16px.png",
                                         ":/performance_monitor_disabled_32px.png", ":/performance_monitor_disabled_16px.png"));
