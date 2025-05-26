@@ -2056,7 +2056,7 @@ static int rtProcPosixForkStatusPipeReadAndCleanup(pid_t pid, int fdStatusPipeR,
     {
         int32_t rcForkStatus;
         uint8_t ab[4];
-    } uBuf = {{0}};
+    } uBuf = {0};
     ssize_t cbRead;
     do
         cbRead = read(fdStatusPipeR, &uBuf, sizeof(uBuf));
