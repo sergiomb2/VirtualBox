@@ -1,5 +1,4 @@
-/* $Id$ $Revision$ $Date$ $Author$ */
-
+/* $Id$ */
 /** @file
  * VBox storage devices - Virtio NET Driver
  *
