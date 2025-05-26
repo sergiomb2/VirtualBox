@@ -2322,7 +2322,8 @@ static int rtProcPosixCreateInner(const char *pszNativeExec, const char * const 
     else
 #endif
     {
-        int fdStatusPipeR, fdStatusPipeW;
+        int fdStatusPipeR = -1;
+        int fdStatusPipeW = -1;
         rc = rtProcPosixForkStatusPipeCreate(&fdStatusPipeR, &fdStatusPipeW);
         if (RT_FAILURE(rc))
             return rc;
