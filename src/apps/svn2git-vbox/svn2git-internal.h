@@ -152,7 +152,8 @@ DECLINLINE(int) s2gScratchBufWrite(PS2GSCRATCHBUF pBuf, const void *pvBuf, size_
 typedef struct S2GREPOSITORYGITINT *S2GREPOSITORYGIT;
 typedef S2GREPOSITORYGIT *PS2GREPOSITORYGIT;
 
-DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *pszGitRepoPath, const char *pszDefaultBranch);
+DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *pszGitRepoPath, const char *pszDefaultBranch,
+                                       const char *pszDumpFilename);
 DECLHIDDEN(int) s2gGitRepositoryClose(S2GREPOSITORYGIT hGitRepo);
 
 DECLHIDDEN(int) s2gGitTransactionStart(S2GREPOSITORYGIT hGitRepo);
