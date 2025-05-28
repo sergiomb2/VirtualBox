@@ -8410,9 +8410,11 @@ static int vmdkReplaceExtentSize(PVMDKIMAGE pImage, PVMDKEXTENT pExtent, unsigne
  * Used for sparse extent resize.
  *
  * @returns VBox status code.
- * @param   pImage          VMDK image instance.
- * @param   pExtent         VMDK extent instance.
- * @param   cSectorsNew     Number of sectors after resize.
+ * @param   pImage                  VMDK image instance.
+ * @param   pExtent                 VMDK extent instance.
+ * @param   cSectorsNew             Number of sectors after resize.
+ * @param   cNewOverheadSectors     The size of new overhead in sectors. This
+ *                                  includes the header and all grain tables/directories.
  */
 static int vmdkRelocateSectorsForSparseResize(PVMDKIMAGE pImage, PVMDKEXTENT pExtent,
                                               uint64_t cSectorsNew, uint64_t cNewOverheadSectors)
