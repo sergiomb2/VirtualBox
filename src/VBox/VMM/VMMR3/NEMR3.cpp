@@ -239,7 +239,7 @@ VMMR3_INT_DECL(int) NEMR3Init(PVM pVM, bool fFallback, bool fForced)
         {
             if (pVM->bMainExecutionEngine == VM_EXEC_ENGINE_NATIVE_API)
             {
-#ifndef VBOX_WITH_HWVIRT /* Don't complain if there are no other alternatives. */
+#ifdef VBOX_WITH_HWVIRT /* Don't complain if there are no other alternatives. */
 # ifdef RT_OS_WINDOWS /* The WHv* API is extremely slow at handling VM exits. The AppleHv and
                          KVM APIs are much faster, thus the different mode name. :-) */
                 LogRel(("NEM:\n"
