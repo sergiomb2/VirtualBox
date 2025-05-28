@@ -1018,7 +1018,7 @@ static RTEXITCODE s2gSvnProcessExternals(PS2GCTX pThis, PS2GSVNREV pRev, const c
                            || *pszExternal == '\t')
                         *pszExternal++;
 
-                    if (strcmp(pszExternal, "-r") == 0)
+                    if (strncmp(pszExternal, "-r", 2) == 0)
                     {
                         pszExternal += sizeof("-r") - 1;
 
@@ -1026,7 +1026,7 @@ static RTEXITCODE s2gSvnProcessExternals(PS2GCTX pThis, PS2GSVNREV pRev, const c
                                || *pszExternal == '\t')
                             *pszExternal++;
 
-                        /* Try to convert to a revisio number. */
+                        /* Try to convert to a revision number. */
                         uint32_t idExternalRev = 0;
                         int rc = RTStrToUInt32Full(pszExternal, 10, &idExternalRev);
                         if (   rc == VINF_SUCCESS
