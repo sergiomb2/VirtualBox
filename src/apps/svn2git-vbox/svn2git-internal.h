@@ -163,6 +163,7 @@ DECLHIDDEN(int) s2gGitTransactionFileAdd(S2GREPOSITORYGIT hGitRepo, const char *
 DECLHIDDEN(int) s2gGitTransactionFileWriteData(S2GREPOSITORYGIT hGitRepo, const void *pvBuf, size_t cb);
 DECLHIDDEN(int) s2gGitTransactionFileRemove(S2GREPOSITORYGIT hGitRepo, const char *pszPath);
 DECLHIDDEN(int) s2gGitTransactionSubmoduleAdd(S2GREPOSITORYGIT hGitRepo, const char *pszPath, const char *pszSha1CommitId);
+DECLHIDDEN(int) s2gGitTransactionLinkAdd(S2GREPOSITORYGIT hGitRepo, const char *pszPath, const void *pvData, size_t cbData);
 
 
 RT_C_DECLS_END
