@@ -47,7 +47,7 @@ endif
 # VBoxHeadless
 #
 ifdef VBOX_WITH_HARDENING
- DLLS    += VBoxHeadless
+ DLLS     += VBoxHeadless
 else
  PROGRAMS += VBoxHeadless
 endif
