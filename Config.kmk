@@ -4535,12 +4535,52 @@ ifdef VBOX_SIGNING_MODE
   endif
 
  else ifeq ($(KBUILD_HOST),darwin)
+  #
+  # Darwin code signing.
+  #
+  # Currently release signing is done when packing, unless in adhoc or test
+  # signing modes.  This is done so because signing was introduced later in
+  # the darwin process and wasn't initially really required on development
+  # machines as such.
+  # (Installer package signing is done elsewhere (VBOX_MACOSX_INSTALLER_SIGN).)
+  #
 
-  ## Sign a VM process binary with the given entitlements
+  if defined(VBOX_CERTIFICATE_FINGERPRINT) && !defined(VBOX_CERTIFICATE_SUBJECT_NAME)
+   VBOX_CERTIFICATE_SUBJECT_NAME  = $(subst $(SP),,$(VBOX_CERTIFICATE_FINGERPRINT))
+  endif
+  ifeq ($(VBOX_SIGNING_MODE),test)
+   VBOX_CERTIFICATE_SUBJECT_NAME      ?= $(error You need to set VBOX_CERTIFICATE_SUBJECT_NAME in LocalConfig.kmk.)
+   VBOX_CERTIFICATE_SUBJECT_NAME_ARGS ?= --sign "$(VBOX_CERTIFICATE_SUBJECT_NAME)"
+   VBOX_TSA_URL                       ?= none
+  else ifeq ($(VBOX_SIGNING_MODE),adhoc)
+   ifdef VBOX_CERTIFICATE_SUBJECT_NAME
+    $(error VBOX_CERTIFICATE_SUBJECT_NAME must not be set in 'adhoc' signing mode)
+   endif
+   VBOX_CERTIFICATE_SUBJECT_NAME       = -
+   VBOX_CERTIFICATE_SUBJECT_NAME_ARGS ?= --sign "$(VBOX_CERTIFICATE_SUBJECT_NAME)"
+   VBOX_TSA_URL                       ?= none
+  else
+   VBOX_CERTIFICATE_SUBJECT_NAME      ?= Developer ID Application: Oracle America, Inc.
+   VBOX_CERTIFICATE_SUBJECT_NAME_ARGS ?= --sign "$(VBOX_CERTIFICATE_SUBJECT_NAME)"
+  endif
+
+  VBOX_CODESIGN ?= codesign
+  if 0
+   VBOX_DARWIN_KEXT_SIGN_FILES = CodeDirectory CodeRequirement CodeResources CodeSignature
+  else
+   VBOX_DARWIN_KEXT_SIGN_FILES = CodeResources
+  endif
+
+  # Always enable the hardened runtime when signing. Can be disabled if
+  # trying to build on quite old macOS, which will likely need some effort.
+  VBOX_WITH_MACOS_HARDENED_RUNTIME ?= 1
+
+
+  ## Sign a VM process binary with the necessary entitlements.
   # @param 1  The file to sign.
   # @param 2  Identifier, optional.
-  ifeq ($(VBOX_SIGNING_MODE),adhoc)
-   if $(intersects darwin all 1,$(VBOX_WITH_CORP_CODE_SIGNING))
+  if1of ($(VBOX_SIGNING_MODE), test adhoc)
+   if1of (darwin all 1, $(VBOX_WITH_CORP_CODE_SIGNING))
     ## @todo cannot handle $(2), the identifier.
     VBOX_SIGN_IMAGE_FN = $(call MSG_TOOL,SIGNTOOL,,$(1),$(2))$(NLTAB) \
     	$(call VBOX_CCS_SIGN_CMD,binary,$(1),,$(subst --entitlements=,-entitlement_file_path ,$(3)) \
@@ -4561,43 +4601,6 @@ ifdef VBOX_SIGNING_MODE
   else
    VBOX_SIGN_IMAGE_FN  =
   endif
-
-  #
-  # Darwin code signing.
-  #
-  # Currently release signing is done when packing.  This may change later.
-  # (Installer package signing is done elsewhere (VBOX_MACOSX_INSTALLER_SIGN).)
-  #
-  if defined(VBOX_CERTIFICATE_FINGERPRINT) && !defined(VBOX_CERTIFICATE_SUBJECT_NAME)
-   VBOX_CERTIFICATE_SUBJECT_NAME  = $(subst $(SP),,$(VBOX_CERTIFICATE_FINGERPRINT))
-  endif
-  ifeq ($(VBOX_SIGNING_MODE),test)
-   VBOX_CERTIFICATE_SUBJECT_NAME ?= $(error You need to set VBOX_CERTIFICATE_SUBJECT_NAME in LocalConfig.kmk.)
-   VBOX_CERTIFICATE_SUBJECT_NAME_ARGS ?= --sign "$(VBOX_CERTIFICATE_SUBJECT_NAME)"
-   VBOX_TSA_URL ?= none
-  else ifeq ($(VBOX_SIGNING_MODE),adhoc)
-   ifdef VBOX_CERTIFICATE_SUBJECT_NAME
-    $(error VBOX_CERTIFICATE_SUBJECT_NAME must not be set in 'adhoc' signing mode)
-   endif
-   VBOX_CERTIFICATE_SUBJECT_NAME = -
-   VBOX_CERTIFICATE_SUBJECT_NAME_ARGS ?= --sign "$(VBOX_CERTIFICATE_SUBJECT_NAME)"
-   VBOX_TSA_URL ?= none
-   VBOX_SIGN_IMAGE_CMDS           ?= $(if $(eq $(tool_do),LINK_LIBRARY),,$(call VBOX_SIGN_IMAGE_FN,$(out),,2))
-  else
-   VBOX_CERTIFICATE_SUBJECT_NAME ?= Developer ID Application: Oracle America, Inc.
-   VBOX_CERTIFICATE_SUBJECT_NAME_ARGS ?= --sign "$(VBOX_CERTIFICATE_SUBJECT_NAME)"
-  endif
-
-  VBOX_CODESIGN ?= codesign
-  if 0
-   VBOX_DARWIN_KEXT_SIGN_FILES = CodeDirectory CodeRequirement CodeResources CodeSignature
-  else
-   VBOX_DARWIN_KEXT_SIGN_FILES = CodeResources
-  endif
-
-  # Always enable the hardened runtime when signing. Can be disabled if
-  # trying to build on quite old macOS, which will likely need some effort.
-  VBOX_WITH_MACOS_HARDENED_RUNTIME ?= 1
 
   ##
   # Corp Code Notarization command line. Modifies the file because the tickets are stapled.
@@ -6551,7 +6554,6 @@ else # the gcc guys
   TEMPLATE_VBoxR3Exe_OBJCXXFLAGS.darwin = $(VBOX_DARWIN_DEF_SDK_OBJCXXFLAGS)
   TEMPLATE_VBoxR3Exe_LDFLAGS.darwin    = $(VBOX_DARWIN_DEF_SDK_LDFLAGS) -Wl,-headerpad_max_install_names
   TEMPLATE_VBoxR3Exe_LDFLAGS.darwin.x86 = -read_only_relocs suppress
-  TEMPLATE_VBoxR3Exe_POST_CMDS.darwin  = $(VBOX_SIGN_IMAGE_CMDS)
   ifdef VBOX_WITH_DTRACE_R3
    TEMPLATE_VBoxR3Exe_CXXFLAGS := $(filter-out -pedantic,$(TEMPLATE_VBoxR3Exe_CXXFLAGS)) -fdollars-in-identifiers # annoying gcc option precedence.
   endif
@@ -6609,10 +6611,10 @@ endif
 
 
 #
-# Variant of VBoxR3Exe that is always signed on windows.
+# Variant of VBoxR3Exe that is always signed on Windows for VBoxSup.sys access.
 # This is used for executables that are normally hardened.
 #
-TEMPLATE_VBoxR3SignedExe                = VBox Ring 3 Exe, signed on windows for VBoxSup.sys use.
+TEMPLATE_VBoxR3SignedExe               = VBox Ring 3 Exe, signed on windows for VBoxSup.sys use.
 TEMPLATE_VBoxR3SignedExe_EXTENDS       = VBoxR3Exe
 if "$(KBUILD_TARGET)" == "win" && "$(VBOX_SIGNING_MODE)" == "test"
  TEMPLATE_VBoxR3SignedExe_POST_CMDS    = $(VBOX_UTF8_MANIFEST_CMDS)$(NLTAB)$(call VBOX_SIGN_IMAGE_FN,$(out),,2)
@@ -6916,7 +6918,8 @@ else
 endif
 
 #
-# A test signed version of VBoxR3Static for VBoxCpuReport on win.arm.
+# A test signed version of VBoxR3Static for VBoxCpuReport on win.arm for VBoxSup.sys access.
+# Note! Entitlements for darwin.arm is done directly in the makefile file.
 #
 TEMPLATE_VBoxR3StaticSignedExe           := VBoxR3Static with test signing
 TEMPLATE_VBoxR3StaticSignedExe_EXTENDS   := VBoxR3Static
@@ -7602,7 +7605,6 @@ else # the GCC guys:
   TEMPLATE_VBoxMainExe_LDFLAGS.darwin   += -bind_at_load
   TEMPLATE_VBoxMainExe_LDFLAGS          += $(VBOX_DARWIN_DEF_SDK_LDFLAGS) -framework Carbon -Wl,-headerpad_max_install_names
   TEMPLATE_VBoxMainExe_LATE_LIBS         = $(LIB_RUNTIME)
-  TEMPLATE_VBoxMainExe_POST_CMDS.darwin  = $(VBOX_SIGN_IMAGE_CMDS)
  else ifeq ($(KBUILD_TARGET),haiku)
   TEMPLATE_VBoxMainExe_TOOL              = GXX3
   TEMPLATE_VBoxMainExe_LATE_LIBS         = $(LIB_RUNTIME) network stdc++ supc++
@@ -7792,12 +7794,16 @@ else
 endif
 
 #
-# Variant of VBoxMainClientExe for VM processes that needs to be signed on windows when using minimal hardening.
+# Variant of VBoxMainClientExe for VM processes that needs to be signed on
+# Windows when using minimal hardening and to be entitled to run VMs (++)
+# on macOS.
 #
 TEMPLATE_VBoxMainClientSignedExe           = VBox Main Client VM (executable), signed on Windows for using VBoxSup.sys.
 TEMPLATE_VBoxMainClientSignedExe_EXTENDS   = VBoxMainClientExe
 if "$(KBUILD_TARGET)" == "win" && "$(VBOX_SIGNING_MODE)" == "test"
  TEMPLATE_VBoxMainClientSignedExe_POST_CMDS = $(VBOX_UTF8_MANIFEST_CMDS)$(NLTAB)$(call VBOX_SIGN_IMAGE_FN,$(out),,2)
+else if "$(KBUILD_TARGET)" == "win" && ("$(VBOX_SIGNING_MODE)" == "test" || "$(VBOX_SIGNING_MODE)" == "adhoc")
+ TEMPLATE_VBoxMainClientSignedExe_POST_CMDS = $(call VBOX_SIGN_IMAGE_FN,$(out),,2)
 endif
 
 #
@@ -8309,7 +8315,6 @@ ifdef VBOX_WITH_QTGUI
    TEMPLATE_VBoxQtGuiExe_LDFLAGS.darwin     += $(VBOX_DARWIN_DEF_SDK_LDFLAGS) -bind_at_load -Wl,-headerpad_max_install_names
    TEMPLATE_VBoxQtGuiExe_LATE_LIBS +=
    TEMPLATE_VBoxQtGuiExe_LIBPATH +=
-   TEMPLATE_VBoxQtGuiExe_POST_CMDS.darwin    = $(VBOX_SIGN_IMAGE_CMDS)
   else
    TEMPLATE_VBoxQtGuiExe_INCS += \
    	$(VBOX_XCURSOR_INCS)
@@ -8386,12 +8391,15 @@ ifdef VBOX_WITH_QTGUI
 
  #
  # Variant of VBoxQtGuiExe for building VM processes that needs to be signed in
- # the minimal hardening configuration on windows.
+ # the minimal hardening configuration on Windows and entitled to run VMs (++)
+ # on macOS.
  #
- TEMPLATE_VBoxQtGuiSignedExe             = VBox Qt GUI VM Executable, signed on windows for using VBoxSup.sys.
+ TEMPLATE_VBoxQtGuiSignedExe            = VBox Qt GUI VM Executable, signed on windows for using VBoxSup.sys.
  TEMPLATE_VBoxQtGuiSignedExe_EXTENDS    = VBoxQtGuiExe
  if "$(KBUILD_TARGET)" == "win" && "$(VBOX_SIGNING_MODE)" == "test"
   TEMPLATE_VBoxQtGuiSignedExe_POST_CMDS = $(VBOX_UTF8_MANIFEST_CMDS)$(NLTAB)$(call VBOX_SIGN_IMAGE_FN,$(out),,2)
+ else if "$(KBUILD_TARGET)" == "darwin" && ("$(VBOX_SIGNING_MODE)" == "test" || "$(VBOX_SIGNING_MODE)" == "adhoc")
+  TEMPLATE_VBoxQtGuiSignedExe_POST_CMDS = $(TEMPLATE_VBoxQtGuiExe_POST_CMDS)$(NLTAB)$(call VBOX_SIGN_IMAGE_FN,$(out),,2)
  endif
 
  #
