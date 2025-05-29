@@ -1468,10 +1468,8 @@ static VBOXSTRICTRC gicReDistReadIntrPriorityReg(PCGICDEV pGicDev, PGICCPU pGicC
     Assert(pGicDev->fAffRoutingEnabled); RT_NOREF(pGicDev);
 
     uint16_t const idxPriority = idxReg * sizeof(uint32_t);
-    uint16_t const idxGroup    = idxPriority / (sizeof(uint32_t) * 8);
     AssertReturn(idxPriority <= RT_ELEMENTS(pGicCpu->abIntrPriority) - sizeof(uint32_t), VERR_BUFFER_OVERFLOW);
     AssertCompile(sizeof(*puValue) == sizeof(uint32_t));
-    Assert(idxGroup < RT_ELEMENTS(pGicCpu->bmIntrGroup));
 
     uint32_t uValue = 0;
     for (uint8_t i = 0; i < sizeof(uint32_t); i++)
@@ -1510,10 +1508,8 @@ static VBOXSTRICTRC gicReDistWriteIntrPriorityReg(PCGICDEV pGicDev, PVMCPUCC pVC
 
     PGICCPU pGicCpu = VMCPU_TO_GICCPU(pVCpu);
     uint16_t const idxPriority = idxReg * sizeof(uint32_t);
-    uint16_t const idxGroup    = idxPriority / (sizeof(uint32_t) * 8);
     AssertReturn(idxPriority <= RT_ELEMENTS(pGicCpu->abIntrPriority) - sizeof(uint32_t), VERR_BUFFER_OVERFLOW);
     AssertCompile(sizeof(uValue) == sizeof(uint32_t));
-    Assert(idxGroup < RT_ELEMENTS(pGicDev->bmIntrGroup));
 
     for (uint8_t i = 0; i < sizeof(uint32_t); i++)
     {
