@@ -149,14 +149,14 @@ void UISharedFolderDetailsEditor::sltRetranslateUI()
     }
 
     if (m_pLabelPath)
-        m_pLabelPath->setText(tr("Folder Path:"));
+        m_pLabelPath->setText(tr("Folder Path"));
     if (m_pLabelName)
-        m_pLabelName->setText(tr("Folder Name:"));
+        m_pLabelName->setText(tr("Folder Name"));
     if (m_pEditorName)
-        m_pEditorName->setToolTip(tr("Holds the name of the shared folder "
-                                     "(as it will be seen by the guest OS)."));
+        m_pEditorName->setToolTip(tr("The name of the shared folder "
+                                     "(as it will be seen by the guest OS)"));
     if (m_pSelectorPath)
-        m_pSelectorPath->setToolTip(tr("Holds the path of the shared folder"));
+        m_pSelectorPath->setToolTip(tr("The path of the shared folder"));
     if (m_pButtonBox && m_pButtonBox->button(QDialogButtonBox::Ok))
         m_pButtonBox->button(QDialogButtonBox::Ok)->setToolTip(tr("Apply the changes and close this dialog"));
     if (m_pButtonBox && m_pButtonBox->button(QDialogButtonBox::Cancel))
@@ -165,32 +165,31 @@ void UISharedFolderDetailsEditor::sltRetranslateUI()
     if (m_pCheckBoxReadonly)
     {
         m_pCheckBoxReadonly->setText(tr("&Read-only"));
-        m_pCheckBoxReadonly->setToolTip(tr("When checked, the guest OS will not be able "
-                                           "to write to the specified shared folder."));
+        m_pCheckBoxReadonly->setToolTip(tr("The guest OS will not be able "
+                                           "to write to the specified shared folder"));
     }
     if (m_pCheckBoxAutoMount)
     {
         m_pCheckBoxAutoMount->setText(tr("&Auto-mount"));
-        m_pCheckBoxAutoMount->setToolTip(tr("When checked, the guest OS will try to "
-                                            "automatically mount the shared folder on startup."));
+        m_pCheckBoxAutoMount->setToolTip(tr("The guest OS will try to "
+                                            "automatically mount the shared folder on startup"));
     }
     if (m_pLabelAutoMountPoint)
-        m_pLabelAutoMountPoint->setText(tr("Mount point:"));
+        m_pLabelAutoMountPoint->setText(tr("Mount point"));
     if (m_pEditorAutoMountPoint)
-        m_pEditorAutoMountPoint->setToolTip(tr("Where to automatically mount the folder in the guest.  "
-                                               "A drive letter (e.g. 'G:') for Windows and OS/2 guests, path for the others.  "
-                                               "If left empty the guest will pick something fitting."));
+        m_pEditorAutoMountPoint->setToolTip(tr("The path to automatically mount the folder in the guest. "
+                                               "A drive letter (e.g. 'G:') for Windows and OS/2 guests, "
+                                               "path for the others. If left empty the guest will pick "
+                                               "something fitting."));
     if (m_pCheckBoxPermanent)
     {
         m_pCheckBoxPermanent->setText(tr("&Make Machine-permanent"));
-        m_pCheckBoxPermanent->setToolTip(tr("When checked, this shared folder will be permanent "
-                                            "to this guest machine."));
+        m_pCheckBoxPermanent->setToolTip(tr("This shared folder will be permanent to this guest machine"));
     }
     if (m_pCheckBoxGlobal)
     {
         m_pCheckBoxGlobal->setText(tr("&Make Global"));
-        m_pCheckBoxGlobal->setToolTip(tr("When checked, this shared folder will be available "
-                                         "to all VMs."));
+        m_pCheckBoxGlobal->setToolTip(tr("This shared folder will be available to all VMs"));
     }
 }
 
