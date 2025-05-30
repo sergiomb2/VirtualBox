@@ -583,29 +583,6 @@ static const struct
     { ARMV8_AARCH64_SYSREG_VTTBR_EL2,      RT_UOFFSETOF(CPUMCTX, VTtbrEl2.u64)      }
 };
 
-#ifndef WITH_NEW_CPUM_IDREG_INTERFACE
-/** ID registers. */
-static const struct
-{
-    hv_feature_reg_t enmHvReg;
-    uint32_t         offIdStruct;
-} s_aIdRegs[] =
-{
-    { HV_FEATURE_REG_ID_AA64DFR0_EL1,       RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Dfr0El1)  },
-    { HV_FEATURE_REG_ID_AA64DFR1_EL1,       RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Dfr1El1)  },
-    { HV_FEATURE_REG_ID_AA64ISAR0_EL1,      RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Isar0El1) },
-    { HV_FEATURE_REG_ID_AA64ISAR1_EL1,      RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Isar1El1) },
-    { HV_FEATURE_REG_ID_AA64MMFR0_EL1,      RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Mmfr0El1) },
-    { HV_FEATURE_REG_ID_AA64MMFR1_EL1,      RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Mmfr1El1) },
-    { HV_FEATURE_REG_ID_AA64MMFR2_EL1,      RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Mmfr2El1) },
-    { HV_FEATURE_REG_ID_AA64PFR0_EL1,       RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Pfr0El1)  },
-    { HV_FEATURE_REG_ID_AA64PFR1_EL1,       RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Pfr1El1)  },
-    { HV_FEATURE_REG_CLIDR_EL1,             RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegClidrEl1)       },
-    { HV_FEATURE_REG_CTR_EL0,               RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegCtrEl0)         },
-    { HV_FEATURE_REG_DCZID_EL0,             RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegDczidEl0)       }
-};
-#endif
-
 
 /*********************************************************************************************************************************
 *   Internal Functions                                                                                                           *
@@ -1483,7 +1460,6 @@ DECLHIDDEN(int) nemR3NativeInit(PVM pVM, bool fFallback, bool fForced)
     return VINF_SUCCESS;
 }
 
-#ifdef WITH_NEW_CPUM_IDREG_INTERFACE
 
 /**
  * @callback_method_impl{FNCPUMARMCPUIDREGQUERY}
@@ -1640,8 +1616,6 @@ static DECLCALLBACK(int) enmR3DarwinNativeCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, 
     return nemR3DarwinHvSts2Rc(rcHvSet);
 }
 
-#endif
-
 
 /**
  * @callback_method_impl{PFNSSMINTLOADDONE,
@@ -1652,7 +1626,6 @@ static DECLCALLBACK(int) nemR3DarwinLoadDone(PVM pVM, PSSMHANDLE pSSM)
     VM_ASSERT_EMT(pVM);
     RT_NOREF(pSSM);
 
-#ifdef WITH_NEW_CPUM_IDREG_INTERFACE
     /*
      * Call CPUMR3PopulateGuestFeaturesViaCallbacks on each VCpu to set the
      * freshly loaded ID register values.  This ASSUMES that CPUM was able
@@ -1666,9 +1639,6 @@ static DECLCALLBACK(int) nemR3DarwinLoadDone(PVM pVM, PSSMHANDLE pSSM)
             return SSMR3SetLoadError(pSSM, rc, RT_SRC_POS,
                                      "CPUMR3PopulateGuestFeaturesViaCallbacks failed on #%u: %Rrc", idCpu, rc);
     }
-#else
-    RT_NOREF(pVM);
-#endif
     return VINF_SUCCESS;
 }
 
@@ -1685,30 +1655,14 @@ static DECLCALLBACK(int) nemR3DarwinNativeInitVCpuOnEmt(PVM pVM, PVMCPU pVCpu, V
 {
     if (idCpu == 0)
     {
+        /* Create a new vCPU config for all the vCPUs (for
+           enmR3DarwinNativeCpuIdRegQuery to query).  As of 2025-05-30 there is
+           nothing officially settable on this config object. */
         Assert(pVM->nem.s.hVCpuCfg == NULL);
-
-        /* Create a new vCPU config and query the ID registers. */
         pVM->nem.s.hVCpuCfg = hv_vcpu_config_create();
         if (!pVM->nem.s.hVCpuCfg)
             return VMSetError(pVM, VERR_NEM_VM_CREATE_FAILED, RT_SRC_POS,
                               "Call to hv_vcpu_config_create failed on vCPU %u", idCpu);
-
-#ifndef WITH_NEW_CPUM_IDREG_INTERFACE
-        /* Query ID registers and hand them to CPUM. */
-        CPUMARMV8IDREGS IdRegs; RT_ZERO(IdRegs);
-        for (uint32_t i = 0; i < RT_ELEMENTS(s_aIdRegs); i++)
-        {
-            uint64_t *pu64 = (uint64_t *)((uint8_t *)&IdRegs + s_aIdRegs[i].offIdStruct);
-            hv_return_t hrc = hv_vcpu_config_get_feature_reg(pVM->nem.s.hVCpuCfg, s_aIdRegs[i].enmHvReg, pu64);
-            if (hrc != HV_SUCCESS)
-                return VMSetError(pVM, VERR_NEM_VM_CREATE_FAILED, RT_SRC_POS,
-                                  "Call to hv_vcpu_get_feature_reg(, %#x, ) failed: %#x (%Rrc)", hrc, nemR3DarwinHvSts2Rc(hrc));
-        }
-
-        int rc = CPUMR3PopulateFeaturesByIdRegisters(pVM, &IdRegs);
-        if (RT_FAILURE(rc))
-            return rc;
-#endif
     }
 
     hv_return_t hrc = hv_vcpu_create(&pVCpu->nem.s.hVCpu, &pVCpu->nem.s.pHvExit, pVM->nem.s.hVCpuCfg);
@@ -1717,18 +1671,14 @@ static DECLCALLBACK(int) nemR3DarwinNativeInitVCpuOnEmt(PVM pVM, PVMCPU pVCpu, V
                           "Call to hv_vcpu_create failed on vCPU %u: %#x (%Rrc)", idCpu, hrc, nemR3DarwinHvSts2Rc(hrc));
 
     /** @todo r=bird: we should set the RES1 bit (31) here, shouldn't we? */
+    /** @todo make CPUM set this for us in the below call! */
     hrc = hv_vcpu_set_sys_reg(pVCpu->nem.s.hVCpu, HV_SYS_REG_MPIDR_EL1, idCpu);
     if (hrc != HV_SUCCESS)
         return VMSetError(pVM, VERR_NEM_VM_CREATE_FAILED, RT_SRC_POS,
                           "Setting MPIDR_EL1 failed on vCPU %u: %#x (%Rrc)", idCpu, hrc, nemR3DarwinHvSts2Rc(hrc));
 
-#ifdef WITH_NEW_CPUM_IDREG_INTERFACE
     return CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVCpu, idCpu == 0 ? enmR3DarwinNativeCpuIdRegQuery : NULL,
                                                    enmR3DarwinNativeCpuIdRegUpdate, NULL /*pvUser*/);
-#else
-
-    return VINF_SUCCESS;
-#endif
 }
 
 
@@ -2763,51 +2713,6 @@ VMMR3_INT_DECL(VBOXSTRICTRC) NEMR3RunGC(PVM pVM, PVMCPU pVCpu)
 #endif
 
     AssertReturn(NEMR3CanExecuteGuest(pVM, pVCpu), VERR_NEM_IPE_9);
-
-#ifndef WITH_NEW_CPUM_IDREG_INTERFACE
-    if (RT_UNLIKELY(!pVCpu->nem.s.fIdRegsSynced))
-    {
-        /*
-         * Sync the guest ID registers which are per VM once (they are readonly and stay constant during VM lifetime).
-         * Need to do it here and not during the init because loading a saved state might change the ID registers from what
-         * done in the call to CPUMR3PopulateFeaturesByIdRegisters().
-         */
-        static const struct
-        {
-            const char       *pszIdReg;
-            hv_sys_reg_t     enmHvReg;
-            uint32_t         offIdStruct;
-        } s_aSysIdRegs[] =
-        {
-#define ID_SYS_REG_CREATE(a_IdReg, a_CpumIdReg) { #a_IdReg, HV_SYS_REG_##a_IdReg, RT_UOFFSETOF(CPUMARMV8IDREGS, a_CpumIdReg) }
-            ID_SYS_REG_CREATE(ID_AA64DFR0_EL1,  u64RegIdAa64Dfr0El1),
-            ID_SYS_REG_CREATE(ID_AA64DFR1_EL1,  u64RegIdAa64Dfr1El1),
-            ID_SYS_REG_CREATE(ID_AA64ISAR0_EL1, u64RegIdAa64Isar0El1),
-            ID_SYS_REG_CREATE(ID_AA64ISAR1_EL1, u64RegIdAa64Isar1El1),
-            ID_SYS_REG_CREATE(ID_AA64MMFR0_EL1, u64RegIdAa64Mmfr0El1),
-            ID_SYS_REG_CREATE(ID_AA64MMFR1_EL1, u64RegIdAa64Mmfr1El1),
-            ID_SYS_REG_CREATE(ID_AA64MMFR2_EL1, u64RegIdAa64Mmfr2El1),
-            ID_SYS_REG_CREATE(ID_AA64PFR0_EL1,  u64RegIdAa64Pfr0El1),
-            ID_SYS_REG_CREATE(ID_AA64PFR1_EL1,  u64RegIdAa64Pfr1El1),
-#undef ID_SYS_REG_CREATE
-        };
-
-        CPUMARMV8IDREGS IdRegsGst;
-        int rc = CPUMR3QueryGuestIdRegs(pVM, &IdRegsGst);
-        AssertRCReturn(rc, rc);
-
-        for (uint32_t i = 0; i < RT_ELEMENTS(s_aSysIdRegs); i++)
-        {
-            uint64_t *pu64 = (uint64_t *)((uintptr_t)&IdRegsGst + s_aSysIdRegs[i].offIdStruct);
-            hv_return_t hrc = hv_vcpu_set_sys_reg(pVCpu->nem.s.hVCpu, s_aSysIdRegs[i].enmHvReg, *pu64);
-            if (hrc != HV_SUCCESS)
-                return VMSetError(pVM, VERR_NEM_SET_REGISTERS_FAILED, RT_SRC_POS,
-                                  "Setting %s failed on vCPU %u: %#x (%Rrc)", s_aSysIdRegs[i].pszIdReg, pVCpu->idCpu, hrc, nemR3DarwinHvSts2Rc(hrc));
-        }
-
-        pVCpu->nem.s.fIdRegsSynced = true;
-    }
-#endif /* WITH_NEW_CPUM_IDREG_INTERFACE */
 
     /*
      * Try switch to NEM runloop state.

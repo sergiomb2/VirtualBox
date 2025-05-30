@@ -883,8 +883,8 @@ static int nemR3WinInitCreatePartition(PVM pVM, PRTERRINFO pErrInfo)
     return rc;
 }
 
-#ifdef WITH_NEW_CPUM_IDREG_INTERFACE
 
+/** Regular g_aNemWinArmIdRegs entry. */
 #define ENTRY_REGULAR(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, a_RegNm, a_uWHv, a_enmWHv, a_fMustWork, a_fPerVCpu) \
     { RT_CONCAT(ARMV8_AARCH64_SYSREG_, a_RegNm), \
       0 /*fMissing*/, 0 /*fUndefined*/, a_fMustWork, a_fPerVCpu, \
@@ -892,26 +892,31 @@ static int nemR3WinInitCreatePartition(PVM pVM, PRTERRINFO pErrInfo)
       && (unsigned)(a_enmWHv)                      == (a_uWHv) ? 0 : -1 /*u1Assert1*/, \
       (a_enmWHv), #a_RegNm }
 
+/** Entry in g_aNemWinArmIdRegs where there is no WHV_REGISTER_NAME value. */
 #define ENTRY_MISSING(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, a_RegNm, a_uWHv) \
     { RT_CONCAT(ARMV8_AARCH64_SYSREG_, a_RegNm), \
       1 /*fMissing*/, 0 /*fUndefined*/, 0 /*fMustWork*/, 0 /*fPerVCpu*/, \
       RT_CONCAT(ARMV8_AARCH64_SYSREG_, a_RegNm) == ARMV8_AARCH64_SYSREG_ID_CREATE(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2) ? 0 : -1 /*u1Assert1*/, \
       (WHV_REGISTER_NAME)(a_uWHv), #a_RegNm }
 
+/** Entry in g_aNemWinArmIdRegs for an undefined register. */
 #define ENTRY_UNDEF(  a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, a_uWHv) \
     { ARMV8_AARCH64_SYSREG_ID_CREATE(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2), \
       0 /*fMissing*/, 1 /*fUndefined*/, 0 /*fMustWork*/, 0 /*fPerVCpu*/, 0 /*u1Assert1*/, \
       (WHV_REGISTER_NAME)(a_uWHv), #a_Op0 "," #a_Op1 "," #a_CRn "," #a_CRm "," #a_Op2 }
 
+/**
+ * Array mapping ARM ID register values to WHV_REGISTER_NAME.
+ */
 static struct
 {
     /** Our register ID value. */
     uint32_t            idReg      : 27;
-    uint32_t            fMissing   : 1;
-    uint32_t            fUndefined : 1;
+    uint32_t            fMissing   : 1; /**< Set if no WHV_REGISTER_NAME value. */
+    uint32_t            fUndefined : 1; /**< Set if not defined by any ARM spec. */
     uint32_t            fMustWork  : 1; /**< If set, we expect this register to be both gettable and settable. */
     uint32_t            fPerVCpu   : 1; /**< Set if this is per VCpu. */
-    uint32_t            u1Assert1  : 1;
+    uint32_t            u1Assert1  : 1; /**< Used for compile time assertions. */
     /** The windows register enum name. */
     WHV_REGISTER_NAME   enmHvName;
     /** The register name. */
@@ -1030,7 +1035,7 @@ static struct
     /*
      * Collections of other read-only registers.
      */
-    /** @todo none of thse work. First thought they were not partition wide and
+    /** @todo None of these work. First thought they were not partition wide and
      *        added the fPerVCpu flag, but that didn't help, so just ignoring
      *        these for now... */
     ENTRY_REGULAR(3, 1, 0, 0, 1, CLIDR_EL1,             0x00040032, WHvArm64RegisterClidrEl1,           0, 0),
@@ -1066,7 +1071,11 @@ static DECLCALLBACK(int) enmR3WinCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, uint32_t i
 
     /*
      * Query the register.
-     * Note! These (most) are partition wide registers and need to be queried/set with WHV_ANY_VP.
+     *
+     * Note! Most of the registers are partition wide and must be queried/set
+     *       with WHV_ANY_VP as CPU number.  We encode this in the fPerVCpu
+     *       g_aNemWinArmIdRegs member.  In case the hypervisor should change
+     *       the register scope, we will try to adopt on the fly.
      */
     uint32_t           idCpu   = !g_aNemWinArmIdRegs[iReg].fPerVCpu ? WHV_ANY_VP : pVCpu->idCpu;
     WHV_REGISTER_NAME  enmName = g_aNemWinArmIdRegs[iReg].enmHvName;
@@ -1115,7 +1124,6 @@ static DECLCALLBACK(int) enmR3WinCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t 
 {
     if (puUpdatedValue)
         *puUpdatedValue = 0;
-    VMCPU_ASSERT_EMT(pVCpu);
     RT_NOREF(pvUser);
 
     /*
@@ -1131,8 +1139,12 @@ static DECLCALLBACK(int) enmR3WinCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t 
     }
 
     /*
-     * Query the current value, set it and query the updated value.
-     * Note! These are partition wide registers and need to be queried/set with WHV_ANY_VP.
+     * Query the current value.
+     *
+     * Note! Most of the registers are partition wide and must be queried/set
+     *       with WHV_ANY_VP as CPU number.  We encode this in the fPerVCpu
+     *       g_aNemWinArmIdRegs member.  In case the hypervisor should change
+     *       the register scope, we will try to adopt on the fly.
      */
     HANDLE const       hPartition = pVM->nem.s.hPartition;
     WHV_REGISTER_NAME  enmName    = g_aNemWinArmIdRegs[iReg].enmHvName;
@@ -1152,6 +1164,18 @@ static DECLCALLBACK(int) enmR3WinCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t 
         }
     }
 
+    /* Quietly skip setting partition wide registers if this isn't vCPU #0.  */
+    if (idCpu == WHV_ANY_VP && pVCpu->idCpu != 0 && SUCCEEDED(hrcGet))
+    {
+        Assert(OldValue.Reg64 == uValue);
+        if (puUpdatedValue)
+            *puUpdatedValue = uValue;
+        return VINF_SUCCESS;
+    }
+
+    /*
+     * Do the setting and query the updated value on success.
+     */
     WHV_REGISTER_VALUE NewValue   = {};
     NewValue.Reg64 = uValue;
     HRESULT const      hrcSet     = WHvSetVirtualProcessorRegisters(hPartition, idCpu, &enmName, 1, &NewValue);
@@ -1182,7 +1206,6 @@ static DECLCALLBACK(int) enmR3WinCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t 
     // return nemR3DarwinHvSts2Rc(rcHvSet);
 }
 
-#endif /* WITH_NEW_CPUM_IDREG_INTERFACE */
 
 static int nemR3NativeInitSetupVm(PVM pVM)
 {
@@ -1258,83 +1281,21 @@ static int nemR3NativeInitSetupVm(PVM pVM)
                               "Call to WHvCreateVirtualProcessor failed: %Rhrc (Last=%#x/%u)", hrc, rcNtLast, dwErrLast);
         }
 
+        PVMCPU const pVCpu = pVM->apCpusR3[idCpu];
+#if 1 /* just curious */
+        uint64_t  uMidr   = 0;
+        int const rcMidr  = enmR3WinCpuIdRegQuery(pVM, pVCpu, ARMV8_AARCH64_SYSREG_MIDR_EL1, NULL, &uMidr);
+        uint64_t  uMpIdr  = 0;
+        int const rcMpIdr = enmR3WinCpuIdRegQuery(pVM, pVCpu, ARMV8_AARCH64_SYSREG_MPIDR_EL1, NULL, &uMpIdr);
+        LogRel(("NEM: Debug: CPU #%u: default MIDR_EL1=%#RX64 (%Rrc),  default MPIDR_EL1=%#RX64 (%Rrc)\n",
+                idCpu, uMidr, rcMidr, uMpIdr, rcMpIdr));
+#endif
         if (idCpu == 0)
         {
-#ifndef WITH_NEW_CPUM_IDREG_INTERFACE
-            /*
-             * Need to query the ID registers and populate CPUM,
-             * these are partition wide registers and need to be queried/set with WHV_ANY_VP.
-             */
-            CPUMARMV8IDREGS IdRegs; RT_ZERO(IdRegs);
-
-            WHV_REGISTER_NAME  aenmNames[10];
-            WHV_REGISTER_VALUE aValues[10];
-            RT_ZERO(aValues);
-
-            aenmNames[0] = WHvArm64RegisterIdAa64Dfr0El1;
-            aenmNames[1] = WHvArm64RegisterIdAa64Dfr1El1;
-            aenmNames[2] = WHvArm64RegisterIdAa64Isar0El1;
-            aenmNames[3] = WHvArm64RegisterIdAa64Isar1El1;
-            aenmNames[4] = WHvArm64RegisterIdAa64Isar2El1;
-            aenmNames[5] = WHvArm64RegisterIdAa64Mmfr0El1;
-            aenmNames[6] = WHvArm64RegisterIdAa64Mmfr1El1;
-            aenmNames[7] = WHvArm64RegisterIdAa64Mmfr2El1;
-            aenmNames[8] = WHvArm64RegisterIdAa64Pfr0El1;
-            aenmNames[9] = WHvArm64RegisterIdAa64Pfr1El1;
-
-            hrc = WHvGetVirtualProcessorRegisters(hPartition, WHV_ANY_VP /*idCpu*/, aenmNames, RT_ELEMENTS(aenmNames), aValues);
-            AssertLogRelMsgReturn(SUCCEEDED(hrc),
-                                  ("WHvGetVirtualProcessorRegisters(%p, %u,,%u,) -> %Rhrc (Last=%#x/%u)\n",
-                                   hPartition, WHV_ANY_VP, RT_ELEMENTS(aenmNames), hrc, RTNtLastStatusValue(), RTNtLastErrorValue())
-                                  , VERR_NEM_GET_REGISTERS_FAILED);
-
-            IdRegs.u64RegIdAa64Pfr0El1  = aValues[8].Reg64;
-            IdRegs.u64RegIdAa64Pfr1El1  = aValues[9].Reg64;
-            IdRegs.u64RegIdAa64Dfr0El1  = aValues[0].Reg64;
-            IdRegs.u64RegIdAa64Dfr1El1  = aValues[1].Reg64;
-            IdRegs.u64RegIdAa64Isar0El1 = aValues[2].Reg64;
-            IdRegs.u64RegIdAa64Isar1El1 = aValues[3].Reg64;
-            IdRegs.u64RegIdAa64Isar2El1 = aValues[4].Reg64;
-            IdRegs.u64RegIdAa64Mmfr0El1 = aValues[5].Reg64;
-            IdRegs.u64RegIdAa64Mmfr1El1 = aValues[6].Reg64;
-            IdRegs.u64RegIdAa64Mmfr2El1 = aValues[7].Reg64;
-
-            rc = CPUMR3PopulateFeaturesByIdRegisters(pVM, &IdRegs);
-            if (RT_FAILURE(rc))
-                return rc;
-
-            /* Apply any overrides to the partition. */
-            rc = CPUMR3QueryGuestIdRegs(pVM, &IdRegs);
-            AssertRCReturn(rc, rc);
-
-            aValues[0].Reg64 = IdRegs.u64RegIdAa64Dfr0El1;
-            aValues[1].Reg64 = IdRegs.u64RegIdAa64Dfr1El1;
-            aValues[2].Reg64 = IdRegs.u64RegIdAa64Isar0El1;
-            aValues[3].Reg64 = IdRegs.u64RegIdAa64Isar1El1;
-            aValues[4].Reg64 = IdRegs.u64RegIdAa64Isar2El1;
-            aValues[5].Reg64 = IdRegs.u64RegIdAa64Mmfr0El1;
-            aValues[6].Reg64 = IdRegs.u64RegIdAa64Mmfr1El1;
-            aValues[7].Reg64 = IdRegs.u64RegIdAa64Mmfr2El1;
-            aValues[8].Reg64 = IdRegs.u64RegIdAa64Pfr0El1;
-            aValues[9].Reg64 = IdRegs.u64RegIdAa64Pfr1El1;
-
-            hrc = WHvSetVirtualProcessorRegisters(hPartition, WHV_ANY_VP /*idCpu*/, aenmNames, RT_ELEMENTS(aenmNames), aValues);
-            AssertLogRelMsgReturn(SUCCEEDED(hrc),
-                                  ("WHvGetVirtualProcessorRegisters(%p, %u,,%u,) -> %Rhrc (Last=%#x/%u)\n",
-                                   hPartition, WHV_ANY_VP, RT_ELEMENTS(aenmNames), hrc, RTNtLastStatusValue(), RTNtLastErrorValue())
-                                  , VERR_NEM_SET_REGISTERS_FAILED);
-
-            /* Save the amount of break-/watchpoints supported for syncing the guest register state later. */
-            pVM->nem.s.cBreakpoints = RT_BF_GET(IdRegs.u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_BRPS) + 1;
-            pVM->nem.s.cWatchpoints = RT_BF_GET(IdRegs.u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_WRPS) + 1;
-
-#else  /* WITH_NEW_CPUM_IDREG_INTERFACE */
-
-            rc = CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVM->apCpusR3[0], enmR3WinCpuIdRegQuery,
-                                                         enmR3WinCpuIdRegUpdate, NULL /*pvUser*/);
+            rc = CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVCpu, enmR3WinCpuIdRegQuery, enmR3WinCpuIdRegUpdate, NULL /*pvUser*/);
             if (RT_FAILURE(rc))
                 return VMSetError(pVM, VERR_NEM_VM_CREATE_FAILED, RT_SRC_POS,
-                                  "CPUMR3PopulateGuestFeaturesViaCallbacks failed: %Rrc", rc);
+                                  "CPUMR3PopulateGuestFeaturesViaCallbacks failed on vCPU #%u: %Rrc", idCpu, rc);
 
             /** @todo this should be exposed in the read-only cpum GuestFeatures! */
             uint64_t uValue = 0;
@@ -1344,7 +1305,13 @@ static int nemR3NativeInitSetupVm(PVM pVM)
                 pVM->nem.s.cBreakpoints = RT_BF_GET(uValue, ARMV8_ID_AA64DFR0_EL1_BRPS) + 1;
                 pVM->nem.s.cWatchpoints = RT_BF_GET(uValue, ARMV8_ID_AA64DFR0_EL1_WRPS) + 1;
             }
-#endif /* WITH_NEW_CPUM_IDREG_INTERFACE */
+        }
+        else
+        {
+            rc = CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVCpu, NULL /*pfnQuery*/, enmR3WinCpuIdRegUpdate, NULL /*pvUser*/);
+            if (RT_FAILURE(rc))
+                return VMSetError(pVM, VERR_NEM_VM_CREATE_FAILED, RT_SRC_POS,
+                                  "CPUMR3PopulateGuestFeaturesViaCallbacks failed on vCPU #%u: %Rrc", idCpu, rc);
         }
 
         /* Configure the GIC re-distributor region for the GIC. */
@@ -1599,14 +1566,10 @@ static DECLCALLBACK(int) nemR3WinLoad(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersio
  */
 static DECLCALLBACK(int) nemR3WinLoadDone(PVM pVM, PSSMHANDLE pSSM)
 {
-#ifdef WITH_NEW_CPUM_IDREG_INTERFACE
     VM_ASSERT_EMT(pVM);
     int rc = CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVM->apCpusR3[0], NULL, enmR3WinCpuIdRegUpdate, pSSM /*pvUser*/);
     if (RT_FAILURE(rc))
         return SSMR3SetLoadError(pSSM, rc, RT_SRC_POS, "CPUMR3PopulateGuestFeaturesViaCallbacks failed: %Rrc", rc);
-#else
-    RT_NOREF(pVM, pSSM);
-#endif
     return VINF_SUCCESS;
 }
 

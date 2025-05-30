@@ -828,6 +828,17 @@ VMMR3_INT_DECL(int) CPUMR3PopulateGuestFeaturesViaCallbacks(PVM pVM, PVMCPU pVCp
 {
     Assert(pfnUpdate);
 
+    /** @todo MIDR_EL1 and MPIDR_EL1 (and probably a few others) should be set per
+     *        VCpu. Not urgent, as MS WHv seems to be using a single MIDR value for
+     *        all VCpus and Apple zeros MIDR the part number and stuff.
+     *
+     *        The MPIDR register is a NOSET register at the moment, so,
+     *        not so important either.  OTOH, on Apple we must set it for each
+     *        VCpu whereas on MS it has sensible defaults, so it would probably
+     *        be a good idea to centralize the setting here in CPUM than having
+     *        each NEM backend do it themselves.  This would also help a lot with
+     *        pure IEM execution later on. */
+
     /*
      * If pfnQuery is given, we must determin the guest feature register values first.
      */

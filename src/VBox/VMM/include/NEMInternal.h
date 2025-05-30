@@ -535,7 +535,6 @@ typedef struct NEMCPU
 # elif defined(VBOX_VMM_TARGET_ARMV8)
     /** Flag whether syncing the CNTV_CTL_EL0/CNTV_CVAL_EL0 registers to Hyper-V is required. */
     bool                        fSyncCntvRegs;
-#define WITH_NEW_CPUM_IDREG_INTERFACE
 # endif
 
     /** @name Statistics
@@ -577,19 +576,13 @@ typedef struct NEMCPU
     /** The vCPU handle associated with the EMT executing this vCPU. */
     hv_vcpu_t                   hVCpu;
     /** Pointer to the exit information structure. */
-    hv_vcpu_exit_t              *pHvExit;
+    hv_vcpu_exit_t             *pHvExit;
     /** Flag whether an event is pending. */
     bool                        fEventPending;
     /** Flag whether the vTimer got activated and is masked. */
     bool                        fVTimerActivated;
     /** Flag whether to update the vTimer offset. */
     bool                        fVTimerOffUpdate;
-#define WITH_NEW_CPUM_IDREG_INTERFACE
-#  ifndef WITH_NEW_CPUM_IDREG_INTERFACE
-    /** Flag whether the ID registers were synced to the guest context
-     * (for first guest exec call on the EMT after loading the saved state). */
-    bool                        fIdRegsSynced;
-#  endif
 
 # elif defined(VBOX_VMM_TARGET_X86)
     /** The vCPU handle associated with the EMT executing this vCPU. */
