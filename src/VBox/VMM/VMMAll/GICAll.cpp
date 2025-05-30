@@ -1172,31 +1172,7 @@ static VBOXSTRICTRC gicDistReadIntrPriorityReg(PGICDEV pGicDev, uint16_t idxReg,
         uint16_t const idxPriority = idxReg * sizeof(uint32_t);
         AssertReturn(idxPriority <= RT_ELEMENTS(pGicDev->abIntrPriority) - sizeof(uint32_t), VERR_BUFFER_OVERFLOW);
         AssertCompile(sizeof(*puValue) == sizeof(uint32_t));
-
-        /*
-         * We don't support dual-security states and thus this is a non-secure read to
-         * the interrupt priority.
-         *
-         * For non-secure reads:
-         *   - For group 0 and secure group 1 interrupts, returns 0.
-         *   - For non-secure group 1, returns the priority shifted left by 1.
-         *
-         * In the future, when security states are implemented, we would need to consult
-         * GICD_NSACR<n> for the grained access permission.
-         *
-         * See ARM GIC spec. 12.9.20 "GICD_IPRIORITYR<n>, Interrupt Priority Registers".
-         * See ARM GIC spec 4.8.7 "Software accesses of interrupt priority".
-         */
-        uint32_t uValue = 0;
-        for (uint8_t i = 0; i < sizeof(uint32_t); i++)
-        {
-            uint8_t const  cShift    = i << 3;
-            uint32_t const uPriority = pGicDev->abIntrPriority[idxPriority + i];
-            bool const     fGroup1   = ASMBitTest(&pGicDev->bmIntrGroup[0], idxPriority + i);
-            if (fGroup1)
-                uValue |= ((uPriority >> 1) << cShift);
-        }
-        *puValue = uValue;
+        *puValue = *(uint32_t *)&pGicDev->abIntrPriority[idxPriority];
     }
     else
     {
@@ -1234,10 +1210,11 @@ static VBOXSTRICTRC gicDistWriteIntrPriorityReg(PVM pVM, PGICDEV pGicDev, uint16
          * the interrupt priority.
          *
          * For non-secure writes:
-         *   - For group 0 interrupts and secure group 1 interrupts, writes are ignored.
-         *   - For non-secure group 1 interrupts, bit 7 is set with priority shifted right by 1.
+         *   - For group 0 interrupts and secure group 1 interrupts, are permitted to be modified.
+         *   - For non-secure group 1 interrupts, priority shifted left by 1.
          *
-         * See ARM GIC spec 4.8.7 "Software accesses of interrupt priority".
+         * See ARM GIC spec. 4.8.7 "Software accesses of interrupt priority".
+         * See ARM GIC spec. 12.9.4 "GICD_CTLR, Distributor Control Register".
          */
         for (uint8_t i = 0; i < sizeof(uint32_t); i++)
         {
@@ -1262,10 +1239,8 @@ static VBOXSTRICTRC gicDistWriteIntrPriorityReg(PVM pVM, PGICDEV pGicDev, uint16
             else
             {
                 /*
-                 * Extremely early on guest boot (most likely EFI) writes non-zero values here which
-                 * does not make sense, see @bugref{10877#c46}. If we ignore this write, it causes
-                 * problems to Fedora guest but as per the ARM GIC spec. we are supposed to ignore
-                 * these writes.
+                 * Since we don't support dual-security states, non-secure accesses are permitted to
+                 * modify registers that group 0 interrupts.
                  */
                 pGicDev->abIntrPriority[idxPriority + i] = uPriority;
             }
@@ -1470,23 +1445,7 @@ static VBOXSTRICTRC gicReDistReadIntrPriorityReg(PCGICDEV pGicDev, PGICCPU pGicC
     uint16_t const idxPriority = idxReg * sizeof(uint32_t);
     AssertReturn(idxPriority <= RT_ELEMENTS(pGicCpu->abIntrPriority) - sizeof(uint32_t), VERR_BUFFER_OVERFLOW);
     AssertCompile(sizeof(*puValue) == sizeof(uint32_t));
-
-    uint32_t uValue = 0;
-    for (uint8_t i = 0; i < sizeof(uint32_t); i++)
-    {
-        /*
-         * Non-secure reads to group 0 and secure group 1 interrupts return 0.
-         * We are currently not doing this because of the Windows 11 (24H2)/Fedora guest
-         * hang mentioned in @bugref{10877#c46}.
-         */
-        /** @todo Fix this later to return 0 for non-secure group 1 interrupts for
-         *        non-secure accesses. */
-        uint8_t const cShift    = i << 3;
-        uint8_t const uPriority = pGicCpu->abIntrPriority[idxPriority + i];
-        uValue |= (uPriority << cShift);
-    }
-    *puValue = uValue;
-
+    *puValue = *(uint32_t *)&pGicCpu->abIntrPriority[idxPriority];
     LogFlowFunc(("idxReg=%#x read %#x\n", idxReg, *puValue));
     return VINF_SUCCESS;
 }
@@ -1513,16 +1472,13 @@ static VBOXSTRICTRC gicReDistWriteIntrPriorityReg(PCGICDEV pGicDev, PVMCPUCC pVC
 
     for (uint8_t i = 0; i < sizeof(uint32_t); i++)
     {
-        /*
-         * Non-secure reads to group 0 and secure group 1 interrupts return 0.
-         * We are currently not doing this because of the Windows 11 (24H2)/Fedora guest
-         * hang mentioned in @bugref{10877#c46}.
-         */
-        /** @todo Fix this later to return 0 for non-secure group 1 interrupts for
-         *        non-secure accesses. */
         uint8_t const cShift    = i << 3;
         uint8_t const uPriority = uValue >> cShift;
-        pGicCpu->abIntrPriority[idxPriority + i] = uPriority;
+        bool const    fGroup1   = ASMBitTest(&pGicDev->bmIntrGroup[0], idxPriority + i);
+        if (fGroup1)
+            pGicCpu->abIntrPriority[idxPriority + i] = uPriority << 1;
+        else
+            pGicCpu->abIntrPriority[idxPriority + i] = uPriority;
     }
 
     LogFlowFunc(("idxReg=%#x written %#x\n", idxReg, *(uint32_t *)&pGicCpu->abIntrPriority[idxPriority]));
