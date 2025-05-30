@@ -2994,20 +2994,7 @@ static DECLCALLBACK(void) nemR3DarwinInfoLbr(PVM pVM, PCDBGFINFOHLP pHlp, const 
 }
 
 
-/**
- * Try initialize the native API.
- *
- * This may only do part of the job, more can be done in
- * nemR3NativeInitAfterCPUM() and nemR3NativeInitCompleted().
- *
- * @returns VBox status code.
- * @param   pVM             The cross context VM structure.
- * @param   fFallback       Whether we're in fallback mode or use-NEM mode. In
- *                          the latter we'll fail if we cannot initialize.
- * @param   fForced         Whether the HMForced flag is set and we should
- *                          fail if we cannot initialize.
- */
-int nemR3NativeInit(PVM pVM, bool fFallback, bool fForced)
+DECLHIDDEN(int) nemR3NativeInit(PVM pVM, bool fFallback, bool fForced)
 {
     AssertReturn(!pVM->nem.s.fCreatedVm, VERR_WRONG_ORDER);
 
@@ -3280,13 +3267,7 @@ static DECLCALLBACK(int) nemR3DarwinNativeInitTprShadowing(PVM pVM, PVMCPU pVCpu
 }
 
 
-/**
- * This is called after CPUMR3Init is done.
- *
- * @returns VBox status code.
- * @param   pVM                 The VM handle..
- */
-int nemR3NativeInitAfterCPUM(PVM pVM)
+DECLHIDDEN(int) nemR3NativeInitAfterCPUM(PVM pVM)
 {
     /*
      * Validate sanity.
@@ -3323,25 +3304,22 @@ int nemR3NativeInitAfterCPUM(PVM pVM)
 }
 
 
-int nemR3NativeInitCompleted(PVM pVM, VMINITCOMPLETED enmWhat)
+DECLHIDDEN(int) nemR3NativeInitCompletedRing3(PVM pVM)
 {
-    if (enmWhat == VMINITCOMPLETED_RING3)
+    /* Now that PDM is initialized the APIC state is known in order to enable the TPR shadowing feature on all EMTs. */
+    for (VMCPUID idCpu = 0; idCpu < pVM->cCpus; idCpu++)
     {
-        /* Now that PDM is initialized the APIC state is known in order to enable the TPR shadowing feature on all EMTs. */
-        for (VMCPUID idCpu = 0; idCpu < pVM->cCpus; idCpu++)
-        {
-            PVMCPU pVCpu = pVM->apCpusR3[idCpu];
+        PVMCPU pVCpu = pVM->apCpusR3[idCpu];
 
-            int rc = VMR3ReqCallWait(pVM, idCpu, (PFNRT)nemR3DarwinNativeInitTprShadowing, 2, pVM, pVCpu);
-            if (RT_FAILURE(rc))
-                return VMSetError(pVM, VERR_NEM_VM_CREATE_FAILED, RT_SRC_POS, "Setting up TPR shadowing failed: %Rrc", rc);
-        }
+        int rc = VMR3ReqCallWait(pVM, idCpu, (PFNRT)nemR3DarwinNativeInitTprShadowing, 2, pVM, pVCpu);
+        if (RT_FAILURE(rc))
+            return VMSetError(pVM, VERR_NEM_VM_CREATE_FAILED, RT_SRC_POS, "Setting up TPR shadowing failed: %Rrc", rc);
     }
     return VINF_SUCCESS;
 }
 
 
-int nemR3NativeTerm(PVM pVM)
+DECLHIDDEN(int) nemR3NativeTerm(PVM pVM)
 {
     /*
      * Delete the VM.
@@ -3400,25 +3378,13 @@ int nemR3NativeTerm(PVM pVM)
 }
 
 
-/**
- * VM reset notification.
- *
- * @param   pVM         The cross context VM structure.
- */
-void nemR3NativeReset(PVM pVM)
+DECLHIDDEN(void) nemR3NativeReset(PVM pVM)
 {
     RT_NOREF(pVM);
 }
 
 
-/**
- * Reset CPU due to INIT IPI or hot (un)plugging.
- *
- * @param   pVCpu       The cross context virtual CPU structure of the CPU being
- *                      reset.
- * @param   fInitIpi    Whether this is the INIT IPI or hot (un)plugging case.
- */
-void nemR3NativeResetCpu(PVMCPU pVCpu, bool fInitIpi)
+DECLHIDDEN(void) nemR3NativeResetCpu(PVMCPU pVCpu, bool fInitIpi)
 {
     RT_NOREF(fInitIpi);
     ASMAtomicUoOrU64(&pVCpu->nem.s.fCtxChanged, HM_CHANGED_ALL_GUEST);
@@ -4115,8 +4081,9 @@ static VBOXSTRICTRC nemR3DarwinRunGuestDebug(PVM pVM, PVMCPU pVCpu)
 }
 
 
-VBOXSTRICTRC nemR3NativeRunGC(PVM pVM, PVMCPU pVCpu)
+VMMR3_INT_DECL(VBOXSTRICTRC) NEMR3RunGC(PVM pVM, PVMCPU pVCpu)
 {
+    Assert(VM_IS_NEM_ENABLED(pVM));
     LogFlow(("NEM/%u: %04x:%08RX64 efl=%#08RX64 <=\n", pVCpu->idCpu, pVCpu->cpum.GstCtx.cs.Sel, pVCpu->cpum.GstCtx.rip, pVCpu->cpum.GstCtx.rflags.u));
 #ifdef LOG_ENABLED
     if (LogIs3Enabled())
@@ -4218,7 +4185,7 @@ VMMR3_INT_DECL(bool) NEMR3CanExecuteGuest(PVM pVM, PVMCPU pVCpu)
 }
 
 
-bool nemR3NativeSetSingleInstruction(PVM pVM, PVMCPU pVCpu, bool fEnable)
+DECLHIDDEN(bool) nemR3NativeSetSingleInstruction(PVM pVM, PVMCPU pVCpu, bool fEnable)
 {
     VMCPU_ASSERT_EMT(pVCpu);
     bool fOld = pVCpu->nem.s.fSingleInstruction;
@@ -4228,10 +4195,9 @@ bool nemR3NativeSetSingleInstruction(PVM pVM, PVMCPU pVCpu, bool fEnable)
 }
 
 
-void nemR3NativeNotifyFF(PVM pVM, PVMCPU pVCpu, uint32_t fFlags)
+DECLHIDDEN(void) nemR3NativeNotifyFF(PVM pVM, PVMCPU pVCpu, uint32_t fFlags)
 {
     LogFlowFunc(("pVM=%p pVCpu=%p fFlags=%#x\n", pVM, pVCpu, fFlags));
-
     RT_NOREF(pVM, fFlags);
 
     hv_return_t hrc = hv_vcpu_interrupt(&pVCpu->nem.s.hVCpuId, 1);
@@ -4466,15 +4432,15 @@ VMMR3_INT_DECL(void) NEMR3NotifySetA20(PVMCPU pVCpu, bool fEnabled)
 }
 
 
-void nemHCNativeNotifyHandlerPhysicalRegister(PVMCC pVM, PGMPHYSHANDLERKIND enmKind, RTGCPHYS GCPhys, RTGCPHYS cb)
+DECLHIDDEN(void) nemHCNativeNotifyHandlerPhysicalRegister(PVMCC pVM, PGMPHYSHANDLERKIND enmKind, RTGCPHYS GCPhys, RTGCPHYS cb)
 {
     Log5(("nemHCNativeNotifyHandlerPhysicalRegister: %RGp LB %RGp enmKind=%d\n", GCPhys, cb, enmKind));
     NOREF(pVM); NOREF(enmKind); NOREF(GCPhys); NOREF(cb);
 }
 
 
-void nemHCNativeNotifyHandlerPhysicalModify(PVMCC pVM, PGMPHYSHANDLERKIND enmKind, RTGCPHYS GCPhysOld,
-                                            RTGCPHYS GCPhysNew, RTGCPHYS cb, bool fRestoreAsRAM)
+DECLHIDDEN(void) nemHCNativeNotifyHandlerPhysicalModify(PVMCC pVM, PGMPHYSHANDLERKIND enmKind, RTGCPHYS GCPhysOld,
+                                                        RTGCPHYS GCPhysNew, RTGCPHYS cb, bool fRestoreAsRAM)
 {
     Log5(("nemHCNativeNotifyHandlerPhysicalModify: %RGp LB %RGp -> %RGp enmKind=%d fRestoreAsRAM=%d\n",
           GCPhysOld, cb, GCPhysNew, enmKind, fRestoreAsRAM));
@@ -4482,8 +4448,8 @@ void nemHCNativeNotifyHandlerPhysicalModify(PVMCC pVM, PGMPHYSHANDLERKIND enmKin
 }
 
 
-int nemHCNativeNotifyPhysPageAllocated(PVMCC pVM, RTGCPHYS GCPhys, RTHCPHYS HCPhys, uint32_t fPageProt,
-                                       PGMPAGETYPE enmType, uint8_t *pu2State)
+DECLHIDDEN(int) nemHCNativeNotifyPhysPageAllocated(PVMCC pVM, RTGCPHYS GCPhys, RTHCPHYS HCPhys, uint32_t fPageProt,
+                                                   PGMPAGETYPE enmType, uint8_t *pu2State)
 {
     Log5(("nemHCNativeNotifyPhysPageAllocated: %RGp HCPhys=%RHp fPageProt=%#x enmType=%d *pu2State=%d\n",
           GCPhys, HCPhys, fPageProt, enmType, *pu2State));

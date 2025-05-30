@@ -375,8 +375,8 @@ VMMR3_INT_DECL(int) NEMR3InitCompleted(PVM pVM, VMINITCOMPLETED enmWhat)
      */
     int rc = VINF_SUCCESS;
 #ifdef VBOX_WITH_NATIVE_NEM
-    if (pVM->bMainExecutionEngine == VM_EXEC_ENGINE_NATIVE_API)
-        rc = nemR3NativeInitCompleted(pVM, enmWhat);
+    if (pVM->bMainExecutionEngine == VM_EXEC_ENGINE_NATIVE_API && enmWhat == VMINITCOMPLETED_RING3)
+        rc = nemR3NativeInitCompletedRing3(pVM);
 #else
     RT_NOREF(pVM, enmWhat);
 #endif
@@ -516,16 +516,13 @@ VMMR3DECL(const char *) NEMR3GetExitName(uint32_t uExit)
 }
 
 
+#ifndef VBOX_WITH_NATIVE_NEM
 VMMR3_INT_DECL(VBOXSTRICTRC) NEMR3RunGC(PVM pVM, PVMCPU pVCpu)
 {
-    Assert(VM_IS_NEM_ENABLED(pVM));
-#ifdef VBOX_WITH_NATIVE_NEM
-    return nemR3NativeRunGC(pVM, pVCpu);
-#else
     NOREF(pVM); NOREF(pVCpu);
     return VERR_INTERNAL_ERROR_3;
-#endif
 }
+#endif
 
 
 #ifndef VBOX_WITH_NATIVE_NEM

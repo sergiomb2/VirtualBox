@@ -1439,20 +1439,7 @@ static int nemR3WinDisableX2Apic(PVM pVM)
 }
 
 
-/**
- * Try initialize the native API.
- *
- * This may only do part of the job, more can be done in
- * nemR3NativeInitAfterCPUM() and nemR3NativeInitCompleted().
- *
- * @returns VBox status code.
- * @param   pVM             The cross context VM structure.
- * @param   fFallback       Whether we're in fallback mode or use-NEM mode. In
- *                          the latter we'll fail if we cannot initialize.
- * @param   fForced         Whether the HMForced flag is set and we should
- *                          fail if we cannot initialize.
- */
-int nemR3NativeInit(PVM pVM, bool fFallback, bool fForced)
+DECLHIDDEN(int) nemR3NativeInit(PVM pVM, bool fFallback, bool fForced)
 {
     g_uBuildNo = RTSystemGetNtBuildNo();
 
@@ -1595,13 +1582,7 @@ int nemR3NativeInit(PVM pVM, bool fFallback, bool fForced)
 }
 
 
-/**
- * This is called after CPUMR3Init is done.
- *
- * @returns VBox status code.
- * @param   pVM                 The VM handle..
- */
-int nemR3NativeInitAfterCPUM(PVM pVM)
+DECLHIDDEN(int) nemR3NativeInitAfterCPUM(PVM pVM)
 {
     /*
      * Validate sanity.
@@ -1771,17 +1752,17 @@ int nemR3NativeInitAfterCPUM(PVM pVM)
 }
 
 
-int nemR3NativeInitCompleted(PVM pVM, VMINITCOMPLETED enmWhat)
+DECLHIDDEN(int) nemR3NativeInitCompletedRing3(PVM pVM)
 {
     //BOOL fRet = SetThreadPriority(GetCurrentThread(), 0);
     //AssertLogRel(fRet);
 
-    NOREF(pVM); NOREF(enmWhat);
+    RT_NOREF_PV(pVM);
     return VINF_SUCCESS;
 }
 
 
-int nemR3NativeTerm(PVM pVM)
+DECLHIDDEN(int) nemR3NativeTerm(PVM pVM)
 {
     /*
      * Delete the partition.
@@ -1809,12 +1790,7 @@ int nemR3NativeTerm(PVM pVM)
 }
 
 
-/**
- * VM reset notification.
- *
- * @param   pVM         The cross context VM structure.
- */
-void nemR3NativeReset(PVM pVM)
+DECLHIDDEN(void) nemR3NativeReset(PVM pVM)
 {
 #if 0
     /* Unfix the A20 gate. */
@@ -1825,14 +1801,7 @@ void nemR3NativeReset(PVM pVM)
 }
 
 
-/**
- * Reset CPU due to INIT IPI or hot (un)plugging.
- *
- * @param   pVCpu       The cross context virtual CPU structure of the CPU being
- *                      reset.
- * @param   fInitIpi    Whether this is the INIT IPI or hot (un)plugging case.
- */
-void nemR3NativeResetCpu(PVMCPU pVCpu, bool fInitIpi)
+DECLHIDDEN(void) nemR3NativeResetCpu(PVMCPU pVCpu, bool fInitIpi)
 {
 #ifdef NEM_WIN_WITH_A20
     /* Lock the A20 gate if INIT IPI, make sure it's enabled.  */
@@ -1850,8 +1819,9 @@ void nemR3NativeResetCpu(PVMCPU pVCpu, bool fInitIpi)
 }
 
 
-VBOXSTRICTRC nemR3NativeRunGC(PVM pVM, PVMCPU pVCpu)
+VMMR3_INT_DECL(VBOXSTRICTRC) NEMR3RunGC(PVM pVM, PVMCPU pVCpu)
 {
+    Assert(VM_IS_NEM_ENABLED(pVM));
     return nemHCWinRunGC(pVM, pVCpu);
 }
 
@@ -1874,14 +1844,14 @@ VMMR3_INT_DECL(bool) NEMR3CanExecuteGuest(PVM pVM, PVMCPU pVCpu)
 }
 
 
-bool nemR3NativeSetSingleInstruction(PVM pVM, PVMCPU pVCpu, bool fEnable)
+DECLHIDDEN(bool) nemR3NativeSetSingleInstruction(PVM pVM, PVMCPU pVCpu, bool fEnable)
 {
     NOREF(pVM); NOREF(pVCpu); NOREF(fEnable);
     return false;
 }
 
 
-void nemR3NativeNotifyFF(PVM pVM, PVMCPU pVCpu, uint32_t fFlags)
+DECLHIDDEN(void) nemR3NativeNotifyFF(PVM pVM, PVMCPU pVCpu, uint32_t fFlags)
 {
     Log8(("nemR3NativeNotifyFF: canceling %u\n", pVCpu->idCpu));
     HRESULT hrc = WHvCancelRunVirtualProcessor(pVM->nem.s.hPartition, pVCpu->idCpu, 0);

@@ -734,16 +734,62 @@ typedef struct NEMR0PERVM
 
 int     nemR3DisableCpuIsaExt(PVM pVM, const char *pszIsaExt);
 
-int     nemR3NativeInit(PVM pVM, bool fFallback, bool fForced);
-int     nemR3NativeInitAfterCPUM(PVM pVM);
-int     nemR3NativeInitCompleted(PVM pVM, VMINITCOMPLETED enmWhat);
-int     nemR3NativeTerm(PVM pVM);
-void    nemR3NativeReset(PVM pVM);
-void    nemR3NativeResetCpu(PVMCPU pVCpu, bool fInitIpi);
-VBOXSTRICTRC    nemR3NativeRunGC(PVM pVM, PVMCPU pVCpu);
-bool            nemR3NativeCanExecuteGuest(PVM pVM, PVMCPU pVCpu);
-bool            nemR3NativeSetSingleInstruction(PVM pVM, PVMCPU pVCpu, bool fEnable);
+/**
+ * Try initialize the native API.
+ *
+ * This may only do part of the job, more can be done in
+ * nemR3NativeInitAfterCPUM() and nemR3NativeInitCompleted().
+ *
+ * @returns VBox status code.
+ * @param   pVM             The cross context VM structure.
+ * @param   fFallback       Whether we're in fallback mode or use-NEM mode. In
+ *                          the latter we'll fail if we cannot initialize.
+ * @param   fForced         Whether the HMForced flag is set and we should
+ *                          fail if we cannot initialize.
+ */
+DECLHIDDEN(int)     nemR3NativeInit(PVM pVM, bool fFallback, bool fForced);
 
+/**
+ * This is called after CPUMR3Init is done.
+ *
+ * @returns VBox status code.
+ * @param   pVM                 The VM handle..
+ */
+DECLHIDDEN(int)     nemR3NativeInitAfterCPUM(PVM pVM);
+
+/*
+ * Called at ring-3 init phase compltion when NEM is the main execution engine.
+ *
+ * @returns VBox status code.
+ * @param   pVM         The cross context VM structure.
+ */
+DECLHIDDEN(int)     nemR3NativeInitCompletedRing3(PVM pVM);
+
+/**
+ * Called to clean up the native NEM state on VM termination when NEM is the
+ * main execution engine.
+ */
+DECLHIDDEN(int)     nemR3NativeTerm(PVM pVM);
+
+/**
+ * VM reset notification (when NEM is the main execution engine).
+ */
+DECLHIDDEN(void)    nemR3NativeReset(PVM pVM);
+
+/**
+ * Reset CPU due to INIT IPI or hot (un)plugging (when NEM is the main execution
+ * engine).
+ *
+ * @param   pVCpu       The cross context virtual CPU structure of the CPU being
+ *                      reset.
+ * @param   fInitIpi    Whether this is the INIT IPI or hot (un)plugging case.
+ */
+DECLHIDDEN(void)    nemR3NativeResetCpu(PVMCPU pVCpu, bool fInitIpi);
+
+/**
+ * Called by NEMR3SetSingleInstruction to do the work.
+ */
+DECLHIDDEN(bool)    nemR3NativeSetSingleInstruction(PVM pVM, PVMCPU pVCpu, bool fEnable);
 
 /**
  * Forced flag notification call from VMEmt.h.
@@ -755,7 +801,7 @@ bool            nemR3NativeSetSingleInstruction(PVM pVM, PVMCPU pVCpu, bool fEna
  *                          to be notified.
  * @param   fFlags          Notification flags, VMNOTIFYFF_FLAGS_XXX.
  */
-void            nemR3NativeNotifyFF(PVM pVM, PVMCPU pVCpu, uint32_t fFlags);
+DECLHIDDEN(void)    nemR3NativeNotifyFF(PVM pVM, PVMCPU pVCpu, uint32_t fFlags);
 
 /**
  * Called by NEMR3NotifyDebugEventChanged() to let the native backend take the final decision
@@ -766,7 +812,7 @@ void            nemR3NativeNotifyFF(PVM pVM, PVMCPU pVCpu, uint32_t fFlags);
  * @param   fUseDebugLoop   The current value determined by NEMR3NotifyDebugEventChanged().
  * @thread  EMT(0)
  */
-DECLHIDDEN(bool) nemR3NativeNotifyDebugEventChanged(PVM pVM, bool fUseDebugLoop);
+DECLHIDDEN(bool)    nemR3NativeNotifyDebugEventChanged(PVM pVM, bool fUseDebugLoop);
 
 
 /**
@@ -778,15 +824,18 @@ DECLHIDDEN(bool) nemR3NativeNotifyDebugEventChanged(PVM pVM, bool fUseDebugLoop)
  * @param   pVCpu           The cross context virtual CPU structure of the calling EMT.
  * @param   fUseDebugLoop   The current value determined by NEMR3NotifyDebugEventChangedPerCpu().
  */
-DECLHIDDEN(bool) nemR3NativeNotifyDebugEventChangedPerCpu(PVM pVM, PVMCPU pVCpu, bool fUseDebugLoop);
+DECLHIDDEN(bool)    nemR3NativeNotifyDebugEventChangedPerCpu(PVM pVM, PVMCPU pVCpu, bool fUseDebugLoop);
 
 #endif /* IN_RING3 */
 
-void    nemHCNativeNotifyHandlerPhysicalRegister(PVMCC pVM, PGMPHYSHANDLERKIND enmKind, RTGCPHYS GCPhys, RTGCPHYS cb);
-void    nemHCNativeNotifyHandlerPhysicalModify(PVMCC pVM, PGMPHYSHANDLERKIND enmKind, RTGCPHYS GCPhysOld,
-                                               RTGCPHYS GCPhysNew, RTGCPHYS cb, bool fRestoreAsRAM);
-int     nemHCNativeNotifyPhysPageAllocated(PVMCC pVM, RTGCPHYS GCPhys, RTHCPHYS HCPhys, uint32_t fPageProt,
-                                           PGMPAGETYPE enmType, uint8_t *pu2State);
+/** All stubs. */
+DECLHIDDEN(void)    nemHCNativeNotifyHandlerPhysicalRegister(PVMCC pVM, PGMPHYSHANDLERKIND enmKind, RTGCPHYS GCPhys, RTGCPHYS cb);
+/** All stubs. */
+DECLHIDDEN(void)    nemHCNativeNotifyHandlerPhysicalModify(PVMCC pVM, PGMPHYSHANDLERKIND enmKind, RTGCPHYS GCPhysOld,
+                                                           RTGCPHYS GCPhysNew, RTGCPHYS cb, bool fRestoreAsRAM);
+/** All but darwin.amd64 are stubs. */
+DECLHIDDEN(int)     nemHCNativeNotifyPhysPageAllocated(PVMCC pVM, RTGCPHYS GCPhys, RTHCPHYS HCPhys, uint32_t fPageProt,
+                                                       PGMPAGETYPE enmType, uint8_t *pu2State);
 
 
 #ifdef RT_OS_WINDOWS

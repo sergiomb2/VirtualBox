@@ -440,20 +440,7 @@ static DECLCALLBACK(VBOXSTRICTRC) nemR3LnxFixThreadPoke(PVM pVM, PVMCPU pVCpu, v
 }
 
 
-/**
- * Try initialize the native API.
- *
- * This may only do part of the job, more can be done in
- * nemR3NativeInitAfterCPUM() and nemR3NativeInitCompleted().
- *
- * @returns VBox status code.
- * @param   pVM             The cross context VM structure.
- * @param   fFallback       Whether we're in fallback mode or use-NEM mode. In
- *                          the latter we'll fail if we cannot initialize.
- * @param   fForced         Whether the HMForced flag is set and we should
- *                          fail if we cannot initialize.
- */
-int nemR3NativeInit(PVM pVM, bool fFallback, bool fForced)
+DECLHIDDEN(int) nemR3NativeInit(PVM pVM, bool fFallback, bool fForced)
 {
     RT_NOREF(pVM, fFallback, fForced);
     /*
@@ -586,13 +573,7 @@ int nemR3NativeInit(PVM pVM, bool fFallback, bool fForced)
 }
 
 
-/**
- * This is called after CPUMR3Init is done.
- *
- * @returns VBox status code.
- * @param   pVM                 The VM handle..
- */
-int nemR3NativeInitAfterCPUM(PVM pVM)
+DECLHIDDEN(int) nemR3NativeInitAfterCPUM(PVM pVM)
 {
     /*
      * Validate sanity.
@@ -607,7 +588,7 @@ int nemR3NativeInitAfterCPUM(PVM pVM)
 }
 
 
-int nemR3NativeTerm(PVM pVM)
+DECLHIDDEN(int) nemR3NativeTerm(PVM pVM)
 {
     /*
      * Per-cpu data
@@ -646,25 +627,13 @@ int nemR3NativeTerm(PVM pVM)
 }
 
 
-/**
- * VM reset notification.
- *
- * @param   pVM         The cross context VM structure.
- */
-void nemR3NativeReset(PVM pVM)
+DECLHIDDEN(void) nemR3NativeReset(PVM pVM)
 {
     RT_NOREF(pVM);
 }
 
 
-/**
- * Reset CPU due to INIT IPI or hot (un)plugging.
- *
- * @param   pVCpu       The cross context virtual CPU structure of the CPU being
- *                      reset.
- * @param   fInitIpi    Whether this is the INIT IPI or hot (un)plugging case.
- */
-void nemR3NativeResetCpu(PVMCPU pVCpu, bool fInitIpi)
+DECLHIDDEN(void) nemR3NativeResetCpu(PVMCPU pVCpu, bool fInitIpi)
 {
     RT_NOREF(pVCpu, fInitIpi);
 }
@@ -979,15 +948,15 @@ VMM_INT_DECL(void) NEMHCNotifyHandlerPhysicalDeregister(PVMCC pVM, PGMPHYSHANDLE
 }
 
 
-void nemHCNativeNotifyHandlerPhysicalRegister(PVMCC pVM, PGMPHYSHANDLERKIND enmKind, RTGCPHYS GCPhys, RTGCPHYS cb)
+DECLHIDDEN(void) nemHCNativeNotifyHandlerPhysicalRegister(PVMCC pVM, PGMPHYSHANDLERKIND enmKind, RTGCPHYS GCPhys, RTGCPHYS cb)
 {
     Log5(("nemHCNativeNotifyHandlerPhysicalRegister: %RGp LB %RGp enmKind=%d\n", GCPhys, cb, enmKind));
     RT_NOREF(pVM, enmKind, GCPhys, cb);
 }
 
 
-void nemHCNativeNotifyHandlerPhysicalModify(PVMCC pVM, PGMPHYSHANDLERKIND enmKind, RTGCPHYS GCPhysOld,
-                                            RTGCPHYS GCPhysNew, RTGCPHYS cb, bool fRestoreAsRAM)
+DECLHIDDEN(void) nemHCNativeNotifyHandlerPhysicalModify(PVMCC pVM, PGMPHYSHANDLERKIND enmKind, RTGCPHYS GCPhysOld,
+                                                        RTGCPHYS GCPhysNew, RTGCPHYS cb, bool fRestoreAsRAM)
 {
     Log5(("nemHCNativeNotifyHandlerPhysicalModify: %RGp LB %RGp -> %RGp enmKind=%d fRestoreAsRAM=%d\n",
           GCPhysOld, cb, GCPhysNew, enmKind, fRestoreAsRAM));
@@ -995,8 +964,8 @@ void nemHCNativeNotifyHandlerPhysicalModify(PVMCC pVM, PGMPHYSHANDLERKIND enmKin
 }
 
 
-int nemHCNativeNotifyPhysPageAllocated(PVMCC pVM, RTGCPHYS GCPhys, RTHCPHYS HCPhys, uint32_t fPageProt,
-                                       PGMPAGETYPE enmType, uint8_t *pu2State)
+DECLHIDDEN(int) nemHCNativeNotifyPhysPageAllocated(PVMCC pVM, RTGCPHYS GCPhys, RTHCPHYS HCPhys, uint32_t fPageProt,
+                                                   PGMPAGETYPE enmType, uint8_t *pu2State)
 {
     Log5(("nemHCNativeNotifyPhysPageAllocated: %RGp HCPhys=%RHp fPageProt=%#x enmType=%d *pu2State=%d\n",
           GCPhys, HCPhys, fPageProt, enmType, *pu2State));
