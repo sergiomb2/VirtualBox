@@ -69,11 +69,6 @@
 
 
 /*********************************************************************************************************************************
-*   Defined Constants And Macros                                                                                                 *
-*********************************************************************************************************************************/
-
-
-/*********************************************************************************************************************************
 *   Structures and Typedefs                                                                                                      *
 *********************************************************************************************************************************/
 
@@ -587,6 +582,8 @@ static const struct
     { ARMV8_AARCH64_SYSREG_VTCR_EL2,       RT_UOFFSETOF(CPUMCTX, VTcrEl2.u64)       },
     { ARMV8_AARCH64_SYSREG_VTTBR_EL2,      RT_UOFFSETOF(CPUMCTX, VTtbrEl2.u64)      }
 };
+
+#ifndef WITH_NEW_CPUM_IDREG_INTERFACE
 /** ID registers. */
 static const struct
 {
@@ -607,11 +604,13 @@ static const struct
     { HV_FEATURE_REG_CTR_EL0,               RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegCtrEl0)         },
     { HV_FEATURE_REG_DCZID_EL0,             RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegDczidEl0)       }
 };
+#endif
 
 
 /*********************************************************************************************************************************
 *   Internal Functions                                                                                                           *
 *********************************************************************************************************************************/
+static FNSSMINTLOADDONE nemR3DarwinLoadDone;
 
 
 /**
@@ -1395,6 +1394,15 @@ int nemR3NativeInit(PVM pVM, bool fFallback, bool fForced)
     }
 
     /*
+     * Register state load callback.
+     */
+    rc = SSMR3RegisterInternal(pVM, "NEM-darwin-arm64-notify", 0, 0, 0,
+                               NULL, NULL, NULL,
+                               NULL, NULL, NULL,
+                               NULL, NULL, nemR3DarwinLoadDone);
+    AssertLogRelRCReturn(rc, rc);
+
+    /*
      * Need to enable nested virt here if supported and reset the CFGM value to false
      * if not supported. This ASSUMES that NEM is initialized before CPUM.
      */
@@ -1488,6 +1496,195 @@ int nemR3NativeInit(PVM pVM, bool fFallback, bool fForced)
     return VINF_SUCCESS;
 }
 
+#ifdef WITH_NEW_CPUM_IDREG_INTERFACE
+
+/**
+ * @callback_method_impl{FNCPUMARMCPUIDREGQUERY}
+ */
+static DECLCALLBACK(int) enmR3DarwinNativeCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, uint32_t idReg, void *pvUser, uint64_t *puValue)
+{
+    *puValue = 0;
+    AssertReturn(pVCpu->idCpu == 0, VERR_INTERNAL_ERROR_4);
+    VMCPU_ASSERT_EMT(pVCpu);
+    RT_NOREF(pvUser);
+
+    /*
+     * There are just a handful of registers that can only be queried via the
+     * configuration object.  There are a bunch we can be quieried both ways,
+     * but VBoxCpuReport-arm.cpp experiments shows the values are the same, so
+     * we'll just query them as system registers.
+     */
+    hv_feature_reg_t enmFeatureReg;
+    switch (idReg)
+    {
+        case ARMV8_AARCH64_SYSREG_CLIDR_EL1:    enmFeatureReg = HV_FEATURE_REG_CLIDR_EL1; break;
+        case ARMV8_AARCH64_SYSREG_CTR_EL0:      enmFeatureReg = HV_FEATURE_REG_CTR_EL0; break;
+        case ARMV8_AARCH64_SYSREG_DCZID_EL0:    enmFeatureReg = HV_FEATURE_REG_DCZID_EL0; break;
+        default:                                enmFeatureReg = (hv_feature_reg_t)-1; break;
+    }
+    if (enmFeatureReg != (hv_feature_reg_t)-1)
+    {
+        hv_return_t const rcHvGet = hv_vcpu_config_get_feature_reg(pVM->nem.s.hVCpuCfg, enmFeatureReg, puValue);
+        LogFlow(("enmR3DarwinNativeCpuIdRegQuery: hv_vcpu_config_get_feature_reg/%#x -> %#x%s %#RX64\n",
+                 idReg, rcHvGet, nemR3DarwinHvStatusName(rcHvGet), *puValue));
+        AssertLogRelMsgReturn(rcHvGet == HV_SUCCESS,
+                              ("rcHvGet=%#x %s idReg=%#x enmFeatureReg=%d\n",
+                               rcHvGet, nemR3DarwinHvStatusName(rcHvGet), idReg, enmFeatureReg),
+                              nemR3DarwinHvSts2Rc(rcHvGet));
+        return VINF_SUCCESS;
+    }
+
+    /*
+     * The system register ID scheme is the same as we're using in armv8.h.
+     */
+    AssertCompile(HV_SYS_REG_ID_AA64DFR0_EL1  == ARMV8_AARCH64_SYSREG_ID_AA64DFR0_EL1);
+    AssertCompile(HV_SYS_REG_ID_AA64DFR1_EL1  == ARMV8_AARCH64_SYSREG_ID_AA64DFR1_EL1);
+    AssertCompile(HV_SYS_REG_ID_AA64MMFR2_EL1 == ARMV8_AARCH64_SYSREG_ID_AA64MMFR2_EL1);
+    AssertCompile(HV_SYS_REG_ID_AA64ISAR1_EL1 == ARMV8_AARCH64_SYSREG_ID_AA64ISAR1_EL1);
+
+    hv_return_t const rcHvGet = hv_vcpu_get_sys_reg(pVCpu->nem.s.hVCpu, (hv_sys_reg_t)idReg, puValue);
+    LogRelFlow(("enmR3DarwinNativeCpuIdRegQuery: hv_vcpu_get_sys_reg/%#x -> %#x%s %#RX64\n",
+                idReg, rcHvGet, nemR3DarwinHvStatusName(rcHvGet), *puValue));
+    if (rcHvGet == HV_SUCCESS)
+        return VINF_SUCCESS;
+
+    /* This shall work for the following: */
+    AssertLogRelMsgReturn(   idReg != ARMV8_AARCH64_SYSREG_ID_AA64DFR0_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64DFR1_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64MMFR0_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64MMFR1_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64MMFR2_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64PFR0_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64PFR1_EL1,
+                          ("rcHvGet=%#x %s idReg=%#x enmFeatureReg=%d\n",
+                           rcHvGet, nemR3DarwinHvStatusName(rcHvGet), idReg, enmFeatureReg),
+                          VERR_INTERNAL_ERROR_5);
+    /* Unsupported registers fail with bad argument status: */
+    if (rcHvGet == HV_BAD_ARGUMENT)
+        return VERR_CPUM_UNSUPPORTED_ID_REGISTER;
+    return nemR3DarwinHvSts2Rc(rcHvGet);
+}
+
+
+/**
+ * @callback_method_impl{FNCPUMARMCPUIDREGUPDATE}
+ */
+static DECLCALLBACK(int) enmR3DarwinNativeCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t idReg,
+                                                         uint64_t uValue, void *pvUser, uint64_t *puUpdateValue)
+{
+    if (puUpdateValue)
+        *puUpdateValue = 0;
+    VMCPU_ASSERT_EMT(pVCpu);
+    RT_NOREF(pVM);
+
+    /*
+     * The system register ID scheme is the same as we're using in armv8.h.
+     */
+    AssertCompile(HV_SYS_REG_ID_AA64DFR0_EL1  == ARMV8_AARCH64_SYSREG_ID_AA64DFR0_EL1);
+    AssertCompile(HV_SYS_REG_ID_AA64DFR1_EL1  == ARMV8_AARCH64_SYSREG_ID_AA64DFR1_EL1);
+    AssertCompile(HV_SYS_REG_ID_AA64MMFR2_EL1 == ARMV8_AARCH64_SYSREG_ID_AA64MMFR2_EL1);
+    AssertCompile(HV_SYS_REG_ID_AA64ISAR1_EL1 == ARMV8_AARCH64_SYSREG_ID_AA64ISAR1_EL1);
+
+    /*
+     * Ignore attempts to set the three registers that aren't available via the
+     * hv_vcpu_get_sys_reg API (see enmR3DarwinNativeCpuIdRegQuery).
+     */
+    switch (idReg)
+    {
+        case ARMV8_AARCH64_SYSREG_CLIDR_EL1:
+        case ARMV8_AARCH64_SYSREG_CTR_EL0:
+        case ARMV8_AARCH64_SYSREG_DCZID_EL0:
+            if (puUpdateValue)
+                *puUpdateValue = uValue;
+            return VINF_SUCCESS;
+    }
+
+    /*
+     * Do the setting.
+     */
+    uint64_t          uOldValue = 0;
+    hv_return_t const rcHvGet   = hv_vcpu_get_sys_reg(pVCpu->nem.s.hVCpu, (hv_sys_reg_t)idReg, &uOldValue);
+    hv_return_t const rcHvSet   = hv_vcpu_set_sys_reg(pVCpu->nem.s.hVCpu, (hv_sys_reg_t)idReg, uValue);
+    Assert((rcHvGet == HV_SUCCESS) == (rcHvSet == HV_SUCCESS)); RT_NOREF(rcHvGet);
+    if (rcHvSet == HV_SUCCESS)
+    {
+        uint64_t          uUpdatedValue = 0;
+        hv_return_t const rcHvGet2      = hv_vcpu_get_sys_reg(pVCpu->nem.s.hVCpu, (hv_sys_reg_t)idReg, &uUpdatedValue);
+        Assert(rcHvGet2 == HV_SUCCESS); RT_NOREF(rcHvGet2);
+        LogRelFlow(("enmR3DarwinNativeCpuIdRegUpdate: idReg=%#x: old=%#RX64 new=%#RX64 -> %#RX64\n",
+                    idReg, uOldValue, uValue, uUpdatedValue));
+        if (puUpdateValue)
+            *puUpdateValue = rcHvGet2 == HV_SUCCESS ? uUpdatedValue : uValue;
+        return VINF_SUCCESS;
+    }
+    LogRel(("enmR3DarwinNativeCpuIdRegUpdate: hv_vcpu_set_sys_reg/%#x/%#RX64 -> %#x %s (OldValue=%#RX64 rcHvGet=%#x %s)\n",
+            idReg, uValue, rcHvSet, nemR3DarwinHvStatusName(rcHvSet), uOldValue, rcHvGet, nemR3DarwinHvStatusName(rcHvGet)));
+
+    /* This shall work for the following: */
+    AssertLogRelMsgReturn(   idReg != ARMV8_AARCH64_SYSREG_ID_AA64DFR0_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64DFR1_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64ISAR0_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64ISAR1_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64MMFR0_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64MMFR1_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64MMFR2_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64MMFR3_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64PFR0_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64PFR1_EL1,
+                          ("rcHvSet=%#x %s idReg=%#x\n", rcHvSet, nemR3DarwinHvStatusName(rcHvSet), idReg),
+                          VERR_INTERNAL_ERROR_5);
+
+    /* Unsupported registers fail with bad argument status when getting them: */
+    if (rcHvGet == HV_BAD_ARGUMENT)
+    {
+        /* HACK ALERT: If we're loading state, we ignore registers that cannot
+           be set provide the new value is zero. This handles the unsupported
+           ID registers from CPUMARMV8OLDIDREGS. */
+        if (pvUser && rcHvSet == HV_BAD_ARGUMENT && uValue == 0)
+        {
+            if (puUpdateValue)
+                *puUpdateValue = 0;
+            return VINF_SUCCESS;
+        }
+
+        return VERR_CPUM_UNSUPPORTED_ID_REGISTER;
+    }
+    /** @todo what's the other status codes here... */
+    return nemR3DarwinHvSts2Rc(rcHvSet);
+}
+
+#endif
+
+
+/**
+ * @callback_method_impl{PFNSSMINTLOADDONE,
+ *          For loading saved system ID registers.}
+ */
+static DECLCALLBACK(int) nemR3DarwinLoadDone(PVM pVM, PSSMHANDLE pSSM)
+{
+    VM_ASSERT_EMT(pVM);
+    RT_NOREF(pSSM);
+
+#ifdef WITH_NEW_CPUM_IDREG_INTERFACE
+    /*
+     * Call CPUMR3PopulateGuestFeaturesViaCallbacks on each VCpu to set the
+     * freshly loaded ID register values.  This ASSUMES that CPUM was able
+     * to sanitize the values after the load w/o the pfnUpdate status values.
+     */
+    for (VMCPUID idCpu = 0; idCpu < pVM->cCpus; idCpu++)
+    {
+        int const rc = VMR3ReqCallWait(pVM, idCpu, (PFNRT)CPUMR3PopulateGuestFeaturesViaCallbacks,
+                                       5, pVM, pVM->apCpusR3[idCpu], NULL, enmR3DarwinNativeCpuIdRegUpdate, pSSM);
+        if (RT_FAILURE(rc))
+            return SSMR3SetLoadError(pSSM, rc, RT_SRC_POS,
+                                     "CPUMR3PopulateGuestFeaturesViaCallbacks failed on #%u: %Rrc", idCpu, rc);
+    }
+#else
+    RT_NOREF(pVM);
+#endif
+    return VINF_SUCCESS;
+}
+
 
 /**
  * Worker to create the vCPU handle on the EMT running it later on (as required by HV).
@@ -1509,6 +1706,7 @@ static DECLCALLBACK(int) nemR3DarwinNativeInitVCpuOnEmt(PVM pVM, PVMCPU pVCpu, V
             return VMSetError(pVM, VERR_NEM_VM_CREATE_FAILED, RT_SRC_POS,
                               "Call to hv_vcpu_config_create failed on vCPU %u", idCpu);
 
+#ifndef WITH_NEW_CPUM_IDREG_INTERFACE
         /* Query ID registers and hand them to CPUM. */
         CPUMARMV8IDREGS IdRegs; RT_ZERO(IdRegs);
         for (uint32_t i = 0; i < RT_ELEMENTS(s_aIdRegs); i++)
@@ -1523,6 +1721,7 @@ static DECLCALLBACK(int) nemR3DarwinNativeInitVCpuOnEmt(PVM pVM, PVMCPU pVCpu, V
         int rc = CPUMR3PopulateFeaturesByIdRegisters(pVM, &IdRegs);
         if (RT_FAILURE(rc))
             return rc;
+#endif
     }
 
     hv_return_t hrc = hv_vcpu_create(&pVCpu->nem.s.hVCpu, &pVCpu->nem.s.pHvExit, pVM->nem.s.hVCpuCfg);
@@ -1530,12 +1729,19 @@ static DECLCALLBACK(int) nemR3DarwinNativeInitVCpuOnEmt(PVM pVM, PVMCPU pVCpu, V
         return VMSetError(pVM, VERR_NEM_VM_CREATE_FAILED, RT_SRC_POS,
                           "Call to hv_vcpu_create failed on vCPU %u: %#x (%Rrc)", idCpu, hrc, nemR3DarwinHvSts2Rc(hrc));
 
+    /** @todo r=bird: we should set the RES1 bit (31) here, shouldn't we? */
     hrc = hv_vcpu_set_sys_reg(pVCpu->nem.s.hVCpu, HV_SYS_REG_MPIDR_EL1, idCpu);
     if (hrc != HV_SUCCESS)
         return VMSetError(pVM, VERR_NEM_VM_CREATE_FAILED, RT_SRC_POS,
                           "Setting MPIDR_EL1 failed on vCPU %u: %#x (%Rrc)", idCpu, hrc, nemR3DarwinHvSts2Rc(hrc));
 
+#ifdef WITH_NEW_CPUM_IDREG_INTERFACE
+    return CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVCpu, idCpu == 0 ? enmR3DarwinNativeCpuIdRegQuery : NULL,
+                                                   enmR3DarwinNativeCpuIdRegUpdate, NULL /*pvUser*/);
+#else
+
     return VINF_SUCCESS;
+#endif
 }
 
 
@@ -2588,6 +2794,7 @@ VBOXSTRICTRC nemR3NativeRunGC(PVM pVM, PVMCPU pVCpu)
 
     AssertReturn(NEMR3CanExecuteGuest(pVM, pVCpu), VERR_NEM_IPE_9);
 
+#ifndef WITH_NEW_CPUM_IDREG_INTERFACE
     if (RT_UNLIKELY(!pVCpu->nem.s.fIdRegsSynced))
     {
         /*
@@ -2615,13 +2822,13 @@ VBOXSTRICTRC nemR3NativeRunGC(PVM pVM, PVMCPU pVCpu)
 #undef ID_SYS_REG_CREATE
         };
 
-        PCCPUMARMV8IDREGS pIdRegsGst = NULL;
-        int rc = CPUMR3QueryGuestIdRegs(pVM, &pIdRegsGst);
+        CPUMARMV8IDREGS IdRegsGst;
+        int rc = CPUMR3QueryGuestIdRegs(pVM, &IdRegsGst);
         AssertRCReturn(rc, rc);
 
         for (uint32_t i = 0; i < RT_ELEMENTS(s_aSysIdRegs); i++)
         {
-            uint64_t *pu64 = (uint64_t *)((uint8_t *)pIdRegsGst + s_aSysIdRegs[i].offIdStruct);
+            uint64_t *pu64 = (uint64_t *)((uintptr_t)&IdRegsGst + s_aSysIdRegs[i].offIdStruct);
             hv_return_t hrc = hv_vcpu_set_sys_reg(pVCpu->nem.s.hVCpu, s_aSysIdRegs[i].enmHvReg, *pu64);
             if (hrc != HV_SUCCESS)
                 return VMSetError(pVM, VERR_NEM_SET_REGISTERS_FAILED, RT_SRC_POS,
@@ -2630,6 +2837,7 @@ VBOXSTRICTRC nemR3NativeRunGC(PVM pVM, PVMCPU pVCpu)
 
         pVCpu->nem.s.fIdRegsSynced = true;
     }
+#endif /* WITH_NEW_CPUM_IDREG_INTERFACE */
 
     /*
      * Try switch to NEM runloop state.

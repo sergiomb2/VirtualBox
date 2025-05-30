@@ -310,6 +310,7 @@ static DBGFREGSUBFIELD const g_aIdAa64AfR1Fields[] =
 };
 
 
+#if 0
 static PCSUPARMSYSREGVAL cpumR3CpuIdInfoArmLookupInner(PCSUPARMSYSREGVAL paIdRegs, uint32_t cIdRegs, uint32_t idReg)
 {
     for (uint32_t i = 0; i < cIdRegs; i++)
@@ -317,8 +318,139 @@ static PCSUPARMSYSREGVAL cpumR3CpuIdInfoArmLookupInner(PCSUPARMSYSREGVAL paIdReg
             return &paIdRegs[i];
     return NULL;
 }
+#endif
 
 
+typedef struct CPUMCPUIDARMDESC const *PCPUMCPUIDARMDESC;
+static struct CPUMCPUIDARMDESC
+{
+    uint32_t            idReg;
+    const char         *pszName;
+    PCDBGFREGSUBFIELD   paFields;
+} const g_aCpumIdArmDescs[] =
+{
+#define ENTRY(a_RegNm, a_Desc)  {  RT_CONCAT(ARMV8_AARCH64_SYSREG_,a_RegNm), #a_RegNm, a_Desc }
+    ENTRY(TRCDEVARCH,           NULL),  // 2,1,7,15,6
+
+    // 3,0,0,0,0:
+    ENTRY(MIDR_EL1,             NULL),
+    ENTRY(MPIDR_EL1,            NULL),
+    ENTRY(REVIDR_EL1,           NULL),
+    // 3,0,0,1,0:
+    ENTRY(ID_PFR0_EL1,          NULL),
+    ENTRY(ID_PFR1_EL1,          NULL),
+    ENTRY(ID_DFR0_EL1,          NULL),
+    ENTRY(ID_AFR0_EL1,          NULL),
+    ENTRY(ID_MMFR0_EL1,         NULL),
+    ENTRY(ID_MMFR1_EL1,         NULL),
+    ENTRY(ID_MMFR2_EL1,         NULL),
+    ENTRY(ID_MMFR3_EL1,         NULL),
+    // 3,0,0,2,0:
+    ENTRY(ID_ISAR0_EL1,         NULL),
+    ENTRY(ID_ISAR1_EL1,         NULL),
+    ENTRY(ID_ISAR2_EL1,         NULL),
+    ENTRY(ID_ISAR3_EL1,         NULL),
+    ENTRY(ID_ISAR4_EL1,         NULL),
+    ENTRY(ID_ISAR5_EL1,         NULL),
+    ENTRY(ID_MMFR4_EL1,         NULL),
+    ENTRY(ID_ISAR6_EL1,         NULL),
+    // 3,0,0,3,0:
+    ENTRY(MVFR0_EL1,            NULL),
+    ENTRY(MVFR1_EL1,            NULL),
+    ENTRY(MVFR2_EL1,            NULL),
+    // 3,0,0,3,3 - undefined
+    ENTRY(ID_PFR2_EL1,          NULL),
+    ENTRY(ID_DFR1_EL1,          NULL),
+    ENTRY(ID_MMFR5_EL1,         NULL),
+    // 3,0,0,3,7 - undefined
+    // 3,0,0,4,0:
+    ENTRY(ID_AA64PFR0_EL1,      g_aIdAa64PfR0Fields),
+    ENTRY(ID_AA64PFR1_EL1,      g_aIdAa64PfR1Fields),
+    ENTRY(ID_AA64PFR2_EL1,      NULL),
+    // 3,0,0,4,3 - undefined
+    ENTRY(ID_AA64ZFR0_EL1,      NULL),
+    ENTRY(ID_AA64SMFR0_EL1,     NULL),
+    // 3,0,0,4,6 - undefined
+    ENTRY(ID_AA64FPFR0_EL1,     NULL),
+    // 3,0,0,5,0:
+    ENTRY(ID_AA64DFR0_EL1,      g_aIdAa64DfR0Fields),
+    ENTRY(ID_AA64DFR1_EL1,      g_aIdAa64DfR1Fields),
+    ENTRY(ID_AA64DFR2_EL1,      NULL),
+    // 3,0,0,5,3 - undefined
+    ENTRY(ID_AA64AFR0_EL1,      g_aIdAa64AfR0Fields),
+    ENTRY(ID_AA64AFR1_EL1,      g_aIdAa64AfR1Fields),
+    // 3,0,0,5,6 - undefined
+    // 3,0,0,5,7 - undefined
+    // 3,0,0,6,0:
+    ENTRY(ID_AA64ISAR0_EL1,     g_aIdAa64IsaR0Fields),
+    ENTRY(ID_AA64ISAR1_EL1,     g_aIdAa64IsaR1Fields),
+    ENTRY(ID_AA64ISAR2_EL1,     g_aIdAa64IsaR2Fields),
+    ENTRY(ID_AA64ISAR3_EL1,     NULL),
+    // 3,0,0,6,4 - undefined
+    // 3,0,0,6,5 - undefined
+    // 3,0,0,6,6 - undefined
+    // 3,0,0,6,7 - undefined
+    // 3,0,0,7,0:
+    ENTRY(ID_AA64MMFR0_EL1,     g_aIdAa64MmfR0Fields),
+    ENTRY(ID_AA64MMFR1_EL1,     g_aIdAa64MmfR1Fields),
+    ENTRY(ID_AA64MMFR2_EL1,     g_aIdAa64MmfR2Fields),
+    ENTRY(ID_AA64MMFR3_EL1,     NULL),
+    ENTRY(ID_AA64MMFR4_EL1,     NULL),
+    // 3,0,0,7,5 - undefined
+    // 3,0,0,7,6 - undefined
+    // 3,0,0,7,7 - undefined
+    ENTRY(ERRIDR_EL1,           NULL),                  // 3,0,5,3,0
+    ENTRY(PMSIDR_EL1,           NULL),                  // 3,0,9,9,7
+    ENTRY(PMBIDR_EL1,           NULL),                  // 3,0,9,10,7
+    ENTRY(TRBIDR_EL1,           NULL),                  // 3,0,9,11,7
+    ENTRY(PMMIR_EL1,            NULL),                  // 3,0,9,14,6
+    ENTRY(MPAMIDR_EL1,          NULL),                  // 3,0,10,4,4
+    ENTRY(MPAMBWIDR_EL1,        NULL),                  // 3,0,10,4,5
+    ENTRY(GMID_EL1,             NULL),                  // 3,1,0,0,4
+    ENTRY(SMIDR_EL1,            NULL),                  // 3,1,0,0,6
+
+    ENTRY(CLIDR_EL1,            g_aClidrEl1Fields),     // 3,1,0,0,1
+    ENTRY(AIDR_EL1,             NULL),                  // 3,1,0,0,7
+    ENTRY(CTR_EL0,              NULL),                  // 3,3,0,0,1
+    ENTRY(DCZID_EL0,            NULL),                  // 3,3,0,0,7
+    ENTRY(CNTFRQ_EL0,           NULL),                  // 3,3,14,0,0
+#undef  ENTRY
+};
+
+
+static const char *cpumR3CpuIdInfoArmFormatRegId(uint32_t idReg, char pszFallback[32])
+{
+    RTStrPrintf(pszFallback, 32, "s%u_%u_c%u_c%u_%u", /* gnu assembly compatible format */
+                ARMV8_AARCH64_SYSREG_ID_GET_OP0(idReg),
+                ARMV8_AARCH64_SYSREG_ID_GET_OP1(idReg),
+                ARMV8_AARCH64_SYSREG_ID_GET_CRN(idReg),
+                ARMV8_AARCH64_SYSREG_ID_GET_CRM(idReg),
+                ARMV8_AARCH64_SYSREG_ID_GET_OP2(idReg));
+    return pszFallback;
+}
+
+
+static const char *cpumR3CpuIdInfoArmGetName(uint32_t idReg, char pszFallback[32])
+{
+    /** @todo can do binary lookup here.   */
+    for (uint32_t i = 0; i < RT_ELEMENTS(g_aCpumIdArmDescs); i++)
+        if (g_aCpumIdArmDescs[i].idReg == idReg)
+            return g_aCpumIdArmDescs[i].pszName;
+    return cpumR3CpuIdInfoArmFormatRegId(idReg, pszFallback);
+}
+
+
+static PCPUMCPUIDARMDESC cpumR3CpuIdInfoArmGetDesc(uint32_t idReg)
+{
+    /** @todo can do binary lookup here.   */
+    for (uint32_t i = 0; i < RT_ELEMENTS(g_aCpumIdArmDescs); i++)
+        if (g_aCpumIdArmDescs[i].idReg == idReg)
+            return &g_aCpumIdArmDescs[i];
+    return NULL;
+}
+
+
+#if 0
 static PCSUPARMSYSREGVAL cpumR3CpuIdInfoArmLookup(PCPUMCPUIDINFOSTATEARMV8 pThis, uint32_t idReg)
 {
     return cpumR3CpuIdInfoArmLookupInner(pThis->paIdRegs, pThis->cIdRegs, idReg);
@@ -329,6 +461,7 @@ static PCSUPARMSYSREGVAL cpumR3CpuIdInfoArmLookup2(PCPUMCPUIDINFOSTATEARMV8 pThi
 {
     return cpumR3CpuIdInfoArmLookupInner(pThis->paIdRegs2, pThis->cIdRegs2, idReg);
 }
+#endif
 
 
 /**
@@ -355,61 +488,93 @@ VMMR3DECL(void) CPUMR3CpuIdInfoArmV8(PCPUMCPUIDINFOSTATEARMV8 pThis)
     AssertReturnVoid(   (pThis->paIdRegs2 && pThis->cIdRegs2 && pThis->Cmn.pszShort2 && pThis->Cmn.pszLabel2)
                      || (!pThis->paIdRegs2 && !pThis->cIdRegs2 && !pThis->Cmn.pszShort2 && !pThis->Cmn.pszLabel2));
 
+#ifdef VBOX_STRICT
+    /* The code ASSUMES correctly sorted arrays: */
+    for (uint32_t i = 0, iPrev = 0; i < pThis->cIdRegs; i++)
+    {
+        Assert(iPrev < pThis->paIdRegs[i].idReg);
+        iPrev = pThis->paIdRegs[i].idReg;
+    }
+    for (uint32_t i = 0, iPrev = 0; i < pThis->cIdRegs2; i++)
+    {
+        Assert(iPrev < pThis->paIdRegs2[i].idReg);
+        iPrev = pThis->paIdRegs2[i].idReg;
+    }
+#endif
 
-    /** @todo MIDR_EL1. */
+    /*
+     * Register counts.
+     */
+    if (pThis->Cmn.pszLabel2)
+        pHlp->pfnPrintf(pHlp, "%s: %u registers;  %s: %u registers\n",
+                        pThis->Cmn.pszLabel, pThis->cIdRegs,
+                        pThis->Cmn.pszLabel2, pThis->cIdRegs2);
+    else
+        pHlp->pfnPrintf(pHlp, "%s: %u registers\n",
+                        pThis->Cmn.pszLabel, pThis->cIdRegs);
 
     /*
      * Generic register dumping.
      */
-    static struct
+    PCSUPARMSYSREGVAL pIdReg       = pThis->paIdRegs;
+    PCSUPARMSYSREGVAL pIdReg2      = pThis->paIdRegs2;
+    uint32_t          cIdRegs2Left = pThis->cIdRegs2;
+    uint32_t          idRegPrev    = 0; /* ASSUMES no zero ID register possible */
+    for (uint32_t i = 0; i < pThis->cIdRegs; i++, pIdReg++)
     {
-        uint32_t            idReg;
-        const char         *pszName;
-        PCDBGFREGSUBFIELD   paFields;
-    } const s_aDescs[] =
-    {
-#define ENTRY(a_RegNm, a_Desc)  {  RT_CONCAT(ARMV8_AARCH64_SYSREG_,a_RegNm), #a_RegNm, a_Desc }
-        ENTRY(CLIDR_EL1,        g_aClidrEl1Fields),
-        ENTRY(ID_AA64PFR0_EL1,  g_aIdAa64PfR0Fields),
-        ENTRY(ID_AA64PFR1_EL1,  g_aIdAa64PfR1Fields),
-        ENTRY(ID_AA64ISAR0_EL1, g_aIdAa64IsaR0Fields),
-        ENTRY(ID_AA64ISAR1_EL1, g_aIdAa64IsaR1Fields),
-        ENTRY(ID_AA64ISAR2_EL1, g_aIdAa64IsaR2Fields),
-        ENTRY(ID_AA64MMFR0_EL1, g_aIdAa64MmfR0Fields),
-        ENTRY(ID_AA64MMFR1_EL1, g_aIdAa64MmfR1Fields),
-        ENTRY(ID_AA64MMFR2_EL1, g_aIdAa64MmfR2Fields),
-        ENTRY(ID_AA64DFR0_EL1,  g_aIdAa64DfR0Fields),
-        ENTRY(ID_AA64DFR1_EL1,  g_aIdAa64DfR1Fields),
-        ENTRY(ID_AA64AFR0_EL1,  g_aIdAa64AfR0Fields),
-        ENTRY(ID_AA64AFR1_EL1,  g_aIdAa64AfR1Fields),
-#undef  ENTRY
-    };
-    for (unsigned i = 0; i < RT_ELEMENTS(s_aDescs); i++)
-    {
-        PCSUPARMSYSREGVAL const pIdReg = cpumR3CpuIdInfoArmLookup(pThis, s_aDescs[i].idReg);
-        if (pIdReg)
+        char                    szName[32];
+        uint32_t const          idReg   = pIdReg->idReg;
+        PCPUMCPUIDARMDESC const pDesc   = cpumR3CpuIdInfoArmGetDesc(idReg);
+        const char * const      pszName = pDesc ? pDesc->pszName : cpumR3CpuIdInfoArmFormatRegId(idReg, szName);
+
+        if (pThis->Cmn.iVerbosity > 1)
         {
-            if (pThis->Cmn.iVerbosity > 1)
+            while (cIdRegs2Left > 0 && pIdReg2->idReg < idReg)
             {
-                PCSUPARMSYSREGVAL const pIdReg2 = cpumR3CpuIdInfoArmLookup2(pThis, s_aDescs[i].idReg);
-                if (pIdReg2)
-                    pHlp->pfnPrintf(pHlp, "%s %16s: %#018RX64 (%s %#018RX64)\n",
-                                    pThis->Cmn.pszLabel, s_aDescs[i].pszName, pIdReg->uValue,
-                                    pThis->Cmn.pszLabel2, pIdReg2->uValue);
-                else
-                    pHlp->pfnPrintf(pHlp, "%s %16s: %#018RX64\n",
-                                    pThis->Cmn.pszLabel, s_aDescs[i].pszName, pIdReg->uValue);
-                cpumR3CpuIdInfoVerboseCompareListU64(&pThis->Cmn, pIdReg->uValue, pIdReg2 ? pIdReg2->uValue : 0,
-                                                     s_aDescs[i].paFields, 60, true /*fColumnHeaders*/);
+                char szName2[32];
+                pHlp->pfnPrintf(pHlp, "%s %16s: .................. (%s %#018RX64)\n",
+                                pThis->Cmn.pszLabel, cpumR3CpuIdInfoArmGetName(pIdReg2->idReg, szName2),
+                                pThis->Cmn.pszLabel2, pIdReg2->uValue);
+                cIdRegs2Left--;
+                pIdReg2++;
             }
+
+            if (cIdRegs2Left > 0 && pIdReg2->idReg == idReg)
+                pHlp->pfnPrintf(pHlp, "%s %16s: %#018RX64 (%s %#018RX64)\n",
+                                pThis->Cmn.pszLabel, pszName, pIdReg->uValue,
+                                pThis->Cmn.pszLabel2, pIdReg2->uValue);
             else
+                pHlp->pfnPrintf(pHlp, "%s %16s: %#018RX64\n",
+                                pThis->Cmn.pszLabel, pszName, pIdReg->uValue);
+            if (pDesc && pDesc->paFields)
+                cpumR3CpuIdInfoVerboseCompareListU64(&pThis->Cmn, pIdReg->uValue,
+                                                     cIdRegs2Left > 0 && pIdReg2->idReg == idReg ? pIdReg2->uValue : 0,
+                                                     pDesc->paFields, 60, true /*fColumnHeaders*/);
+            if (cIdRegs2Left > 0 && pIdReg2->idReg == idReg)
             {
-                pHlp->pfnPrintf(pHlp, "%16s = %#018RX64",
-                                s_aDescs[i].pszName, pIdReg->uValue);
-                cpumR3CpuIdInfoMnemonicListU64(&pThis->Cmn, pIdReg->uValue, s_aDescs[i].paFields, " :", 0);
+                cIdRegs2Left--;
+                pIdReg2++;
             }
         }
+        else
+        {
+            pHlp->pfnPrintf(pHlp, "%16s = %#018RX64\n", pszName, pIdReg->uValue);
+            if (pDesc && pDesc->paFields)
+                cpumR3CpuIdInfoMnemonicListU64(&pThis->Cmn, pIdReg->uValue, pDesc->paFields, " :", 0);
+        }
+        idRegPrev = idReg;
     }
+
+    if (pThis->Cmn.iVerbosity > 1)
+        while (cIdRegs2Left > 0)
+        {
+            char szName2[32];
+            pHlp->pfnPrintf(pHlp, "%s %16s: .................. (%s %#018RX64)\n",
+                            pThis->Cmn.pszLabel, cpumR3CpuIdInfoArmGetName(pIdReg2->idReg, szName2),
+                            pThis->Cmn.pszLabel2, pIdReg2->uValue);
+            cIdRegs2Left--;
+            pIdReg2++;
+        }
 }
 
 

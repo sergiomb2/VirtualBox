@@ -7313,10 +7313,15 @@ static void supdrvIOCtl_ArmGetSysRegsOnCpu(PSUPARMGETSYSREGS pReq, uint32_t cons
      * the range 3,0,0,2,0 thru 3,0,0,7,7 are defined to be accessible and if not
      * defined will read-as-zero.
      */
+
+    /* The first three seems to be in a sparse block. Haven't found any docs on
+       what the Op2 values 1-4 and 7 may do if read. */
     READ_SYS_REG_NAMED(3, 0, 0, 0, 0, MIDR_EL1);
     READ_SYS_REG_NAMED(3, 0, 0, 0, 5, MPIDR_EL1);
     READ_SYS_REG_NAMED(3, 0, 0, 0, 6, REVIDR_EL1);
 
+    /* AArch64 feature registers
+       The CRm values 4 thru 7 are RAZ when undefined as per the D23.3.1 note. */
     READ_SYS_REG_NAMED(3, 0, 0, 4, 0, ID_AA64PFR0_EL1);
     uint64_t const fPfr0 = uRegVal;
     bool const fA32 = ((fPfr0 & ARMV8_ID_AA64PFR0_EL1_EL0_MASK) >> ARMV8_ID_AA64PFR0_EL1_EL0_SHIFT) == ARMV8_ID_AA64PFR0_EL1_EL0_AARCH64_AARCH32
@@ -7361,11 +7366,9 @@ static void supdrvIOCtl_ArmGetSysRegsOnCpu(PSUPARMGETSYSREGS pReq, uint32_t cons
     READ_SYS_REG_UNDEF(3, 0, 0, 7, 6);
     READ_SYS_REG_UNDEF(3, 0, 0, 7, 7);
 
-    /*
-     * AArch32 feature registers (covered by the D23.3.1 note).
-     * If AA64PFR0 doesn't indicate any AARCH32 support, switch to only report
-     * these registers if they are non-zero.
-     */
+    /* AArch32 feature registers (covered by the D23.3.1 note).
+       If AA64PFR0 doesn't indicate any AARCH32 support, switch to only report
+       these registers if they are non-zero. */
     if (!fA32)
         fFlags &= ~SUP_ARM_SYS_REG_F_INC_ZERO_REG_VAL;
     READ_SYS_REG_NAMED(3, 0, 0, 1, 0, ID_PFR0_EL1);
@@ -7407,7 +7410,7 @@ static void supdrvIOCtl_ArmGetSysRegsOnCpu(PSUPARMGETSYSREGS pReq, uint32_t cons
     fFlags = fSavedFlags; /* restore SUP_ARM_SYS_REG_F_INC_ZERO_REG_VAL */
 
     /*
-     * Feature dependent registers:
+     * Feature dependent registers outside the ID block:
      */
     bool const fFeatRas = ((fPfr0 >> ARMV8_ID_AA64PFR0_EL1_RAS_SHIFT) & 0xfU) >= 1; /* FEAT_RAS <->  ID_AA64PFR0_EL1.RAS >= 1 */
     if (fFeatRas)

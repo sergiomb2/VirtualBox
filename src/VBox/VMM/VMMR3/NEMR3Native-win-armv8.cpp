@@ -883,6 +883,306 @@ static int nemR3WinInitCreatePartition(PVM pVM, PRTERRINFO pErrInfo)
     return rc;
 }
 
+#ifdef WITH_NEW_CPUM_IDREG_INTERFACE
+
+#define ENTRY_REGULAR(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, a_RegNm, a_uWHv, a_enmWHv, a_fMustWork, a_fPerVCpu) \
+    { RT_CONCAT(ARMV8_AARCH64_SYSREG_, a_RegNm), \
+      0 /*fMissing*/, 0 /*fUndefined*/, a_fMustWork, a_fPerVCpu, \
+         RT_CONCAT(ARMV8_AARCH64_SYSREG_, a_RegNm) == ARMV8_AARCH64_SYSREG_ID_CREATE(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2) \
+      && (unsigned)(a_enmWHv)                      == (a_uWHv) ? 0 : -1 /*u1Assert1*/, \
+      (a_enmWHv), #a_RegNm }
+
+#define ENTRY_MISSING(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, a_RegNm, a_uWHv) \
+    { RT_CONCAT(ARMV8_AARCH64_SYSREG_, a_RegNm), \
+      1 /*fMissing*/, 0 /*fUndefined*/, 0 /*fMustWork*/, 0 /*fPerVCpu*/, \
+      RT_CONCAT(ARMV8_AARCH64_SYSREG_, a_RegNm) == ARMV8_AARCH64_SYSREG_ID_CREATE(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2) ? 0 : -1 /*u1Assert1*/, \
+      (WHV_REGISTER_NAME)(a_uWHv), #a_RegNm }
+
+#define ENTRY_UNDEF(  a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, a_uWHv) \
+    { ARMV8_AARCH64_SYSREG_ID_CREATE(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2), \
+      0 /*fMissing*/, 1 /*fUndefined*/, 0 /*fMustWork*/, 0 /*fPerVCpu*/, 0 /*u1Assert1*/, \
+      (WHV_REGISTER_NAME)(a_uWHv), #a_Op0 "," #a_Op1 "," #a_CRn "," #a_CRm "," #a_Op2 }
+
+static struct
+{
+    /** Our register ID value. */
+    uint32_t            idReg      : 27;
+    uint32_t            fMissing   : 1;
+    uint32_t            fUndefined : 1;
+    uint32_t            fMustWork  : 1; /**< If set, we expect this register to be both gettable and settable. */
+    uint32_t            fPerVCpu   : 1; /**< Set if this is per VCpu. */
+    uint32_t            u1Assert1  : 1;
+    /** The windows register enum name. */
+    WHV_REGISTER_NAME   enmHvName;
+    /** The register name. */
+    const char         *pszName;
+} const g_aNemWinArmIdRegs[] =
+{
+    /*
+     * Standard ID registers.
+     */
+    /* The first three seems to be in a sparse block. */
+    ENTRY_REGULAR(3, 0, 0, 0, 0, MIDR_EL1,              0x00040051, WHvArm64RegisterMidrEl1,            0, 1),
+    ENTRY_REGULAR(3, 0, 0, 0, 5, MPIDR_EL1,             0x00040001, WHvArm64RegisterMpidrEl1,           0, 1),
+    ENTRY_REGULAR(3, 0, 0, 0, 6, REVIDR_EL1,            0x00040055, WHvArm64RegisterRevidrEl1,          0, 0),
+
+    /* AArch64 feature registers. */
+    ENTRY_REGULAR(3, 0, 0, 1, 0, ID_PFR0_EL1,           0x00022008, WHvArm64RegisterIdPfr0El1,          0, 0),
+    ENTRY_REGULAR(3, 0, 0, 1, 1, ID_PFR1_EL1,           0x00022009, WHvArm64RegisterIdPfr1El1,          0, 0),
+    ENTRY_REGULAR(3, 0, 0, 1, 2, ID_DFR0_EL1,           0x0002200a, WHvArm64RegisterIdDfr0El1,          0, 0),
+    ENTRY_MISSING(3, 0, 0, 1, 3, ID_AFR0_EL1,           0x0002200b),
+    ENTRY_REGULAR(3, 0, 0, 1, 4, ID_MMFR0_EL1,          0x0002200c, WHvArm64RegisterIdMmfr0El1,         0, 0),
+    ENTRY_REGULAR(3, 0, 0, 1, 5, ID_MMFR1_EL1,          0x0002200d, WHvArm64RegisterIdMmfr1El1,         0, 0),
+    ENTRY_REGULAR(3, 0, 0, 1, 6, ID_MMFR2_EL1,          0x0002200e, WHvArm64RegisterIdMmfr2El1,         0, 0),
+    ENTRY_REGULAR(3, 0, 0, 1, 7, ID_MMFR3_EL1,          0x0002200f, WHvArm64RegisterIdMmfr3El1,         0, 0),
+    ENTRY_REGULAR(3, 0, 0, 2, 0, ID_ISAR0_EL1,          0x00022010, WHvArm64RegisterIdIsar0El1,         0, 0),
+    ENTRY_REGULAR(3, 0, 0, 2, 1, ID_ISAR1_EL1,          0x00022011, WHvArm64RegisterIdIsar1El1,         0, 0),
+    ENTRY_REGULAR(3, 0, 0, 2, 2, ID_ISAR2_EL1,          0x00022012, WHvArm64RegisterIdIsar2El1,         0, 0),
+    ENTRY_REGULAR(3, 0, 0, 2, 3, ID_ISAR3_EL1,          0x00022013, WHvArm64RegisterIdIsar3El1,         0, 0),
+    ENTRY_REGULAR(3, 0, 0, 2, 4, ID_ISAR4_EL1,          0x00022014, WHvArm64RegisterIdIsar4El1,         0, 0),
+    ENTRY_REGULAR(3, 0, 0, 2, 5, ID_ISAR5_EL1,          0x00022015, WHvArm64RegisterIdIsar5El1,         0, 0),
+    ENTRY_MISSING(3, 0, 0, 2, 6, ID_MMFR4_EL1,          0x00022016),
+    ENTRY_MISSING(3, 0, 0, 2, 7, ID_ISAR6_EL1,          0x00022017),
+    ENTRY_MISSING(3, 0, 0, 3, 0, MVFR0_EL1,             0x00022018),
+    ENTRY_MISSING(3, 0, 0, 3, 1, MVFR1_EL1,             0x00022019),
+    ENTRY_MISSING(3, 0, 0, 3, 2, MVFR2_EL1,             0x0002201a),
+    ENTRY_UNDEF(  3, 0, 0, 3, 3,                        0x0002201b),
+    ENTRY_REGULAR(3, 0, 0, 3, 4, ID_PFR2_EL1,           0x0002201c, WHvArm64RegisterIdPfr2El1,          0, 0),
+    ENTRY_MISSING(3, 0, 0, 3, 5, ID_DFR1_EL1,           0x0002201d),
+    ENTRY_MISSING(3, 0, 0, 3, 6, ID_MMFR5_EL1,          0x0002201e),
+    ENTRY_UNDEF(  3, 0, 0, 3, 7,                        0x0002201f),
+    ENTRY_REGULAR(3, 0, 0, 4, 0, ID_AA64PFR0_EL1,       0x00022020, WHvArm64RegisterIdAa64Pfr0El1,      1, 0),
+    ENTRY_REGULAR(3, 0, 0, 4, 1, ID_AA64PFR1_EL1,       0x00022021, WHvArm64RegisterIdAa64Pfr1El1,      1, 0),
+    ENTRY_REGULAR(3, 0, 0, 4, 2, ID_AA64PFR2_EL1,       0x00022022, WHvArm64RegisterIdAa64Pfr2El1,      0, 0),
+    ENTRY_UNDEF(  3, 0, 0, 4, 3,                        0x00022023),
+    ENTRY_REGULAR(3, 0, 0, 4, 4, ID_AA64ZFR0_EL1,       0x00022024, WHvArm64RegisterIdAa64Zfr0El1,      0, 0),
+    ENTRY_REGULAR(3, 0, 0, 4, 5, ID_AA64SMFR0_EL1,      0x00022025, WHvArm64RegisterIdAa64Smfr0El1,     0, 0),
+    ENTRY_UNDEF(  3, 0, 0, 4, 6,                        0x00022026),
+    ENTRY_MISSING(3, 0, 0, 4, 7, ID_AA64FPFR0_EL1,      0x00022027),
+    ENTRY_REGULAR(3, 0, 0, 5, 0, ID_AA64DFR0_EL1,       0x00022028, WHvArm64RegisterIdAa64Dfr0El1,      0, 0),
+    ENTRY_REGULAR(3, 0, 0, 5, 1, ID_AA64DFR1_EL1,       0x00022029, WHvArm64RegisterIdAa64Dfr1El1,      0, 0),
+    ENTRY_MISSING(3, 0, 0, 5, 2, ID_AA64DFR2_EL1,       0x0002202a),
+    ENTRY_UNDEF(  3, 0, 0, 5, 3,                        0x0002202b),
+    ENTRY_MISSING(3, 0, 0, 5, 4, ID_AA64AFR0_EL1,       0x0002202c),
+    ENTRY_MISSING(3, 0, 0, 5, 5, ID_AA64AFR1_EL1,       0x0002202d),
+    ENTRY_UNDEF(  3, 0, 0, 5, 6,                        0x0002202e),
+    ENTRY_UNDEF(  3, 0, 0, 5, 7,                        0x0002202f),
+    ENTRY_REGULAR(3, 0, 0, 6, 0, ID_AA64ISAR0_EL1,      0x00022030, WHvArm64RegisterIdAa64Isar0El1,     1, 0),
+    ENTRY_REGULAR(3, 0, 0, 6, 1, ID_AA64ISAR1_EL1,      0x00022031, WHvArm64RegisterIdAa64Isar1El1,     1, 0),
+    ENTRY_REGULAR(3, 0, 0, 6, 2, ID_AA64ISAR2_EL1,      0x00022032, WHvArm64RegisterIdAa64Isar2El1,     1, 0),
+    ENTRY_MISSING(3, 0, 0, 6, 3, ID_AA64ISAR3_EL1,      0x00022033),
+    ENTRY_UNDEF(  3, 0, 0, 6, 4,                        0x00022034),
+    ENTRY_UNDEF(  3, 0, 0, 6, 5,                        0x00022035),
+    ENTRY_UNDEF(  3, 0, 0, 6, 6,                        0x00022036),
+    ENTRY_UNDEF(  3, 0, 0, 6, 7,                        0x00022037),
+    ENTRY_REGULAR(3, 0, 0, 7, 0, ID_AA64MMFR0_EL1,      0x00022038, WHvArm64RegisterIdAa64Mmfr0El1,     1, 0),
+    ENTRY_REGULAR(3, 0, 0, 7, 1, ID_AA64MMFR1_EL1,      0x00022039, WHvArm64RegisterIdAa64Mmfr1El1,     1, 0),
+    ENTRY_REGULAR(3, 0, 0, 7, 2, ID_AA64MMFR2_EL1,      0x0002203a, WHvArm64RegisterIdAa64Mmfr2El1,     1, 0),
+    ENTRY_REGULAR(3, 0, 0, 7, 3, ID_AA64MMFR3_EL1,      0x0002203b, WHvArm64RegisterIdAa64Mmfr3El1,     0, 0),
+    ENTRY_REGULAR(3, 0, 0, 7, 4, ID_AA64MMFR4_EL1,      0x0002203c, WHvArm64RegisterIdAa64Mmfr4El1,     0, 0),
+    ENTRY_UNDEF(  3, 0, 0, 7, 5,                        0x0002203d),
+    ENTRY_UNDEF(  3, 0, 0, 7, 6,                        0x0002203e),
+    ENTRY_UNDEF(  3, 0, 0, 7, 7,                        0x0002203f),
+
+    /*
+     * Feature dependent registers outside the ID block:
+     */
+    // READ_SYS_REG_NAMED(3, 0, 5, 3, 0, ERRIDR_EL1),      /* FEAT_RAS */
+    //
+    // READ_SYS_REG_NAMED(3, 0, 9,  9, 7, PMSIDR_EL1),     /* FEAT_SPS */
+    // READ_SYS_REG_NAMED(3, 0, 9, 10, 7, PMBIDR_EL1),     /* FEAT_SPS*/
+    //
+    // READ_SYS_REG_NAMED(3, 0, 9, 11, 7, TRBIDR_EL1),     /* FEAT_TRBE */
+    //
+    // READ_SYS_REG_NAMED(3, 0, 9, 14, 6, PMMIR_EL1),      /* FEAT_PMUv3p4 */
+    //
+    // READ_SYS_REG_NAMED(3, 0, 10, 4, 4, MPAMIDR_EL1),    /* FEAT_MPAM */
+    // READ_SYS_REG_NAMED(3, 0, 10, 4, 5, MPAMBWIDR_EL1),  /* FEAT_MPAM_PE_BW_CTRL (&& FEAT_MPAM) */
+    //
+    // /// @todo LORID_EL1 3,0,10,4,7  - FEAT_LOR
+    // /// @todo PMCEID0_EL0 ?
+    // /// @todo PMCEID1_EL0 ?
+    // /// @todo AMCFGR_EL0 ?
+    // /// @todo AMCGCR_EL0 ?
+    // /// @todo AMCG1IDR_EL0 ?
+    // /// @todo AMEVTYPER0<n>_EL0 ?
+    //
+    // READ_SYS_REG_NAMED(3, 1, 0, 0, 4, GMID_EL1),        /* FEAT_MTE2 */
+    //
+    // READ_SYS_REG_NAMED(3, 1, 0, 0, 6, SMIDR_EL1),       /* FEAT_SME */
+    //
+    // /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0,  8, 7, TRCIDR0),  */
+    // /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0,  9, 7, TRCIDR1),  */
+    // /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0, 10, 7, TRCIDR2),  */
+    // /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0, 11, 7, TRCIDR3),  */
+    // /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0, 12, 7, TRCIDR4),  */
+    // /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0, 13, 7, TRCIDR5),  */
+    // /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0, 14, 7, TRCIDR6),  */
+    // /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0, 15, 7, TRCIDR7),  */
+    // /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0,  0, 6, TRCIDR8),  */
+    // /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0,  1, 6, TRCIDR10),  */
+    // /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0,  2, 6, TRCIDR11),  */
+    // /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0,  4, 6, TRCIDR12),  */
+    // /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0,  5, 6, TRCIDR13),  */
+    //
+    // READ_SYS_REG_NAMED(2, 1, 7, 15, 6, TRCDEVARCH),     /* FEAT_ETE */
+
+    /*
+     * Collections of other read-only registers.
+     */
+    /** @todo none of thse work. First thought they were not partition wide and
+     *        added the fPerVCpu flag, but that didn't help, so just ignoring
+     *        these for now... */
+    ENTRY_REGULAR(3, 1, 0, 0, 1, CLIDR_EL1,             0x00040032, WHvArm64RegisterClidrEl1,           0, 0),
+    //READ_SYS_REG_NAMED(3, 1, 0, 0, 7, AIDR_EL1),
+    ENTRY_REGULAR(3, 3, 0, 0, 1, CTR_EL0,               0x00040036, WHvArm64RegisterCtrEl0,             0, 0),
+    ENTRY_REGULAR(3, 3, 0, 0, 7, DCZID_EL0,             0x00040038, WHvArm64RegisterDczidEl0,           0, 0),
+    ENTRY_REGULAR(3, 3,14, 0, 0, CNTFRQ_EL0,            0x00058000, WHvArm64RegisterCntfrqEl0,          0, 0),
+};
+#undef ENTRY_REGULAR
+#undef ENTRY_MISSING
+#undef ENTRY_UNDEF
+
+
+/**
+ * @callback_method_impl{FNCPUMARMCPUIDREGQUERY}
+ */
+static DECLCALLBACK(int) enmR3WinCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, uint32_t idReg, void *pvUser, uint64_t *puValue)
+{
+    RT_NOREF_PV(pvUser);
+    *puValue = 0;
+
+    /*
+     * Lookup the register in the translation table.
+     */
+    size_t iReg = 0;
+    while (iReg < RT_ELEMENTS(g_aNemWinArmIdRegs) && g_aNemWinArmIdRegs[iReg].idReg != idReg)
+        iReg++;
+    if (iReg >= RT_ELEMENTS(g_aNemWinArmIdRegs))
+    {
+        LogFlow(("enmR3WinCpuIdRegQuery: Unknown register: %#x\n", idReg));
+        return VERR_CPUM_UNSUPPORTED_ID_REGISTER;
+    }
+
+    /*
+     * Query the register.
+     * Note! These (most) are partition wide registers and need to be queried/set with WHV_ANY_VP.
+     */
+    uint32_t           idCpu   = !g_aNemWinArmIdRegs[iReg].fPerVCpu ? WHV_ANY_VP : pVCpu->idCpu;
+    WHV_REGISTER_NAME  enmName = g_aNemWinArmIdRegs[iReg].enmHvName;
+    WHV_REGISTER_VALUE Value   = {};
+    HRESULT            hrc     = WHvGetVirtualProcessorRegisters(pVM->nem.s.hPartition, idCpu, &enmName, 1, &Value);
+    if (hrc == ERROR_HV_INVALID_PARAMETER)
+    {
+        uint32_t const idCpu2 = idCpu == WHV_ANY_VP ? pVCpu->idCpu : WHV_ANY_VP;
+        HRESULT const  hrc2   = WHvGetVirtualProcessorRegisters(pVM->nem.s.hPartition, idCpu2, &enmName, 1, &Value);
+        if (SUCCEEDED(hrc2))
+        {
+            LogRel(("enmR3WinCpuIdRegQuery: TODO: mixed up fPerVCpu setting for idReg=%#x/%s: %d -> %Rhrc, while %d works\n",
+                    idReg, g_aNemWinArmIdRegs[iReg].pszName, idCpu, hrc, idCpu2));
+            idCpu = idCpu2;
+            hrc   = hrc2;
+        }
+    }
+    LogRel2(("enmR3WinCpuIdRegQuery: WHvGetVirtualProcessorRegisters(,%d, %#x (%s),) -> %Rhrc %#RX64\n",
+             idCpu, g_aNemWinArmIdRegs[iReg].enmHvName, g_aNemWinArmIdRegs[iReg].pszName, hrc, Value.Reg64));
+    if (SUCCEEDED(hrc))
+    {
+        *puValue = Value.Reg64;
+        return VINF_SUCCESS;
+    }
+
+    /* Do we complain about this? */
+    if (!g_aNemWinArmIdRegs[iReg].fUndefined && !g_aNemWinArmIdRegs[iReg].fUndefined)
+    {
+        LogFlow(("NEM: WHvGetVirtualProcessorRegisters(,%d, %#x (%s),) failed: %Rhrc\n",
+                 idCpu, g_aNemWinArmIdRegs[iReg].enmHvName, g_aNemWinArmIdRegs[iReg].pszName, hrc));
+        AssertLogRelMsgReturn(!g_aNemWinArmIdRegs[iReg].fMustWork,
+                              ("NEM: WHvGetVirtualProcessorRegisters(,%d, %#x (%s),) failed: %Rhrc\n",
+                               idCpu, g_aNemWinArmIdRegs[iReg].enmHvName, g_aNemWinArmIdRegs[iReg].pszName, hrc),
+                              VERR_NEM_GET_REGISTERS_FAILED);
+    }
+    /** @todo do we return other status codes here? */
+    return VERR_CPUM_UNSUPPORTED_ID_REGISTER;
+}
+
+
+/**
+ * @callback_method_impl{FNCPUMARMCPUIDREGUPDATE}
+ */
+static DECLCALLBACK(int) enmR3WinCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t idReg, uint64_t uValue, void *pvUser,
+                                                uint64_t *puUpdateValue)
+{
+    if (puUpdateValue)
+        *puUpdateValue = 0;
+    VMCPU_ASSERT_EMT(pVCpu);
+    RT_NOREF(pvUser);
+
+    /*
+     * Lookup the register in the translation table.
+     */
+    size_t iReg = 0;
+    while (iReg < RT_ELEMENTS(g_aNemWinArmIdRegs) && g_aNemWinArmIdRegs[iReg].idReg != idReg)
+        iReg++;
+    if (iReg >= RT_ELEMENTS(g_aNemWinArmIdRegs))
+    {
+        LogFlow(("enmR3WinCpuIdRegUpdate: Unknown register: %#x\n", idReg));
+        return VERR_CPUM_UNSUPPORTED_ID_REGISTER;
+    }
+
+    /*
+     * Query the current value, set it and query the updated value.
+     * Note! These are partition wide registers and need to be queried/set with WHV_ANY_VP.
+     */
+    HANDLE const       hPartition = pVM->nem.s.hPartition;
+    WHV_REGISTER_NAME  enmName    = g_aNemWinArmIdRegs[iReg].enmHvName;
+    uint32_t           idCpu      = !g_aNemWinArmIdRegs[iReg].fPerVCpu ? WHV_ANY_VP : pVCpu->idCpu;
+    WHV_REGISTER_VALUE OldValue   = {};
+    HRESULT            hrcGet     = WHvGetVirtualProcessorRegisters(hPartition, idCpu, &enmName, 1, &OldValue);
+    if (hrcGet == ERROR_HV_INVALID_PARAMETER)
+    {
+        uint32_t const idCpu2 = idCpu == WHV_ANY_VP ? pVCpu->idCpu : WHV_ANY_VP;
+        HRESULT const  hrc2   = WHvGetVirtualProcessorRegisters(pVM->nem.s.hPartition, idCpu2, &enmName, 1, &OldValue);
+        if (SUCCEEDED(hrc2))
+        {
+            LogRel(("enmR3WinCpuIdRegUpdate: TODO: mixed up fPerVCpu setting for idReg=%#x/%s: %d -> %Rhrc, while %d works\n",
+                    idReg, g_aNemWinArmIdRegs[iReg].pszName, idCpu, hrcGet, idCpu2));
+            idCpu  = idCpu2;
+            hrcGet = hrc2;
+        }
+    }
+
+    WHV_REGISTER_VALUE NewValue   = {};
+    NewValue.Reg64 = uValue;
+    HRESULT const      hrcSet     = WHvSetVirtualProcessorRegisters(hPartition, idCpu, &enmName, 1, &NewValue);
+    LogRelFlow(("enmR3WinCpuIdRegUpdate: WHvSetVirtualProcessorRegisters(,%d, %#x (%s), %#RX64) -> %Rhrc\n",
+                idCpu, g_aNemWinArmIdRegs[iReg].enmHvName, g_aNemWinArmIdRegs[iReg].pszName, uValue, hrcSet));
+    Assert(SUCCEEDED(hrcGet) == SUCCEEDED(hrcSet)); RT_NOREF(hrcGet);
+    if (SUCCEEDED(hrcSet))
+    {
+        WHV_REGISTER_VALUE UpdatedValue = {};
+        HRESULT const  hrcGet2 = WHvGetVirtualProcessorRegisters(hPartition, idCpu, &enmName, 1, &UpdatedValue);
+        Assert(SUCCEEDED(hrcGet2));
+        LogRelFlow(("enmR3WinCpuIdRegUpdate: idReg=%#x (%s) idCpu=%d: old=%#RX64 new=%#RX64 -> %#RX64\n",
+                    idReg, g_aNemWinArmIdRegs[iReg].pszName, idCpu, OldValue.Reg64, uValue, UpdatedValue.Reg64));
+
+        if (puUpdateValue)
+            *puUpdateValue = SUCCEEDED(hrcGet2) ? UpdatedValue.Reg64 : uValue;
+        return VINF_SUCCESS;
+    }
+
+    AssertLogRelMsgReturn(!g_aNemWinArmIdRegs[iReg].fMustWork,
+                          ("NEM: hrcSet=%Rhrc idReg=%#x (%s)\n", hrcSet, idReg, g_aNemWinArmIdRegs[iReg].pszName),
+                          VERR_INTERNAL_ERROR_5);
+
+    /* Unsupported registers fail with bad argument status when getting them: */
+    // if (hrcGet == E_INVALIDARG)
+        return VERR_CPUM_UNSUPPORTED_ID_REGISTER;
+    // /** @todo what's the other status codes here... */
+    // return nemR3DarwinHvSts2Rc(rcHvSet);
+}
+
+#endif /* WITH_NEW_CPUM_IDREG_INTERFACE */
 
 static int nemR3NativeInitSetupVm(PVM pVM)
 {
@@ -960,6 +1260,7 @@ static int nemR3NativeInitSetupVm(PVM pVM)
 
         if (idCpu == 0)
         {
+#ifndef WITH_NEW_CPUM_IDREG_INTERFACE
             /*
              * Need to query the ID registers and populate CPUM,
              * these are partition wide registers and need to be queried/set with WHV_ANY_VP.
@@ -1003,20 +1304,19 @@ static int nemR3NativeInitSetupVm(PVM pVM)
                 return rc;
 
             /* Apply any overrides to the partition. */
-            PCCPUMARMV8IDREGS pIdRegsGst = NULL;
-            rc = CPUMR3QueryGuestIdRegs(pVM, &pIdRegsGst);
+            rc = CPUMR3QueryGuestIdRegs(pVM, &IdRegs);
             AssertRCReturn(rc, rc);
 
-            aValues[0].Reg64 = pIdRegsGst->u64RegIdAa64Dfr0El1;
-            aValues[1].Reg64 = pIdRegsGst->u64RegIdAa64Dfr1El1;
-            aValues[2].Reg64 = pIdRegsGst->u64RegIdAa64Isar0El1;
-            aValues[3].Reg64 = pIdRegsGst->u64RegIdAa64Isar1El1;
-            aValues[4].Reg64 = pIdRegsGst->u64RegIdAa64Isar2El1;
-            aValues[5].Reg64 = pIdRegsGst->u64RegIdAa64Mmfr0El1;
-            aValues[6].Reg64 = pIdRegsGst->u64RegIdAa64Mmfr1El1;
-            aValues[7].Reg64 = pIdRegsGst->u64RegIdAa64Mmfr2El1;
-            aValues[8].Reg64 = pIdRegsGst->u64RegIdAa64Pfr0El1;
-            aValues[9].Reg64 = pIdRegsGst->u64RegIdAa64Pfr1El1;
+            aValues[0].Reg64 = IdRegs.u64RegIdAa64Dfr0El1;
+            aValues[1].Reg64 = IdRegs.u64RegIdAa64Dfr1El1;
+            aValues[2].Reg64 = IdRegs.u64RegIdAa64Isar0El1;
+            aValues[3].Reg64 = IdRegs.u64RegIdAa64Isar1El1;
+            aValues[4].Reg64 = IdRegs.u64RegIdAa64Isar2El1;
+            aValues[5].Reg64 = IdRegs.u64RegIdAa64Mmfr0El1;
+            aValues[6].Reg64 = IdRegs.u64RegIdAa64Mmfr1El1;
+            aValues[7].Reg64 = IdRegs.u64RegIdAa64Mmfr2El1;
+            aValues[8].Reg64 = IdRegs.u64RegIdAa64Pfr0El1;
+            aValues[9].Reg64 = IdRegs.u64RegIdAa64Pfr1El1;
 
             hrc = WHvSetVirtualProcessorRegisters(hPartition, WHV_ANY_VP /*idCpu*/, aenmNames, RT_ELEMENTS(aenmNames), aValues);
             AssertLogRelMsgReturn(SUCCEEDED(hrc),
@@ -1025,8 +1325,26 @@ static int nemR3NativeInitSetupVm(PVM pVM)
                                   , VERR_NEM_SET_REGISTERS_FAILED);
 
             /* Save the amount of break-/watchpoints supported for syncing the guest register state later. */
-            pVM->nem.s.cBreakpoints = RT_BF_GET(pIdRegsGst->u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_BRPS) + 1;
-            pVM->nem.s.cWatchpoints = RT_BF_GET(pIdRegsGst->u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_WRPS) + 1;
+            pVM->nem.s.cBreakpoints = RT_BF_GET(IdRegs.u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_BRPS) + 1;
+            pVM->nem.s.cWatchpoints = RT_BF_GET(IdRegs.u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_WRPS) + 1;
+
+#else  /* WITH_NEW_CPUM_IDREG_INTERFACE */
+
+            rc = CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVM->apCpusR3[0], enmR3WinCpuIdRegQuery,
+                                                         enmR3WinCpuIdRegUpdate, NULL /*pvUser*/);
+            if (RT_FAILURE(rc))
+                return VMSetError(pVM, VERR_NEM_VM_CREATE_FAILED, RT_SRC_POS,
+                                  "CPUMR3PopulateGuestFeaturesViaCallbacks failed: %Rrc", rc);
+
+            /** @todo this should be exposed in the read-only cpum GuestFeatures! */
+            uint64_t uValue = 0;
+            rc = CPUMR3QueryGuestIdReg(pVM, ARMV8_AARCH64_SYSREG_ID_AA64DFR0_EL1, &uValue);
+            if (RT_SUCCESS(rc))
+            {
+                pVM->nem.s.cBreakpoints = RT_BF_GET(uValue, ARMV8_ID_AA64DFR0_EL1_BRPS) + 1;
+                pVM->nem.s.cWatchpoints = RT_BF_GET(uValue, ARMV8_ID_AA64DFR0_EL1_WRPS) + 1;
+            }
+#endif /* WITH_NEW_CPUM_IDREG_INTERFACE */
         }
 
         /* Configure the GIC re-distributor region for the GIC. */
@@ -1051,7 +1369,7 @@ static int nemR3NativeInitSetupVm(PVM pVM)
 /**
  * Try initialize the native API.
  *
- * This may only do part of the job, more can be done in
+ * This may only do part of the job, more will be done in
  * nemR3NativeInitAfterCPUM() and nemR3NativeInitCompleted().
  *
  * @returns VBox status code.
@@ -1216,13 +1534,9 @@ int nemR3NativeInitAfterCPUM(PVM pVM)
 
 
 /**
- * Execute state save operation.
- *
- * @returns VBox status code.
- * @param   pVM             The cross context VM structure.
- * @param   pSSM            SSM operation handle.
+ * @callback_method_impl{PFNSSMINTSAVEEXEC, Saves the NEM/windows state.}
  */
-static DECLCALLBACK(int) nemR3Save(PVM pVM, PSSMHANDLE pSSM)
+static DECLCALLBACK(int) nemR3WinSave(PVM pVM, PSSMHANDLE pSSM)
 {
     /*
      * Save the Hyper-V activity state for all CPUs.
@@ -1248,15 +1562,9 @@ static DECLCALLBACK(int) nemR3Save(PVM pVM, PSSMHANDLE pSSM)
 
 
 /**
- * Execute state load operation.
- *
- * @returns VBox status code.
- * @param   pVM             The cross context VM structure.
- * @param   pSSM            SSM operation handle.
- * @param   uVersion        Data layout version.
- * @param   uPass           The data pass.
+ * @callback_method_impl{PFNSSMINTLOADEXEC, Loads the NEM/windows state.}
  */
-static DECLCALLBACK(int) nemR3Load(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersion, uint32_t uPass)
+static DECLCALLBACK(int) nemR3WinLoad(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersion, uint32_t uPass)
 {
     Assert(uPass == SSM_PASS_FINAL); NOREF(uPass);
 
@@ -1265,7 +1573,7 @@ static DECLCALLBACK(int) nemR3Load(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersion, 
      */
     if (uVersion != 1)
     {
-        AssertMsgFailed(("nemR3Load: Invalid version uVersion=%u!\n", uVersion));
+        AssertMsgFailed(("nemR3WinLoad: Invalid version uVersion=%u!\n", uVersion));
         return VERR_SSM_UNSUPPORTED_DATA_UNIT_VERSION;
     }
 
@@ -1304,6 +1612,24 @@ static DECLCALLBACK(int) nemR3Load(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersion, 
 }
 
 
+/**
+ * @callback_method_impl{PFNSSMINTLOADDONE,
+ *          For loading saved system ID registers.}
+ */
+static DECLCALLBACK(int) nemR3WinLoadDone(PVM pVM, PSSMHANDLE pSSM)
+{
+#ifdef WITH_NEW_CPUM_IDREG_INTERFACE
+    VM_ASSERT_EMT(pVM);
+    int rc = CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVM->apCpusR3[0], NULL, enmR3WinCpuIdRegUpdate, pSSM /*pvUser*/);
+    if (RT_FAILURE(rc))
+        return SSMR3SetLoadError(pSSM, rc, RT_SRC_POS, "CPUMR3PopulateGuestFeaturesViaCallbacks failed: %Rrc", rc);
+#else
+    RT_NOREF(pVM, pSSM);
+#endif
+    return VINF_SUCCESS;
+}
+
+
 int nemR3NativeInitCompleted(PVM pVM, VMINITCOMPLETED enmWhat)
 {
     //BOOL fRet = SetThreadPriority(GetCurrentThread(), 0);
@@ -1317,8 +1643,8 @@ int nemR3NativeInitCompleted(PVM pVM, VMINITCOMPLETED enmWhat)
         int rc = SSMR3RegisterInternal(pVM, "nem-win", 1, NEM_HV_SAVED_STATE_VERSION,
                                        sizeof(uint64_t),
                                        NULL, NULL, NULL,
-                                       NULL, nemR3Save, NULL,
-                                       NULL, nemR3Load, NULL);
+                                       NULL, nemR3WinSave, NULL,
+                                       NULL, nemR3WinLoad, nemR3WinLoadDone);
         if (RT_FAILURE(rc))
             return rc;
     }

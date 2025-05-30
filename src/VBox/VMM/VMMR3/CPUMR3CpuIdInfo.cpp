@@ -312,37 +312,10 @@ DECLCALLBACK(void) cpumR3CpuIdInfo(PVM pVM, PCDBGFINFOHLP pHlp, const char *pszA
     InfoState.paLeaves2     = NULL;
 #elif defined(VBOX_VMM_TARGET_ARMV8)
     /* ARMv8 specifics: */
-    InfoState.paIdRegs      = NULL; /** @todo */
-    InfoState.cIdRegs       = 0;
+    InfoState.paIdRegs      = pVM->cpum.s.GuestInfo.paIdRegsR3;
+    InfoState.cIdRegs       = pVM->cpum.s.GuestInfo.cIdRegs;
     InfoState.cIdRegs2      = 0;
     InfoState.paIdRegs2     = NULL;
-    /* Convert from IdRegs struct for now (must be sorted): */
-    InfoState.cIdRegs = 15;
-    PSUPARMSYSREGVAL paFreeArmV8 = (PSUPARMSYSREGVAL)RTMemAllocZ(sizeof(paFreeArmV8[0]) * InfoState.cIdRegs);
-    AssertReturnVoid(paFreeArmV8);
-    InfoState.paIdRegs = paFreeArmV8;
-# define ADD_ID_REG(a_idx, a_idReg, a_uValue) do { \
-            Assert((a_idx) == 0 || paFreeArmV8[(a_idx) - 1].idReg < (a_idReg)); \
-            paFreeArmV8[a_idx].uValue = (a_uValue); \
-            paFreeArmV8[a_idx].idReg  = (a_idReg); \
-            paFreeArmV8[a_idx].fFlags = 0; \
-        } while (0)
-    ADD_ID_REG( 0, ARMV8_AARCH64_SYSREG_ID_AA64PFR0_EL1,  pVM->cpum.s.GuestIdRegs.u64RegIdAa64Pfr0El1);  /* 3.0.0.4.0 */
-    ADD_ID_REG( 1, ARMV8_AARCH64_SYSREG_ID_AA64PFR1_EL1,  pVM->cpum.s.GuestIdRegs.u64RegIdAa64Pfr1El1);
-    ADD_ID_REG( 2, ARMV8_AARCH64_SYSREG_ID_AA64DFR0_EL1,  pVM->cpum.s.GuestIdRegs.u64RegIdAa64Dfr0El1);  /* 3.0.0.5.0 */
-    ADD_ID_REG( 3, ARMV8_AARCH64_SYSREG_ID_AA64DFR1_EL1,  pVM->cpum.s.GuestIdRegs.u64RegIdAa64Dfr1El1);
-    ADD_ID_REG( 4, ARMV8_AARCH64_SYSREG_ID_AA64AFR0_EL1,  pVM->cpum.s.GuestIdRegs.u64RegIdAa64Afr0El1);  /* 3.0.0.5.4*/
-    ADD_ID_REG( 5, ARMV8_AARCH64_SYSREG_ID_AA64AFR1_EL1,  pVM->cpum.s.GuestIdRegs.u64RegIdAa64Afr1El1);
-    ADD_ID_REG( 6, ARMV8_AARCH64_SYSREG_ID_AA64ISAR0_EL1, pVM->cpum.s.GuestIdRegs.u64RegIdAa64Isar0El1); /* 3.0.0.6.0 */
-    ADD_ID_REG( 7, ARMV8_AARCH64_SYSREG_ID_AA64ISAR1_EL1, pVM->cpum.s.GuestIdRegs.u64RegIdAa64Isar1El1);
-    ADD_ID_REG( 8, ARMV8_AARCH64_SYSREG_ID_AA64ISAR2_EL1, pVM->cpum.s.GuestIdRegs.u64RegIdAa64Isar2El1);
-    ADD_ID_REG( 9, ARMV8_AARCH64_SYSREG_ID_AA64MMFR0_EL1, pVM->cpum.s.GuestIdRegs.u64RegIdAa64Mmfr0El1); /* 3.0.0.7.0 */
-    ADD_ID_REG(10, ARMV8_AARCH64_SYSREG_ID_AA64MMFR1_EL1, pVM->cpum.s.GuestIdRegs.u64RegIdAa64Mmfr1El1);
-    ADD_ID_REG(11, ARMV8_AARCH64_SYSREG_ID_AA64MMFR2_EL1, pVM->cpum.s.GuestIdRegs.u64RegIdAa64Mmfr2El1);
-    ADD_ID_REG(12, ARMV8_AARCH64_SYSREG_CLIDR_EL1,        pVM->cpum.s.GuestIdRegs.u64RegClidrEl1);       /* 3.1.0.0.1 */
-    ADD_ID_REG(13, ARMV8_AARCH64_SYSREG_CTR_EL0,          pVM->cpum.s.GuestIdRegs.u64RegCtrEl0);         /* 3.3.0.0.1 */
-    ADD_ID_REG(14, ARMV8_AARCH64_SYSREG_DCZID_EL0,        pVM->cpum.s.GuestIdRegs.u64RegDczidEl0);       /* 3.3.0.0.7 */
-# undef ADD_ID_REG
 #else
 # error "port me"
 #endif
@@ -385,10 +358,6 @@ DECLCALLBACK(void) cpumR3CpuIdInfo(PVM pVM, PCDBGFINFOHLP pHlp, const char *pszA
 
 #else
 # error "port me"
-#endif
-
-#if defined(VBOX_VMM_TARGET_ARMV8)
-    RTMemFree(paFreeArmV8);
 #endif
 }
 

@@ -208,7 +208,46 @@ DECLINLINE(bool) CPUMIsGuestIn64BitCodeEx(PCCPUMCTX pCtx)
 VMMR3DECL(int)          CPUMR3SysRegRangesInsert(PVM pVM, PCCPUMSYSREGRANGE pNewRange);
 VMMR3DECL(int)          CPUMR3PopulateFeaturesByIdRegisters(PVM pVM, PCCPUMARMV8IDREGS pIdRegs);
 
-VMMR3_INT_DECL(int)     CPUMR3QueryGuestIdRegs(PVM pVM, PCCPUMARMV8IDREGS *ppIdRegs);
+VMMR3_INT_DECL(int)     CPUMR3QueryGuestIdRegs(PVM pVM, PCPUMARMV8IDREGS pIdRegs);
+
+/**
+ * Callback used by CPUMR3PopulateGuestFeaturesViaCallbacks to query a
+ * register value.
+ *
+ * @returns VBox status code
+ * @retval  VINF_CPUM_UNSUPPORTED_ID_REGISTER
+ * @param   pVM         The cross context VM structure.
+ * @param   pVCpu       The cross context VMCPU structure.
+ * @param   idReg       The register to query (ARMV8_AARCH64_SYSREG_ID_CREATE).
+ * @param   pvUser      User specific argument.
+ * @param   puValue     Where to return the value on success.
+ */
+typedef DECLCALLBACKTYPE(int, FNCPUMARMCPUIDREGQUERY,(PVM pVM, PVMCPU pVCpu, uint32_t idReg, void *pvUser, uint64_t *puValue));
+/** Pointer to FNCPUMARMCPUIDREGQUERY. */
+typedef FNCPUMARMCPUIDREGQUERY *PFNCPUMARMCPUIDREGQUERY;
+
+/**
+ * Callback used by CPUMR3PopulateGuestFeaturesViaCallbacks to update a
+ * register.
+ *
+ * @returns VBox status code
+ * @retval  VINF_CPUM_UNSUPPORTED_ID_REGISTER
+ * @param   pVM             The cross context VM structure.
+ * @param   pVCpu           The cross context VMCPU structure.
+ * @param   idReg           The register to query (ARMV8_AARCH64_SYSREG_ID_CREATE).
+ * @param   uNewValue       The new register value.
+ * @param   pvUser          User specific argument.
+ * @param   puUpdatedValue  Where to return the updated value on success.
+ */
+typedef DECLCALLBACKTYPE(int, FNCPUMARMCPUIDREGUPDATE,(PVM pVM, PVMCPU pVCpu, uint32_t idReg,
+                                                       uint64_t uNewValue, void *pvUser, uint64_t *puUpdateValue));
+/** Pointer to FNCPUMARMCPUIDREGUPDATE. */
+typedef FNCPUMARMCPUIDREGUPDATE *PFNCPUMARMCPUIDREGUPDATE;
+
+
+VMMR3_INT_DECL(int) CPUMR3PopulateGuestFeaturesViaCallbacks(PVM pVM, PVMCPU pVCpu, PFNCPUMARMCPUIDREGQUERY pfnQuery,
+                                                            PFNCPUMARMCPUIDREGUPDATE pfnUpdate, void *pvUser);
+VMMR3_INT_DECL(int) CPUMR3QueryGuestIdReg(PVM pVM, uint32_t idReg, uint64_t *puValue);
 
 /** @} */
 #endif /* IN_RING3 */

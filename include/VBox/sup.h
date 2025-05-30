@@ -219,10 +219,14 @@ typedef SUPARMSYSREGVAL const *PCSUPARMSYSREGVAL;
  * @{ */
 #define SUP_ARM_SYS_REG_VAL_F_FROM_CPU           UINT32_C(0x00000000) /**< Directly from the CPU. */
 #define SUP_ARM_SYS_REG_VAL_F_FROM_DB            UINT32_C(0x00000001) /**< From a CPU database entry. */
+#define SUP_ARM_SYS_REG_VAL_F_FROM_EXEC_ENGINE   UINT32_C(0x00000002) /**< From the execution engine (NEM, guest). */
+#define SUP_ARM_SYS_REG_VAL_F_FROM_SAVED_STATE   UINT32_C(0x00000003) /**< From saved state. */
 #define SUP_ARM_SYS_REG_VAL_F_FROM_REGISTRY      UINT32_C(0x00000004) /**< From windows registry*/
 #define SUP_ARM_SYS_REG_VAL_F_FROM_SYSFS         UINT32_C(0x00000005) /**< From linux sysfs. */
 #define SUP_ARM_SYS_REG_VAL_F_FROM_USERLAND      UINT32_C(0x00000006) /**< From linux userland MRS emulation, i.e. sanitized. */
 #define SUP_ARM_SYS_REG_VAL_F_FROM_MASK          UINT32_C(0x00000007) /**< Register source mask. */
+#define SUP_ARM_SYS_REG_VAL_F_LOAD_ZERO          UINT32_C(0x40000000) /**< Zeroed by state loading (CPUM internal). */
+#define SUP_ARM_SYS_REG_VAL_F_NOSET              UINT32_C(0x80000000) /**< Do not set (CPUM internal). */
 /** @} */
 
 #if defined(RT_ARCH_ARM64) || defined(DOXYGEN_RUNNING)

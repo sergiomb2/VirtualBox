@@ -366,6 +366,28 @@ static int populateSystemRegistersComplete(void)
     return VINF_SUCCESS;
 }
 
+#ifdef RT_OS_DARWIN
+static const char *darwinHvReturnToString(hv_return_t rc)
+{
+    switch (rc)
+    {
+        RT_CASE_RET_STR(HV_SUCCESS);
+        RT_CASE_RET_STR(HV_ERROR);
+        RT_CASE_RET_STR(HV_BUSY);
+        RT_CASE_RET_STR(HV_BAD_ARGUMENT);
+        RT_CASE_RET_STR(HV_ILLEGAL_GUEST_STATE);
+        RT_CASE_RET_STR(HV_NO_RESOURCES);
+        RT_CASE_RET_STR(HV_NO_DEVICE);
+        RT_CASE_RET_STR(HV_DENIED);
+        RT_CASE_RET_STR(HV_UNSUPPORTED);
+    }
+
+    static char s_szMsg[128];
+    RTStrPrintf(s_szMsg, sizeof(s_szMsg), "%#x (%d)", rc, rc);
+    return s_szMsg;
+}
+#endif
+
 
 /**
  * Populates g_aSysRegVals and g_cSysRegVals
@@ -376,7 +398,7 @@ static int populateSystemRegisters(void)
      * First try using the support driver.
      */
     int rc = SUPR3Init(NULL);
-    if (RT_SUCCESS(rc))
+    if (RT_SUCCESS(rc) && !SUPR3IsDriverless())
     {
         /*
          * Get the registers for online each CPU in the system, sorting them.
@@ -501,8 +523,8 @@ static int populateSystemRegisters(void)
                 hv_sys_reg_t const enmSysReg = (hv_sys_reg_t)ARMV8_AARCH64_SYSREG_ID_CREATE(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2); \
                 hv_return_t const rcHvGet = hv_vcpu_get_sys_reg(hVCpu, enmSysReg, &uValue); \
                 if (rcHvGet == HV_SUCCESS) ADD_REG(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, uValue); \
-                else vbCpuRepDebug("Warning! hv_vcpu_get_sys_reg(%u,%u,%u,%u,%u) failed on line %u: %#x (%d)\n", \
-                                   a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, __LINE__, rcHvGet, rcHvGet); \
+                else vbCpuRepDebug("Warning! hv_vcpu_get_sys_reg(%u,%u,%u,%u,%u) failed on line %u: %s\n", \
+                                   a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, __LINE__, darwinHvReturnToString(rcHvGet)); \
             } while (0)
 
 # define READ_SYS_REG__TODO_U(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, a_SysRegName) do { \
@@ -510,14 +532,14 @@ static int populateSystemRegisters(void)
                 hv_sys_reg_t const enmSysReg = (hv_sys_reg_t)ARMV8_AARCH64_SYSREG_ID_CREATE(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2); \
                 hv_return_t const rcHvGet = hv_vcpu_get_sys_reg(hVCpu, enmSysReg, &uValue); \
                 if (rcHvGet == HV_SUCCESS) ADD_REG(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, uValue); \
-                else vbCpuRepDebug("Warning! hv_vcpu_get_sys_reg(" #a_SysRegName ") failed: %#x (%d)\n", rcHvGet, rcHvGet); \
+                else vbCpuRepDebug("Warning! hv_vcpu_get_sys_reg(" #a_SysRegName ") failed: %s\n", darwinHvReturnToString(rcHvGet)); \
             } while (0)
 
 # define READ_SYS_REG__TODO_F(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, a_SysRegName) do { \
                uint64_t uValue = 0; \
                hv_return_t const rcHvGet = hv_vcpu_config_get_feature_reg(hVCpuCfg, RT_CONCAT(HV_FEATURE_REG_,a_SysRegName), &uValue); \
                if (rcHvGet == HV_SUCCESS) ADD_REG(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, uValue); \
-               else vbCpuRepDebug("Warning! hv_vcpu_get_sys_reg(" #a_SysRegName ") failed: %#x (%d)\n", rcHvGet, rcHvGet); \
+               else vbCpuRepDebug("Warning! hv_vcpu_get_sys_reg(" #a_SysRegName ") failed: %s\n", darwinHvReturnToString(rcHvGet)); \
             } while (0)
 
 # define READ_SYS_REG_NAMED_U(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, a_SysRegName) do { \
@@ -540,11 +562,11 @@ static int populateSystemRegisters(void)
                 hv_sys_reg_t const enmSysReg = (hv_sys_reg_t)ARMV8_AARCH64_SYSREG_ID_CREATE(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2); \
                 hv_return_t const rcHvSys = hv_vcpu_get_sys_reg(hVCpu, enmSysReg, &uValueSys); \
                 if (rcHvSys == HV_SUCCESS) ADD_REG(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, uValueSys); \
-                else vbCpuRepDebug("Warning! hv_vcpu_get_sys_reg(" #a_SysRegName ") failed: %#x (%d)\n", rcHvSys, rcHvSys); \
+                else vbCpuRepDebug("Warning! hv_vcpu_get_sys_reg(" #a_SysRegName ") failed: %s\n", darwinHvReturnToString(rcHvSys)); \
                 /* 2. feature: */ \
                 uint64_t uValueFeature = 0; \
                 hv_return_t const rcHvFeat = hv_vcpu_config_get_feature_reg(hVCpuCfg, RT_CONCAT(HV_FEATURE_REG_,a_SysRegName), &uValueFeature); \
-                if (rcHvFeat != HV_SUCCESS) vbCpuRepDebug("Warning! hv_vcpu_config_get_feature_reg(" #a_SysRegName ") failed: %#x (%d)\n", rcHvFeat, rcHvFeat); \
+                if (rcHvFeat != HV_SUCCESS) vbCpuRepDebug("Warning! hv_vcpu_config_get_feature_reg(" #a_SysRegName ") failed: %s\n", darwinHvReturnToString(rcHvFeat)); \
                 else if (rcHvSys != HV_SUCCESS) ADD_REG(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, uValueFeature); \
                 else if (uValueFeature != uValueSys) \
                     vbCpuRepDebug("Warning! ARMV8_AARCH64_SYSREG_" #a_SysRegName "=%#RX64 while HV_FEATURE_REG_" #a_SysRegName "=%#RX64, diff: %#RX64\n", \

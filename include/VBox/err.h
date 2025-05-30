@@ -730,6 +730,8 @@
 #define VERR_CPUM_INVALID_HWVIRT_FEAT_COMBO     (-1768)
 /** CPU microarch lookup matched by name. */
 #define VINF_CPUM_MATCHED_BY_NAME               (1769)
+/** Unsupported CPU ID register. */
+#define VERR_CPUM_UNSUPPORTED_ID_REGISTER       (-1770)
 /** @} */
 
 

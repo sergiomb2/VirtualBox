@@ -115,7 +115,7 @@ typedef uint64_t STAMCOUNTER;
 #if defined(VBOX_VMM_TARGET_X86)
 # define CPUM_SAVED_STATE_VERSION               CPUM_SAVED_STATE_VERSION_HWVIRT_VMX_4
 #elif defined(VBOX_VMM_TARGET_ARMV8)
-# define CPUM_SAVED_STATE_VERSION               CPUM_SAVED_STATE_VERSION_ARMV8_V2
+# define CPUM_SAVED_STATE_VERSION               CPUM_SAVED_STATE_VERSION_ARMV8_IDREGS
 #endif
 
 #if defined(VBOX_VMM_TARGET_X86)
@@ -162,6 +162,8 @@ typedef uint64_t STAMCOUNTER;
 #endif
 
 #if defined(VBOX_VMM_TARGET_ARMV8)
+/** More flexible ID registers saving. */
+# define CPUM_SAVED_STATE_VERSION_ARMV8_IDREGS  3
 /** Adds ACTLR_EL1 to the ARMv8 saved state. */
 # define CPUM_SAVED_STATE_VERSION_ARMV8_V2      2
 /** The initial ARMv8 saved state. */
@@ -229,10 +231,13 @@ typedef struct CPUMINFO
     CPUMMSRRANGE                aMsrRanges[8192];
 
 #elif defined(VBOX_VMM_TARGET_ARMV8)
+    /** Guest system registers used for identification (heap). */
+    R3PTRTYPE(PSUPARMSYSREGVAL) paIdRegsR3;
+    /** Number of registers in paIdRegsR3.   */
+    uint32_t                    cIdRegs;
+
     /** The number of system register ranges (CPUMSSREGRANGE) in the array pointed to below. */
     uint32_t                    cSysRegRanges;
-    uint32_t                    uPadding;
-
     /** Pointer to the sysrem register ranges. */
     R3PTRTYPE(PCPUMSYSREGRANGE) paSysRegRangesR3;
 
@@ -459,8 +464,6 @@ typedef struct CPUM
 
     /** Guest CPU info. */
     CPUMINFO                GuestInfo;
-    /** Guest CPU ID registers. */
-    CPUMARMV8IDREGS         GuestIdRegs;
 
     /** @name System register statistics.
      * @{ */
@@ -480,9 +483,6 @@ typedef struct CPUM
     R3PTRTYPE(PSUPARMSYSREGVAL) paHostIdRegsR3;
     /** Number of registers in paHostSysRegs.   */
     uint32_t                    cHostIdRegs;
-
-    /** Host CPU ID registers. */
-    CPUMARMV8IDREGS             HostIdRegs;
 
 #elif defined(RT_ARCH_X86) || defined(RT_ARCH_AMD64)
     /** The host MXCSR mask (determined at init). */
@@ -584,6 +584,7 @@ void                cpumCpuIdExplodeArchCapabilities(CPUMFEATURESX86 *pFeatures,
 # endif /* defined(RT_ARCH_X86) || defined(RT_ARCH_AMD64) || defined(VBOX_VMM_TARGET_X86) */
 # if defined(RT_ARCH_ARM64) || defined(VBOX_VMM_TARGET_ARMV8)
 DECLHIDDEN(int)     cpumCpuIdExplodeFeaturesArmV8FromIdRegs(PCCPUMARMV8IDREGS pIdRegs, CPUMFEATURESARMV8 *pFeatures);
+DECLCALLBACK(int)   cpumCpuIdSysRegValSortCmp(void const *pvElement1, void const *pvElement2, void *pvUser);
 # endif
 
 

@@ -42,12 +42,78 @@
 #include <VBox/err.h>
 #include <iprt/ctype.h>
 #include <iprt/mem.h>
+#include <iprt/sort.h>
 #include <iprt/string.h>
 
 
-/*********************************************************************************************************************************
-*   Defined Constants And Macros                                                                                                 *
-*********************************************************************************************************************************/
+
+
+/**
+ * Looks up @a idReg in @a paIdRegs.
+ *
+ * @returns Pointer to matching @a paIdRegs entry if found, NULL if not.
+ * @param   paIdRegs    Sorted array of ID register values.
+ * @param   cIdRegs     Number of ID register values.
+ * @param   idReg       The ID register to lookup.
+ */
+static PSUPARMSYSREGVAL cpumCpuIdLookupIdReg(PSUPARMSYSREGVAL paIdRegs, uint32_t cIdRegs, uint32_t idReg)
+{
+    if (cIdRegs)
+    {
+        /*
+         * Binary lookup. The input should be sorted.
+         */
+        uint32_t iLow = 0;
+        uint32_t iEnd = cIdRegs;
+        for (;;)
+        {
+            uint32_t i = iLow + (iEnd - iLow) / 2;
+            if (paIdRegs[i].idReg > idReg)
+            {
+                if (i > iLow)
+                    iEnd = i;
+                else
+                    break;
+            }
+            else if (paIdRegs[i].idReg < idReg)
+            {
+                i += 1;
+                if (i < iEnd)
+                    iLow = i;
+                else
+                    break;
+            }
+            else
+                return &paIdRegs[i];
+        }
+
+#ifdef VBOX_STRICT
+        /* Do linear search to make sure it's sorted and the above code works. */
+        for (uint32_t i = 0, idPrev = 0 /*ASSUMES no zero ID reg*/; i < cIdRegs; i++)
+        {
+            uint32_t const idRegThis = paIdRegs[i].idReg;
+            Assert(idRegThis != idReg);
+            Assert(idRegThis > idPrev);
+            idPrev = idRegThis;
+        }
+#endif
+    }
+
+    return NULL;
+}
+
+
+/**
+ * Looks up @a idReg in the guest ID registers.
+ *
+ * @returns Pointer to matching ID register entry if found, NULL if not.
+ * @param   idReg       The ID register to lookup.
+ */
+static PSUPARMSYSREGVAL cpumR3CpuIdLookupGuestIdReg(PVM pVM, uint32_t idReg)
+{
+    return cpumCpuIdLookupIdReg(pVM->cpum.s.GuestInfo.paIdRegsR3, pVM->cpum.s.GuestInfo.cIdRegs, idReg);
+}
+
 
 /*
  *
@@ -151,61 +217,73 @@ static int cpumR3CpuIdSanitize(PVM pVM, PCPUM pCpum, PCPUMCPUIDCONFIG pConfig, P
         } while (0)
 #endif
 
-    /* ID_AA64ISAR0_EL1 */
-    uint64_t u64ValTmp = 0;
-    uint64_t u64IdReg = pVM->cpum.s.GuestIdRegs.u64RegIdAa64Isar0El1;
-
-    PASSTHRU_FEATURE(u64IdReg, pConfig->enmAes,     pHstFeat->fAes,     ARMV8_ID_AA64ISAR0_EL1_AES,     ARMV8_ID_AA64ISAR0_EL1_AES_SUPPORTED,                   ARMV8_ID_AA64ISAR0_EL1_AES_NOT_IMPL);
-    u64ValTmp = RT_BF_GET(u64IdReg, ARMV8_ID_AA64ISAR0_EL1_AES) == ARMV8_ID_AA64ISAR0_EL1_AES_SUPPORTED ? ARMV8_ID_AA64ISAR0_EL1_AES_SUPPORTED : ARMV8_ID_AA64ISAR0_EL1_AES_NOT_IMPL;
-    PASSTHRU_FEATURE(u64IdReg, pConfig->enmPmull,   pHstFeat->fPmull,   ARMV8_ID_AA64ISAR0_EL1_AES,     ARMV8_ID_AA64ISAR0_EL1_AES_SUPPORTED_PMULL,             u64ValTmp);
-    PASSTHRU_FEATURE(u64IdReg, pConfig->enmSha1,    pHstFeat->fSha1,    ARMV8_ID_AA64ISAR0_EL1_SHA1,    ARMV8_ID_AA64ISAR0_EL1_SHA1_SUPPORTED,                  ARMV8_ID_AA64ISAR0_EL1_SHA1_NOT_IMPL);
-    PASSTHRU_FEATURE(u64IdReg, pConfig->enmSha256,  pHstFeat->fSha256,  ARMV8_ID_AA64ISAR0_EL1_SHA2,    ARMV8_ID_AA64ISAR0_EL1_SHA2_SUPPORTED_SHA256,           ARMV8_ID_AA64ISAR0_EL1_SHA2_NOT_IMPL);
-    u64ValTmp = RT_BF_GET(u64IdReg, ARMV8_ID_AA64ISAR0_EL1_SHA2) == ARMV8_ID_AA64ISAR0_EL1_SHA2_SUPPORTED_SHA256 ? ARMV8_ID_AA64ISAR0_EL1_SHA2_SUPPORTED_SHA256 : ARMV8_ID_AA64ISAR0_EL1_SHA2_NOT_IMPL;
-    PASSTHRU_FEATURE(u64IdReg, pConfig->enmSha512,  pHstFeat->fSha512,  ARMV8_ID_AA64ISAR0_EL1_SHA2,    ARMV8_ID_AA64ISAR0_EL1_SHA2_SUPPORTED_SHA256_SHA512,    u64ValTmp);
-    PASSTHRU_FEATURE(u64IdReg, pConfig->enmCrc32,   pHstFeat->fCrc32,   ARMV8_ID_AA64ISAR0_EL1_CRC32,   ARMV8_ID_AA64ISAR0_EL1_CRC32_SUPPORTED,                 ARMV8_ID_AA64ISAR0_EL1_CRC32_NOT_IMPL);
-    PASSTHRU_FEATURE(u64IdReg, pConfig->enmSha3,    pHstFeat->fSha3,    ARMV8_ID_AA64ISAR0_EL1_SHA3,    ARMV8_ID_AA64ISAR0_EL1_SHA3_SUPPORTED,                  ARMV8_ID_AA64ISAR0_EL1_SHA3_NOT_IMPL);
-
-    if (pCpum->u8PortableCpuIdLevel > 0)
+    /*
+     * ID_AA64ISAR0_EL1
+     */
+    PSUPARMSYSREGVAL pIdReg = cpumR3CpuIdLookupGuestIdReg(pVM, ARMV8_AARCH64_SYSREG_ID_AA64ISAR0_EL1);
+    if (pIdReg)
     {
-        PORTABLE_DISABLE_FEATURE_BIT_CFG(1, u64IdReg, ARMV8_ID_AA64ISAR0_EL1_AES,   ARMV8_ID_AA64ISAR0_EL1_AES_SUPPORTED,                   pConfig->enmAes,    ARMV8_ID_AA64ISAR0_EL1_AES_NOT_IMPL);
-        PORTABLE_DISABLE_FEATURE_BIT_CFG(1, u64IdReg, ARMV8_ID_AA64ISAR0_EL1_AES,   ARMV8_ID_AA64ISAR0_EL1_AES_SUPPORTED_PMULL,             pConfig->enmPmull,  ARMV8_ID_AA64ISAR0_EL1_AES_NOT_IMPL);
-        PORTABLE_DISABLE_FEATURE_BIT_CFG(1, u64IdReg, ARMV8_ID_AA64ISAR0_EL1_SHA1,  ARMV8_ID_AA64ISAR0_EL1_SHA1_SUPPORTED,                  pConfig->enmSha1,   ARMV8_ID_AA64ISAR0_EL1_SHA1_NOT_IMPL);
-        PORTABLE_DISABLE_FEATURE_BIT_CFG(1, u64IdReg, ARMV8_ID_AA64ISAR0_EL1_SHA2,  ARMV8_ID_AA64ISAR0_EL1_SHA2_SUPPORTED_SHA256,           pConfig->enmSha256, ARMV8_ID_AA64ISAR0_EL1_SHA2_NOT_IMPL);
-        PORTABLE_DISABLE_FEATURE_BIT_CFG(1, u64IdReg, ARMV8_ID_AA64ISAR0_EL1_SHA2,  ARMV8_ID_AA64ISAR0_EL1_SHA2_SUPPORTED_SHA256_SHA512,    pConfig->enmSha512, ARMV8_ID_AA64ISAR0_EL1_SHA2_NOT_IMPL);
-        PORTABLE_DISABLE_FEATURE_BIT_CFG(1, u64IdReg, ARMV8_ID_AA64ISAR0_EL1_CRC32, ARMV8_ID_AA64ISAR0_EL1_CRC32_SUPPORTED,                 pConfig->enmCrc32,  ARMV8_ID_AA64ISAR0_EL1_CRC32_NOT_IMPL);
-        PORTABLE_DISABLE_FEATURE_BIT_CFG(1, u64IdReg, ARMV8_ID_AA64ISAR0_EL1_SHA3,  ARMV8_ID_AA64ISAR0_EL1_SHA3_SUPPORTED,                  pConfig->enmSha3,   ARMV8_ID_AA64ISAR0_EL1_SHA3_NOT_IMPL);
+        uint64_t uVal = pIdReg->uValue;
+        PASSTHRU_FEATURE(uVal, pConfig->enmAes,     pHstFeat->fAes,     ARMV8_ID_AA64ISAR0_EL1_AES,     ARMV8_ID_AA64ISAR0_EL1_AES_SUPPORTED,                   ARMV8_ID_AA64ISAR0_EL1_AES_NOT_IMPL);
+        uint64_t uTmp = RT_BF_GET(uVal, ARMV8_ID_AA64ISAR0_EL1_AES) == ARMV8_ID_AA64ISAR0_EL1_AES_SUPPORTED ? ARMV8_ID_AA64ISAR0_EL1_AES_SUPPORTED : ARMV8_ID_AA64ISAR0_EL1_AES_NOT_IMPL;
+        PASSTHRU_FEATURE(uVal, pConfig->enmPmull,   pHstFeat->fPmull,   ARMV8_ID_AA64ISAR0_EL1_AES,     ARMV8_ID_AA64ISAR0_EL1_AES_SUPPORTED_PMULL,             uTmp);
+        PASSTHRU_FEATURE(uVal, pConfig->enmSha1,    pHstFeat->fSha1,    ARMV8_ID_AA64ISAR0_EL1_SHA1,    ARMV8_ID_AA64ISAR0_EL1_SHA1_SUPPORTED,                  ARMV8_ID_AA64ISAR0_EL1_SHA1_NOT_IMPL);
+        PASSTHRU_FEATURE(uVal, pConfig->enmSha256,  pHstFeat->fSha256,  ARMV8_ID_AA64ISAR0_EL1_SHA2,    ARMV8_ID_AA64ISAR0_EL1_SHA2_SUPPORTED_SHA256,           ARMV8_ID_AA64ISAR0_EL1_SHA2_NOT_IMPL);
+        uTmp = RT_BF_GET(uVal, ARMV8_ID_AA64ISAR0_EL1_SHA2) == ARMV8_ID_AA64ISAR0_EL1_SHA2_SUPPORTED_SHA256 ? ARMV8_ID_AA64ISAR0_EL1_SHA2_SUPPORTED_SHA256 : ARMV8_ID_AA64ISAR0_EL1_SHA2_NOT_IMPL;
+        PASSTHRU_FEATURE(uVal, pConfig->enmSha512,  pHstFeat->fSha512,  ARMV8_ID_AA64ISAR0_EL1_SHA2,    ARMV8_ID_AA64ISAR0_EL1_SHA2_SUPPORTED_SHA256_SHA512,    uTmp);
+        PASSTHRU_FEATURE(uVal, pConfig->enmCrc32,   pHstFeat->fCrc32,   ARMV8_ID_AA64ISAR0_EL1_CRC32,   ARMV8_ID_AA64ISAR0_EL1_CRC32_SUPPORTED,                 ARMV8_ID_AA64ISAR0_EL1_CRC32_NOT_IMPL);
+        PASSTHRU_FEATURE(uVal, pConfig->enmSha3,    pHstFeat->fSha3,    ARMV8_ID_AA64ISAR0_EL1_SHA3,    ARMV8_ID_AA64ISAR0_EL1_SHA3_SUPPORTED,                  ARMV8_ID_AA64ISAR0_EL1_SHA3_NOT_IMPL);
+
+        if (pCpum->u8PortableCpuIdLevel > 0)
+        {
+            PORTABLE_DISABLE_FEATURE_BIT_CFG(1, uVal, ARMV8_ID_AA64ISAR0_EL1_AES,   ARMV8_ID_AA64ISAR0_EL1_AES_SUPPORTED,                   pConfig->enmAes,    ARMV8_ID_AA64ISAR0_EL1_AES_NOT_IMPL);
+            PORTABLE_DISABLE_FEATURE_BIT_CFG(1, uVal, ARMV8_ID_AA64ISAR0_EL1_AES,   ARMV8_ID_AA64ISAR0_EL1_AES_SUPPORTED_PMULL,             pConfig->enmPmull,  ARMV8_ID_AA64ISAR0_EL1_AES_NOT_IMPL);
+            PORTABLE_DISABLE_FEATURE_BIT_CFG(1, uVal, ARMV8_ID_AA64ISAR0_EL1_SHA1,  ARMV8_ID_AA64ISAR0_EL1_SHA1_SUPPORTED,                  pConfig->enmSha1,   ARMV8_ID_AA64ISAR0_EL1_SHA1_NOT_IMPL);
+            PORTABLE_DISABLE_FEATURE_BIT_CFG(1, uVal, ARMV8_ID_AA64ISAR0_EL1_SHA2,  ARMV8_ID_AA64ISAR0_EL1_SHA2_SUPPORTED_SHA256,           pConfig->enmSha256, ARMV8_ID_AA64ISAR0_EL1_SHA2_NOT_IMPL);
+            PORTABLE_DISABLE_FEATURE_BIT_CFG(1, uVal, ARMV8_ID_AA64ISAR0_EL1_SHA2,  ARMV8_ID_AA64ISAR0_EL1_SHA2_SUPPORTED_SHA256_SHA512,    pConfig->enmSha512, ARMV8_ID_AA64ISAR0_EL1_SHA2_NOT_IMPL);
+            PORTABLE_DISABLE_FEATURE_BIT_CFG(1, uVal, ARMV8_ID_AA64ISAR0_EL1_CRC32, ARMV8_ID_AA64ISAR0_EL1_CRC32_SUPPORTED,                 pConfig->enmCrc32,  ARMV8_ID_AA64ISAR0_EL1_CRC32_NOT_IMPL);
+            PORTABLE_DISABLE_FEATURE_BIT_CFG(1, uVal, ARMV8_ID_AA64ISAR0_EL1_SHA3,  ARMV8_ID_AA64ISAR0_EL1_SHA3_SUPPORTED,                  pConfig->enmSha3,   ARMV8_ID_AA64ISAR0_EL1_SHA3_NOT_IMPL);
+        }
+
+        pIdReg->uValue = uVal; /* write it back */
     }
 
-    /* Write ID_AA64ISAR0_EL1 register back. */
-    pVM->cpum.s.GuestIdRegs.u64RegIdAa64Isar0El1 = u64IdReg;
-
-    /* ID_AA64PFR0_EL1 */
-    u64IdReg = pVM->cpum.s.GuestIdRegs.u64RegIdAa64Pfr0El1;
-
-    uint8_t uArchRev;
-    int rc = CFGMR3QueryU8(pCpumCfg, "GicArchRev", &uArchRev);
-    AssertRCReturn(rc, rc);
-    if (uArchRev == GIC_DIST_REG_PIDR2_ARCHREV_GICV3)
-        u64IdReg = RT_BF_SET(u64IdReg, ARMV8_ID_AA64PFR0_EL1_GIC, ARMV8_ID_AA64PFR0_EL1_GIC_V3_V4); /* 3.0 */
-    else if (uArchRev == GIC_DIST_REG_PIDR2_ARCHREV_GICV4)
+    /*
+     * ID_AA64PFR0_EL1
+     */
+    pIdReg = cpumR3CpuIdLookupGuestIdReg(pVM, ARMV8_AARCH64_SYSREG_ID_AA64PFR0_EL1);
+    if (pIdReg)
     {
-        uint8_t uArchRevMinor = 0;
-        rc = CFGMR3QueryU8Def(pCpumCfg, "GicArchRevMinor", &uArchRevMinor, 0);
-        u64IdReg = uArchRevMinor == 0
-                 ? RT_BF_SET(u64IdReg, ARMV8_ID_AA64PFR0_EL1_GIC, ARMV8_ID_AA64PFR0_EL1_GIC_V3_V4)  /* 4.0 */
-                 : RT_BF_SET(u64IdReg, ARMV8_ID_AA64PFR0_EL1_GIC, ARMV8_ID_AA64PFR0_EL1_GIC_V4_1);  /* 4.1 */
-    }
-    else
-        Assert(RT_BF_GET(u64IdReg, ARMV8_ID_AA64PFR0_EL1_GIC) == ARMV8_ID_AA64PFR0_EL1_GIC_NOT_IMPL);
+        uint64_t uVal = pIdReg->uValue;
 
-    /* Write ID_AA64PFR0_EL1 register back. */
-    pVM->cpum.s.GuestIdRegs.u64RegIdAa64Pfr0El1 = u64IdReg;
+        uint8_t uArchRev;
+        int rc = CFGMR3QueryU8(pCpumCfg, "GicArchRev", &uArchRev);
+        AssertRCReturn(rc, rc);
+        if (uArchRev == GIC_DIST_REG_PIDR2_ARCHREV_GICV3)
+            uVal = RT_BF_SET(uVal, ARMV8_ID_AA64PFR0_EL1_GIC, ARMV8_ID_AA64PFR0_EL1_GIC_V3_V4); /* 3.0 */
+        else if (uArchRev == GIC_DIST_REG_PIDR2_ARCHREV_GICV4)
+        {
+            uint8_t uArchRevMinor = 0;
+            rc = CFGMR3QueryU8Def(pCpumCfg, "GicArchRevMinor", &uArchRevMinor, 0);
+            AssertRCReturn(rc, rc);
+            uVal = uArchRevMinor == 0
+                 ? RT_BF_SET(uVal, ARMV8_ID_AA64PFR0_EL1_GIC, ARMV8_ID_AA64PFR0_EL1_GIC_V3_V4)  /* 4.0 */
+                 : RT_BF_SET(uVal, ARMV8_ID_AA64PFR0_EL1_GIC, ARMV8_ID_AA64PFR0_EL1_GIC_V4_1);  /* 4.1 */
+        }
+        else
+            Assert(RT_BF_GET(uVal, ARMV8_ID_AA64PFR0_EL1_GIC) == ARMV8_ID_AA64PFR0_EL1_GIC_NOT_IMPL);
+
+        pIdReg->uValue = uVal;  /* write it back */
+    }
 
     /** @todo Other ID and feature registers. */
 
-    return VINF_SUCCESS;
+#undef PORTABLE_DISABLE_FEATURE_BIT_CFG
 #undef PORTABLE_DISABLE_FEATURE_BIT
 #undef PORTABLE_CLEAR_BITS_WHEN
+#undef PASSTHRU_FEATURE
+
+    return VINF_SUCCESS;
 }
 
 
@@ -395,6 +473,31 @@ static int cpumR3CpuIdReadConfig(PVM pVM, PCPUMCPUIDCONFIG pConfig, PCFGMNODE pC
 }
 
 
+/** Translation table between CPUMARMV8IDREGS and register numbers (temp). */
+static struct
+{
+    uint32_t idReg;
+    uint32_t off;
+} const g_aArmV8IdRegsOffsetsAndIds[] =
+{
+    {  ARMV8_AARCH64_SYSREG_ID_AA64PFR0_EL1,    RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Pfr0El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64PFR1_EL1,    RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Pfr1El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64DFR0_EL1,    RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Dfr0El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64DFR1_EL1,    RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Dfr1El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64AFR0_EL1,    RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Afr0El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64AFR1_EL1,    RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Afr1El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64ISAR0_EL1,   RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Isar0El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64ISAR1_EL1,   RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Isar1El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64ISAR2_EL1,   RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Isar2El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64MMFR0_EL1,   RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Mmfr0El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64MMFR1_EL1,   RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Mmfr1El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64MMFR2_EL1,   RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Mmfr2El1) },
+    {  ARMV8_AARCH64_SYSREG_CLIDR_EL1,          RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegClidrEl1) },
+    {  ARMV8_AARCH64_SYSREG_CTR_EL0,            RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegCtrEl0) },
+    {  ARMV8_AARCH64_SYSREG_DCZID_EL0,          RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegDczidEl0) },
+};
+
+
 /**
  * Populates the host and guest features by the given ID registers.
  *
@@ -409,23 +512,40 @@ static int cpumR3CpuIdReadConfig(PVM pVM, PCPUMCPUIDCONFIG pConfig, PCFGMNODE pC
  */
 VMMR3DECL(int) CPUMR3PopulateFeaturesByIdRegisters(PVM pVM, PCCPUMARMV8IDREGS pIdRegs)
 {
+    PCPUM const pCpum = &pVM->cpum.s;
+
     /* Set the host features from the given ID registers. */
 #ifdef RT_ARCH_ARM64
     int rcHost = cpumCpuIdExplodeFeaturesArmV8FromIdRegs(pIdRegs, &g_CpumHostFeatures.s);
     AssertRCReturn(rcHost, rcHost);
-    pVM->cpum.s.HostFeatures.s             = g_CpumHostFeatures.s;
-    pVM->cpum.s.HostIdRegs                 = *pIdRegs;
+    pCpum->HostFeatures.s             = g_CpumHostFeatures.s;
 #endif
 
-    pVM->cpum.s.GuestFeatures.enmCpuVendor = pVM->cpum.s.HostFeatures.Common.enmCpuVendor;
-    pVM->cpum.s.GuestIdRegs                = *pIdRegs;
+    pCpum->GuestFeatures.enmCpuVendor = pCpum->HostFeatures.Common.enmCpuVendor; /* bogus on non-arm hosts */
 
-    PCPUM       pCpum    = &pVM->cpum.s;
-    PCFGMNODE   pCpumCfg = CFGMR3GetChild(CFGMR3GetRoot(pVM), "CPUM");
+    /*
+     * Copy the structure values into an register value array:
+     */
+    AssertLogRelReturn(pCpum->GuestInfo.paIdRegsR3 == NULL, VERR_WRONG_ORDER);
+    PSUPARMSYSREGVAL const paIdRegs = (PSUPARMSYSREGVAL)RTMemAllocZ(  sizeof(paIdRegs[0])
+                                                                    * RT_ELEMENTS(g_aArmV8IdRegsOffsetsAndIds));
+    AssertReturn(paIdRegs, VERR_NO_MEMORY);
+    for (size_t i = 0; i < RT_ELEMENTS(g_aArmV8IdRegsOffsetsAndIds); i++)
+    {
+        paIdRegs[i].idReg  = g_aArmV8IdRegsOffsetsAndIds[i].idReg;
+        paIdRegs[i].fFlags = SUP_ARM_SYS_REG_VAL_F_FROM_EXEC_ENGINE;
+        paIdRegs[i].uValue = *(uint64_t *)((uintptr_t)pIdRegs + g_aArmV8IdRegsOffsetsAndIds[i].off);
+    }
+
+    RTSortShell(paIdRegs, RT_ELEMENTS(g_aArmV8IdRegsOffsetsAndIds), sizeof(paIdRegs[0]), cpumCpuIdSysRegValSortCmp, NULL);
+
+    pCpum->GuestInfo.paIdRegsR3 = paIdRegs;
+    pCpum->GuestInfo.cIdRegs    = RT_ELEMENTS(g_aArmV8IdRegsOffsetsAndIds);
 
     /*
      * Read the configuration.
      */
+    PCFGMNODE const pCpumCfg = CFGMR3GetChild(CFGMR3GetRoot(pVM), "CPUM");
     CPUMCPUIDCONFIG Config;
     RT_ZERO(Config);
 
@@ -449,34 +569,412 @@ VMMR3DECL(int) CPUMR3PopulateFeaturesByIdRegisters(PVM pVM, PCCPUMARMV8IDREGS pI
 #endif
 
     /*
-     * Pre-explode the CPUID info.
+     * Pre-explode the CPU ID register info.
      */
-    if (RT_SUCCESS(rc))
-        rc = cpumCpuIdExplodeFeaturesArmV8FromIdRegs(pIdRegs, &pCpum->GuestFeatures);
+    rc = CPUMCpuIdExplodeFeaturesArmV8FromSysRegs(pCpum->GuestInfo.paIdRegsR3, pCpum->GuestInfo.cIdRegs, &pCpum->GuestFeatures);
+    AssertRCReturn(rc, rc);
 
     /*
      * Sanitize the cpuid information passed on to the guest.
      */
-    if (RT_SUCCESS(rc))
-        rc = cpumR3CpuIdSanitize(pVM, pCpum, &Config, pCpumCfg);
+    rc = cpumR3CpuIdSanitize(pVM, pCpum, &Config, pCpumCfg);
+    AssertRCReturn(rc, rc);
 
-    return rc;
+    /*
+     * Explode the sanitized CPU ID register info.
+     */
+    rc = CPUMCpuIdExplodeFeaturesArmV8FromSysRegs(pCpum->GuestInfo.paIdRegsR3, pCpum->GuestInfo.cIdRegs, &pCpum->GuestFeatures);
+    AssertRCReturn(rc, rc);
+
+    return VINF_SUCCESS;
 }
 
 
 /**
- * Queries the pointer to the VM wide ID registers exposing configured features to the guest.
+ * Queries a copy of the VM wide ID registers exposing configured features to
+ * the guest.
  *
  * @returns VBox status code.
  * @param   pVM                 The cross context VM structure.
  * @param   ppIdRegs            Where to store the pointer to the guest ID register struct.
  */
-VMMR3_INT_DECL(int) CPUMR3QueryGuestIdRegs(PVM pVM, PCCPUMARMV8IDREGS *ppIdRegs)
+VMMR3_INT_DECL(int) CPUMR3QueryGuestIdRegs(PVM pVM, PCPUMARMV8IDREGS pIdRegs)
 {
-    AssertPtrReturn(ppIdRegs, VERR_INVALID_POINTER);
+    AssertPtrReturn(pIdRegs, VERR_INVALID_POINTER);
 
-    *ppIdRegs = &pVM->cpum.s.GuestIdRegs;
+    RT_ZERO(*pIdRegs);
+    for (size_t i = 0; i < RT_ELEMENTS(g_aArmV8IdRegsOffsetsAndIds); i++)
+    {
+        PCSUPARMSYSREGVAL const pIdRegVal = cpumR3CpuIdLookupGuestIdReg(pVM, g_aArmV8IdRegsOffsetsAndIds[i].idReg);
+        *(uint64_t * )((uintptr_t)pIdRegs + g_aArmV8IdRegsOffsetsAndIds[i].off) = pIdRegVal ? pIdRegVal->uValue : 0;
+    }
+
     return VINF_SUCCESS;
+}
+
+
+/**
+ * System ID registers to query and consider for sanitizing.
+ */
+static struct
+{
+    uint32_t idReg;
+    uint32_t fSet : 1;
+    uint32_t fAssert : 1;
+    const char *pszName;
+} const g_aSysIdRegs[] =
+{
+    /* This is pretty much the same list as in SUPDrv.cpp (supdrvIOCtl_ArmGetSysRegsOnCpu). */
+#define READ_SYS_REG_NAMED_EX(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, a_SysRegName, a_fSet) \
+        {   ARMV8_AARCH64_SYSREG_ID_CREATE(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2), \
+            (a_fSet), \
+               ARMV8_AARCH64_SYSREG_ID_CREATE(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2) \
+            == RT_CONCAT(ARMV8_AARCH64_SYSREG_, a_SysRegName) ? 0 : -2, \
+            #a_SysRegName }
+#define READ_SYS_REG_NOSET(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, a_SysRegName) \
+    READ_SYS_REG_NAMED_EX(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, a_SysRegName, false)
+#define READ_SYS_REG_NAMED(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, a_SysRegName) \
+    READ_SYS_REG_NAMED_EX(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, a_SysRegName, true)
+#define READ_SYS_REG_UNDEF(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2) \
+    {   ARMV8_AARCH64_SYSREG_ID_CREATE(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2), true, 0, \
+        #a_Op0 "," #a_Op1 "," #a_CRn "," #a_CRm "," #a_Op2 }
+
+    /*
+     * Standard ID registers.
+     *
+     * DDI0487L.a section D23.3.1, 3rd item in note states that the registers in
+     * the range 3,0,0,2,0 thru 3,0,0,7,7 are defined to be accessible and if not
+     * defined will read-as-zero.
+     */
+
+    /* The first three seems to be in a sparse block. Haven't found any docs on
+       what the Op2 values 1-4 and 7 may do if read. */
+    READ_SYS_REG_NAMED(3, 0, 0, 0, 0, MIDR_EL1),
+    READ_SYS_REG_NOSET(3, 0, 0, 0, 5, MPIDR_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 0, 6, REVIDR_EL1),
+
+    /* AArch64 feature registers
+       The CRm values 4 thru 7 are RAZ when undefined as per the D23.3.1 note. */
+    READ_SYS_REG_NAMED(3, 0, 0, 4, 0, ID_AA64PFR0_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 4, 1, ID_AA64PFR1_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 4, 2, ID_AA64PFR2_EL1),
+    READ_SYS_REG_UNDEF(3, 0, 0, 4, 3),
+    READ_SYS_REG_NAMED(3, 0, 0, 4, 4, ID_AA64ZFR0_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 4, 5, ID_AA64SMFR0_EL1),
+    READ_SYS_REG_UNDEF(3, 0, 0, 4, 6),
+    READ_SYS_REG_NAMED(3, 0, 0, 4, 7, ID_AA64FPFR0_EL1),
+
+    READ_SYS_REG_NAMED(3, 0, 0, 5, 0, ID_AA64DFR0_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 5, 1, ID_AA64DFR1_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 5, 2, ID_AA64DFR2_EL1),
+    READ_SYS_REG_UNDEF(3, 0, 0, 5, 3),
+    READ_SYS_REG_NAMED(3, 0, 0, 5, 4, ID_AA64AFR0_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 5, 5, ID_AA64AFR1_EL1),
+    READ_SYS_REG_UNDEF(3, 0, 0, 5, 6),
+    READ_SYS_REG_UNDEF(3, 0, 0, 5, 7),
+
+    READ_SYS_REG_NAMED(3, 0, 0, 6, 0, ID_AA64ISAR0_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 6, 1, ID_AA64ISAR1_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 6, 2, ID_AA64ISAR2_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 6, 3, ID_AA64ISAR3_EL1),
+    READ_SYS_REG_UNDEF(3, 0, 0, 6, 4),
+    READ_SYS_REG_UNDEF(3, 0, 0, 6, 5),
+    READ_SYS_REG_UNDEF(3, 0, 0, 6, 6),
+    READ_SYS_REG_UNDEF(3, 0, 0, 6, 7),
+
+    READ_SYS_REG_NAMED(3, 0, 0, 7, 0, ID_AA64MMFR0_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 7, 1, ID_AA64MMFR1_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 7, 2, ID_AA64MMFR2_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 7, 3, ID_AA64MMFR3_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 7, 4, ID_AA64MMFR4_EL1),
+    READ_SYS_REG_UNDEF(3, 0, 0, 7, 5),
+    READ_SYS_REG_UNDEF(3, 0, 0, 7, 6),
+    READ_SYS_REG_UNDEF(3, 0, 0, 7, 7),
+
+    /* AArch32 feature registers (covered by the D23.3.1 note). */
+    READ_SYS_REG_NAMED(3, 0, 0, 1, 0, ID_PFR0_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 1, 1, ID_PFR1_EL1),
+
+    READ_SYS_REG_NAMED(3, 0, 0, 1, 2, ID_DFR0_EL1),
+
+    READ_SYS_REG_NAMED(3, 0, 0, 1, 3, ID_AFR0_EL1),
+
+    READ_SYS_REG_NAMED(3, 0, 0, 1, 4, ID_MMFR0_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 1, 5, ID_MMFR1_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 1, 6, ID_MMFR2_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 1, 7, ID_MMFR3_EL1),
+
+    READ_SYS_REG_NAMED(3, 0, 0, 2, 0, ID_ISAR0_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 2, 1, ID_ISAR1_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 2, 2, ID_ISAR2_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 2, 3, ID_ISAR3_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 2, 4, ID_ISAR4_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 2, 5, ID_ISAR5_EL1),
+
+    READ_SYS_REG_NAMED(3, 0, 0, 2, 6, ID_MMFR4_EL1),
+
+    READ_SYS_REG_NAMED(3, 0, 0, 2, 7, ID_ISAR6_EL1),
+
+    READ_SYS_REG_NAMED(3, 0, 0, 3, 0, MVFR0_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 3, 1, MVFR1_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 3, 2, MVFR2_EL1),
+
+    READ_SYS_REG_UNDEF(3, 0, 0, 3, 3),
+
+    READ_SYS_REG_NAMED(3, 0, 0, 3, 4, ID_PFR2_EL1),
+
+    READ_SYS_REG_NAMED(3, 0, 0, 3, 5, ID_DFR1_EL1),
+
+    READ_SYS_REG_NAMED(3, 0, 0, 3, 6, ID_MMFR5_EL1),
+
+    READ_SYS_REG_UNDEF(3, 0, 0, 3, 7),
+
+    /*
+     * Feature dependent registers outside the ID block:
+     */
+    READ_SYS_REG_NAMED(3, 0, 5, 3, 0, ERRIDR_EL1),      /* FEAT_RAS */
+
+    READ_SYS_REG_NAMED(3, 0, 9,  9, 7, PMSIDR_EL1),     /* FEAT_SPS */
+    READ_SYS_REG_NAMED(3, 0, 9, 10, 7, PMBIDR_EL1),     /* FEAT_SPS*/
+
+    READ_SYS_REG_NAMED(3, 0, 9, 11, 7, TRBIDR_EL1),     /* FEAT_TRBE */
+
+    READ_SYS_REG_NAMED(3, 0, 9, 14, 6, PMMIR_EL1),      /* FEAT_PMUv3p4 */
+
+    READ_SYS_REG_NAMED(3, 0, 10, 4, 4, MPAMIDR_EL1),    /* FEAT_MPAM */
+    READ_SYS_REG_NAMED(3, 0, 10, 4, 5, MPAMBWIDR_EL1),  /* FEAT_MPAM_PE_BW_CTRL (&& FEAT_MPAM) */
+
+    /// @todo LORID_EL1 3,0,10,4,7  - FEAT_LOR
+    /// @todo PMCEID0_EL0 ?
+    /// @todo PMCEID1_EL0 ?
+    /// @todo AMCFGR_EL0 ?
+    /// @todo AMCGCR_EL0 ?
+    /// @todo AMCG1IDR_EL0 ?
+    /// @todo AMEVTYPER0<n>_EL0 ?
+
+    READ_SYS_REG_NAMED(3, 1, 0, 0, 4, GMID_EL1),        /* FEAT_MTE2 */
+
+    READ_SYS_REG_NAMED(3, 1, 0, 0, 6, SMIDR_EL1),       /* FEAT_SME */
+
+    /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0,  8, 7, TRCIDR0),  */
+    /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0,  9, 7, TRCIDR1),  */
+    /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0, 10, 7, TRCIDR2),  */
+    /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0, 11, 7, TRCIDR3),  */
+    /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0, 12, 7, TRCIDR4),  */
+    /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0, 13, 7, TRCIDR5),  */
+    /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0, 14, 7, TRCIDR6),  */
+    /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0, 15, 7, TRCIDR7),  */
+    /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0,  0, 6, TRCIDR8),  */
+    /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0,  1, 6, TRCIDR10),  */
+    /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0,  2, 6, TRCIDR11),  */
+    /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0,  4, 6, TRCIDR12),  */
+    /** @todo FEAT_ETE: READ_SYS_REG_NAMED(2, 1, 0,  5, 6, TRCIDR13),  */
+
+    READ_SYS_REG_NAMED(2, 1, 7, 15, 6, TRCDEVARCH),     /* FEAT_ETE */
+
+    /*
+     * Collections of other read-only registers.
+     */
+    READ_SYS_REG_NAMED(3, 1, 0, 0, 1, CLIDR_EL1),   /* cache level id register */
+    READ_SYS_REG_NAMED(3, 1, 0, 0, 7, AIDR_EL1),
+    READ_SYS_REG_NAMED(3, 3, 0, 0, 1, CTR_EL0),     /* cache type register */
+    READ_SYS_REG_NAMED(3, 3, 0, 0, 7, DCZID_EL0),
+    READ_SYS_REG_NOSET(3, 3,14, 0, 0, CNTFRQ_EL0),
+
+#undef READ_SYS_REG_NAMED_EX
+#undef READ_SYS_REG_NAMED
+#undef READ_SYS_REG_NOSET
+#undef READ_SYS_REG_UNDEF
+};
+
+
+/**
+ * Gets the name of the ID register for logging.
+ */
+static const char *cpumR3GetIdRegName(uint32_t idReg, char pszFallback[32])
+{
+    for (uint32_t i = 0; i < RT_ELEMENTS(g_aSysIdRegs); i++)
+        if (g_aSysIdRegs[i].idReg == idReg)
+            return g_aSysIdRegs[i].pszName;
+    RTStrPrintf(pszFallback, 32, "s%u_%u_c%u_c%u_%u", /* gnu assembly compatible format */
+                ARMV8_AARCH64_SYSREG_ID_GET_OP0(idReg),
+                ARMV8_AARCH64_SYSREG_ID_GET_OP1(idReg),
+                ARMV8_AARCH64_SYSREG_ID_GET_CRN(idReg),
+                ARMV8_AARCH64_SYSREG_ID_GET_CRM(idReg),
+                ARMV8_AARCH64_SYSREG_ID_GET_OP2(idReg));
+    return pszFallback;
+}
+
+/**
+ * Populate guest feature ID registers.
+ *
+ * This operates in two modes:
+ *      -# pfnQuery != NULL: Determin the guest feature register values and sets
+ *         them in the execution manager calling us.
+ *      -# pfnQuery == NULL: Enumerate the guest feature registers and set them
+ *         in the execution manager calling us.
+ *
+ * @returns VBox status code.
+ * @param   pVM         The cross context VM structure.
+ * @param   pVCpu       For passing along to the callbacks.
+ * @param   pfnQuery    Callback for query register values in order to establish
+ *                      the guest feature ID register values. Specify NULL to
+ *                      just get called back to set the value.
+ * @param   pfnUpdate   Callback for update (setting) register values.
+ * @param   pvUser      User specific callback argument.
+ */
+VMMR3_INT_DECL(int) CPUMR3PopulateGuestFeaturesViaCallbacks(PVM pVM, PVMCPU pVCpu, PFNCPUMARMCPUIDREGQUERY pfnQuery,
+                                                            PFNCPUMARMCPUIDREGUPDATE pfnUpdate, void *pvUser)
+{
+    Assert(pfnUpdate);
+
+    /*
+     * If pfnQuery is given, we must determin the guest feature register values first.
+     */
+    if (pfnQuery)
+    {
+        /*
+         * Read the configuration.
+         */
+        PCFGMNODE const pCpumCfg = CFGMR3GetChild(CFGMR3GetRoot(pVM), "CPUM");
+        CPUMCPUIDCONFIG Config;
+        RT_ZERO(Config);
+
+        int rc = cpumR3CpuIdReadConfig(pVM, &Config, pCpumCfg);
+        AssertRCReturn(rc, rc);
+
+        /*
+         * Query all the registers we might find interesting...
+         */
+        uint32_t         cIdRegsAlloc = RT_ELEMENTS(g_aSysIdRegs);
+        PSUPARMSYSREGVAL paIdRegs     = (PSUPARMSYSREGVAL)RTMemAlloc(cIdRegsAlloc * sizeof(paIdRegs[0]));
+        AssertReturn(paIdRegs, VERR_NO_MEMORY);
+        uint32_t         cIdRegs = 0;
+        for (uint32_t i = 0; i < RT_ELEMENTS(g_aSysIdRegs); i++)
+        {
+            paIdRegs[cIdRegs].uValue = 0;
+            rc = pfnQuery(pVM, pVCpu, g_aSysIdRegs[i].idReg, pvUser, &paIdRegs[cIdRegs].uValue);
+            if (RT_SUCCESS(rc))
+            {
+                paIdRegs[cIdRegs].idReg  = g_aSysIdRegs[i].idReg;
+                paIdRegs[cIdRegs].fFlags = SUP_ARM_SYS_REG_VAL_F_FROM_EXEC_ENGINE;
+                if (!g_aSysIdRegs[i].fSet)
+                    paIdRegs[cIdRegs].fFlags |= SUP_ARM_SYS_REG_VAL_F_NOSET;
+                cIdRegs++;
+            }
+            else
+                AssertLogRelMsgReturn(rc == VERR_CPUM_UNSUPPORTED_ID_REGISTER,
+                                      ("idReg=%#x %s - %Rrc\n", g_aSysIdRegs[i].idReg, g_aSysIdRegs[i].pszName, rc),
+                                      rc);
+        }
+
+        /* Without counting too closely, we must at least get some 6 register
+           values here or something is seriously busted. */
+        AssertLogRelMsgReturnStmt(cIdRegs >= 6, ("cIdRegsAlloc=%d\n", cIdRegsAlloc),
+                                  RTMemFree(paIdRegs), VERR_INTERNAL_ERROR_4);
+
+        /* Sort the register values to facilitate binary lookup and such. */
+        RTSortShell(paIdRegs, cIdRegs, sizeof(paIdRegs[0]), cpumCpuIdSysRegValSortCmp, NULL);
+
+        /*
+         * Install the raw array.
+         */
+        RTMemFree(pVM->cpum.s.GuestInfo.paIdRegsR3);
+        pVM->cpum.s.GuestInfo.paIdRegsR3 = paIdRegs;
+        pVM->cpum.s.GuestInfo.cIdRegs    = cIdRegs;
+
+#if 0
+        /*
+         * Get the guest CPU data from the database and/or the host.
+         *
+         * The CPUID and MSRs are currently living on the regular heap to avoid
+         * fragmenting the hyper heap (and because there isn't/wasn't any realloc
+         * API for the hyper heap).  This means special cleanup considerations.
+         */
+        rc = cpumR3DbGetCpuInfo(Config.szCpuName, &pCpum->GuestInfo);
+        if (RT_FAILURE(rc))
+            return rc == VERR_CPUM_DB_CPU_NOT_FOUND
+                 ? VMSetError(pVM, rc, RT_SRC_POS,
+                              "Info on guest CPU '%s' could not be found. Please, select a different CPU.", Config.szCpuName)
+                 : rc;
+#endif
+
+        /*
+         * Pre-explode the CPU ID register info.
+         */
+        rc = CPUMCpuIdExplodeFeaturesArmV8FromSysRegs(paIdRegs, cIdRegs, &pVM->cpum.s.GuestFeatures);
+        AssertLogRelRCReturn(rc, rc);
+
+        /*
+         * Sanitize the cpuid information passed on to the guest.
+         */
+        rc = cpumR3CpuIdSanitize(pVM, &pVM->cpum.s, &Config, pCpumCfg);
+        AssertLogRelRCReturn(rc, rc);
+
+        /*
+         * Explode the sanitized CPU ID register info.
+         */
+        rc = CPUMCpuIdExplodeFeaturesArmV8FromSysRegs(pVM->cpum.s.GuestInfo.paIdRegsR3, pVM->cpum.s.GuestInfo.cIdRegs,
+                                                      &pVM->cpum.s.GuestFeatures);
+        AssertLogRelRCReturn(rc, rc);
+    }
+
+    /*
+     * Set the values.
+     */
+    int                     rcRet    = VINF_SUCCESS;
+    PSUPARMSYSREGVAL  const paIdRegs = pVM->cpum.s.GuestInfo.paIdRegsR3;
+    uint32_t const          cIdRegs  = pVM->cpum.s.GuestInfo.cIdRegs;
+    for (uint32_t i = 0; i < cIdRegs; i++)
+        if (!(paIdRegs[i].fFlags & SUP_ARM_SYS_REG_VAL_F_NOSET))
+        {
+            char      szName[32];
+            uint64_t  uValue = paIdRegs[i].uValue;
+            int const rc2    = pfnUpdate(pVM, pVCpu, paIdRegs[i].idReg, uValue, pvUser, &uValue);
+            if (RT_SUCCESS(rc2))
+            {
+                if (uValue != paIdRegs[i].uValue && pfnQuery)
+                {
+                    LogRel(("CPUM: idReg=%#x (%s) pfnUpdate adjusted %#RX64 -> %#RX64\n",
+                            paIdRegs[i].idReg, cpumR3GetIdRegName(paIdRegs[i].idReg, szName), paIdRegs[i].uValue, uValue));
+                    paIdRegs[i].uValue = uValue;
+                }
+                else
+                    AssertLogRelMsg(uValue == paIdRegs[i].uValue,
+                                    ("idCpu=%u idReg=%#x (%s) value: %#RX64 -> %#RX64\n", pVCpu->idCpu, paIdRegs[i].idReg,
+                                     cpumR3GetIdRegName(paIdRegs[i].idReg, szName), paIdRegs[i].uValue, uValue));
+            }
+            else
+            {
+                LogRel(("CPUM: Error: pfnUpdate(idCpu=%u idReg=%#x (%s) value=%#RX64) failed: %Rrc\n", pVCpu->idCpu,
+                        paIdRegs[i].idReg, cpumR3GetIdRegName(paIdRegs[i].idReg, szName), paIdRegs[i].uValue, rc2));
+                if (RT_SUCCESS(rcRet))
+                    rcRet = rc2;
+            }
+        }
+    return rcRet;
+}
+
+
+/**
+ * Query an ARM system ID register value.
+ *
+ * @retval  VINF_SUCCESS
+ * @retval  VERR_CPUM_UNSUPPORTED_ID_REGISTER
+ * @param   pVM         The cross context VM structure.
+ * @param   idReg       The ID register to query.
+ * @param   puValue     Where to return the value.
+ */
+VMMR3_INT_DECL(int) CPUMR3QueryGuestIdReg(PVM pVM, uint32_t idReg, uint64_t *puValue)
+{
+    PCSUPARMSYSREGVAL pIdReg = cpumR3CpuIdLookupGuestIdReg(pVM, idReg);
+    if (pIdReg)
+    {
+        *puValue = pIdReg->uValue;
+        return VINF_SUCCESS;
+    }
+    *puValue = 0;
+    return VERR_CPUM_UNSUPPORTED_ID_REGISTER;
 }
 
 
@@ -490,25 +988,88 @@ VMMR3_INT_DECL(int) CPUMR3QueryGuestIdRegs(PVM pVM, PCCPUMARMV8IDREGS *ppIdRegs)
  *
  */
 
-/** Saved state field descriptors for CPUMARMV8IDREGS. */
-static const SSMFIELD g_aCpumArmV8IdRegsFields[] =
+/**
+ * Old ARMv8 CPU ID registers structure - version 1 & 2 saved states.
+ */
+typedef struct CPUMARMV8OLDIDREGS
 {
-    SSMFIELD_ENTRY(CPUMARMV8IDREGS, u64RegIdAa64Pfr0El1),
-    SSMFIELD_ENTRY(CPUMARMV8IDREGS, u64RegIdAa64Pfr1El1),
-    SSMFIELD_ENTRY(CPUMARMV8IDREGS, u64RegIdAa64Dfr0El1),
-    SSMFIELD_ENTRY(CPUMARMV8IDREGS, u64RegIdAa64Dfr1El1),
-    SSMFIELD_ENTRY(CPUMARMV8IDREGS, u64RegIdAa64Afr0El1),
-    SSMFIELD_ENTRY(CPUMARMV8IDREGS, u64RegIdAa64Afr1El1),
-    SSMFIELD_ENTRY(CPUMARMV8IDREGS, u64RegIdAa64Isar0El1),
-    SSMFIELD_ENTRY(CPUMARMV8IDREGS, u64RegIdAa64Isar1El1),
-    SSMFIELD_ENTRY(CPUMARMV8IDREGS, u64RegIdAa64Isar2El1),
-    SSMFIELD_ENTRY(CPUMARMV8IDREGS, u64RegIdAa64Mmfr0El1),
-    SSMFIELD_ENTRY(CPUMARMV8IDREGS, u64RegIdAa64Mmfr1El1),
-    SSMFIELD_ENTRY(CPUMARMV8IDREGS, u64RegIdAa64Mmfr2El1),
-    SSMFIELD_ENTRY(CPUMARMV8IDREGS, u64RegClidrEl1),
-    SSMFIELD_ENTRY(CPUMARMV8IDREGS, u64RegCtrEl0),
-    SSMFIELD_ENTRY(CPUMARMV8IDREGS, u64RegDczidEl0),
+    /** Content of the ID_AA64PFR0_EL1 register. */
+    uint64_t        u64RegIdAa64Pfr0El1;
+    /** Content of the ID_AA64PFR1_EL1 register. */
+    uint64_t        u64RegIdAa64Pfr1El1;
+    /** Content of the ID_AA64DFR0_EL1 register. */
+    uint64_t        u64RegIdAa64Dfr0El1;
+    /** Content of the ID_AA64DFR1_EL1 register. */
+    uint64_t        u64RegIdAa64Dfr1El1;
+    /** Content of the ID_AA64AFR0_EL1 register. */
+    uint64_t        u64RegIdAa64Afr0El1;
+    /** Content of the ID_AA64AFR1_EL1 register. */
+    uint64_t        u64RegIdAa64Afr1El1;
+    /** Content of the ID_AA64ISAR0_EL1 register. */
+    uint64_t        u64RegIdAa64Isar0El1;
+    /** Content of the ID_AA64ISAR1_EL1 register. */
+    uint64_t        u64RegIdAa64Isar1El1;
+    /** Content of the ID_AA64ISAR2_EL1 register. */
+    uint64_t        u64RegIdAa64Isar2El1;
+    /** Content of the ID_AA64MMFR0_EL1 register. */
+    uint64_t        u64RegIdAa64Mmfr0El1;
+    /** Content of the ID_AA64MMFR1_EL1 register. */
+    uint64_t        u64RegIdAa64Mmfr1El1;
+    /** Content of the ID_AA64MMFR2_EL1 register. */
+    uint64_t        u64RegIdAa64Mmfr2El1;
+    /** Content of the CLIDR_EL1 register. */
+    uint64_t        u64RegClidrEl1;
+    /** Content of the CTR_EL0 register. */
+    uint64_t        u64RegCtrEl0;
+    /** Content of the DCZID_EL0 register. */
+    uint64_t        u64RegDczidEl0;
+} CPUMARMV8OLDIDREGS;
+
+
+/** Saved state field descriptors for CPUMARMV8OLDIDREGS. */
+static const SSMFIELD g_aCpumArmV8OldIdRegsFields[] =
+{
+    SSMFIELD_ENTRY(CPUMARMV8OLDIDREGS, u64RegIdAa64Pfr0El1),
+    SSMFIELD_ENTRY(CPUMARMV8OLDIDREGS, u64RegIdAa64Pfr1El1),
+    SSMFIELD_ENTRY(CPUMARMV8OLDIDREGS, u64RegIdAa64Dfr0El1),
+    SSMFIELD_ENTRY(CPUMARMV8OLDIDREGS, u64RegIdAa64Dfr1El1),
+    SSMFIELD_ENTRY(CPUMARMV8OLDIDREGS, u64RegIdAa64Afr0El1),
+    SSMFIELD_ENTRY(CPUMARMV8OLDIDREGS, u64RegIdAa64Afr1El1),
+    SSMFIELD_ENTRY(CPUMARMV8OLDIDREGS, u64RegIdAa64Isar0El1),
+    SSMFIELD_ENTRY(CPUMARMV8OLDIDREGS, u64RegIdAa64Isar1El1),
+    SSMFIELD_ENTRY(CPUMARMV8OLDIDREGS, u64RegIdAa64Isar2El1),
+    SSMFIELD_ENTRY(CPUMARMV8OLDIDREGS, u64RegIdAa64Mmfr0El1),
+    SSMFIELD_ENTRY(CPUMARMV8OLDIDREGS, u64RegIdAa64Mmfr1El1),
+    SSMFIELD_ENTRY(CPUMARMV8OLDIDREGS, u64RegIdAa64Mmfr2El1),
+    SSMFIELD_ENTRY(CPUMARMV8OLDIDREGS, u64RegClidrEl1),
+    SSMFIELD_ENTRY(CPUMARMV8OLDIDREGS, u64RegCtrEl0),
+    SSMFIELD_ENTRY(CPUMARMV8OLDIDREGS, u64RegDczidEl0),
     SSMFIELD_ENTRY_TERM()
+};
+
+
+/** Translation table between CPUMARMV8OLDIDREGS and register numbers. */
+static struct
+{
+    uint32_t idReg;
+    uint32_t off;
+} const g_aArmV8OldIdRegsOffsetsAndIds[] =
+{
+    {  ARMV8_AARCH64_SYSREG_ID_AA64PFR0_EL1,    RT_UOFFSETOF(CPUMARMV8OLDIDREGS, u64RegIdAa64Pfr0El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64PFR1_EL1,    RT_UOFFSETOF(CPUMARMV8OLDIDREGS, u64RegIdAa64Pfr1El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64DFR0_EL1,    RT_UOFFSETOF(CPUMARMV8OLDIDREGS, u64RegIdAa64Dfr0El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64DFR1_EL1,    RT_UOFFSETOF(CPUMARMV8OLDIDREGS, u64RegIdAa64Dfr1El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64AFR0_EL1,    RT_UOFFSETOF(CPUMARMV8OLDIDREGS, u64RegIdAa64Afr0El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64AFR1_EL1,    RT_UOFFSETOF(CPUMARMV8OLDIDREGS, u64RegIdAa64Afr1El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64ISAR0_EL1,   RT_UOFFSETOF(CPUMARMV8OLDIDREGS, u64RegIdAa64Isar0El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64ISAR1_EL1,   RT_UOFFSETOF(CPUMARMV8OLDIDREGS, u64RegIdAa64Isar1El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64ISAR2_EL1,   RT_UOFFSETOF(CPUMARMV8OLDIDREGS, u64RegIdAa64Isar2El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64MMFR0_EL1,   RT_UOFFSETOF(CPUMARMV8OLDIDREGS, u64RegIdAa64Mmfr0El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64MMFR1_EL1,   RT_UOFFSETOF(CPUMARMV8OLDIDREGS, u64RegIdAa64Mmfr1El1) },
+    {  ARMV8_AARCH64_SYSREG_ID_AA64MMFR2_EL1,   RT_UOFFSETOF(CPUMARMV8OLDIDREGS, u64RegIdAa64Mmfr2El1) },
+    {  ARMV8_AARCH64_SYSREG_CLIDR_EL1,          RT_UOFFSETOF(CPUMARMV8OLDIDREGS, u64RegClidrEl1) },
+    {  ARMV8_AARCH64_SYSREG_CTR_EL0,            RT_UOFFSETOF(CPUMARMV8OLDIDREGS, u64RegCtrEl0) },
+    {  ARMV8_AARCH64_SYSREG_DCZID_EL0,          RT_UOFFSETOF(CPUMARMV8OLDIDREGS, u64RegDczidEl0) },
 };
 
 
@@ -523,66 +1084,100 @@ void cpumR3SaveCpuId(PVM pVM, PSSMHANDLE pSSM)
     /*
      * Save all the CPU ID leaves.
      */
-    SSMR3PutStructEx(pSSM, &pVM->cpum.s.GuestIdRegs, sizeof(pVM->cpum.s.GuestIdRegs), 0, g_aCpumArmV8IdRegsFields, NULL);
+    PCSUPARMSYSREGVAL const paIdRegs = pVM->cpum.s.GuestInfo.paIdRegsR3;
+    uint32_t const          cIdRegs  = pVM->cpum.s.GuestInfo.cIdRegs;
+    SSMR3PutU32(pSSM, cIdRegs);
+    for (uint32_t i = 0; i < cIdRegs; i++)
+    {
+        SSMR3PutU32(pSSM, paIdRegs[i].idReg);
+        SSMR3PutU64(pSSM, paIdRegs[i].uValue);
+    }
+    SSMR3PutU32(pSSM, UINT32_MAX);
 }
 
 
 /**
- * Loads the CPU ID leaves saved by pass 0, inner worker.
+ * Verifies and sanitizes CPU ID register values saved by pass 0.
  *
  * @returns VBox status code.
- * @param   pVM                 The cross context VM structure.
- * @param   pSSM                The saved state handle.
- * @param   uVersion            The format version.
- * @param   pGuestIdRegs        The guest ID register as loaded from the saved state.
+ * @param   pVM         The cross context VM structure.
+ * @param   pSSM        The saved state handle.
+ * @param   paIdRegs    The ID register values being loaded and installed.
+ *                      On success ownership is taken over this array.
+ *                      On failure the caller must free it.
+ * @param   cIdRegs     The number of ID register values in @a paIdRegs.
+ * @param   fNewVersion Set if we're loading a new state version.  Clear when
+ *                      loading one based on CPUMARMV8OLDIDREGS.
  */
-static int cpumR3LoadCpuIdInner(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersion, PCCPUMARMV8IDREGS pGuestIdRegs)
+static int cpumR3LoadCpuIdInner(PVM pVM, PSSMHANDLE pSSM, PSUPARMSYSREGVAL paIdRegs, uint32_t cIdRegs, bool fNewVersion)
 {
     /*
      * This can be skipped.
      */
     bool fStrictCpuIdChecks;
-    CFGMR3QueryBoolDef(CFGMR3GetChild(CFGMR3GetRoot(pVM), "CPUM"), "StrictCpuIdChecks", &fStrictCpuIdChecks, true);
+    int rc = CFGMR3QueryBoolDef(CFGMR3GetChild(CFGMR3GetRoot(pVM), "CPUM"), "StrictCpuIdChecks", &fStrictCpuIdChecks, true);
+    AssertRCReturn(rc, rc);
 
     /*
      * Define a bunch of macros for simplifying the santizing/checking code below.
      */
     /* For checking guest features. */
-#define CPUID_GST_FEATURE_RET(a_IdReg, a_Field) \
+#define CPUID_GST_FEATURE_RET(a_uLoad, a_uCfg, a_Field) \
     do { \
-        if (RT_BF_GET(pGuestIdRegs->a_IdReg, a_Field) > RT_BF_GET(pVM->cpum.s.GuestIdRegs.a_IdReg, a_Field)) \
+        if (RT_BF_GET(a_uLoad, a_Field) > RT_BF_GET(a_uCfg, a_Field)) \
         { \
             if (fStrictCpuIdChecks) \
                 return SSMR3SetLoadError(pSSM, VERR_SSM_LOAD_CPUID_MISMATCH, RT_SRC_POS, \
-                                         N_(#a_Field " is not supported by the host but has already exposed to the guest")); \
-            LogRel(("CPUM: " #a_Field " is not supported by the host but has already been exposed to the guest\n")); \
+                                         N_(#a_Field " is not supported by the guest config / host (%#x) but has already exposed to the guest (%#x)"),\
+                                         RT_BF_GET(a_uCfg, a_Field), RT_BF_GET(a_uLoad, a_Field) ); \
+            LogRel(("CPUM: " #a_Field " is not supported by the guest config / host (%#x) but has already been exposed to the guest (%#x)\n", \
+                    RT_BF_GET(a_uCfg, a_Field), RT_BF_GET(a_uLoad, a_Field) )); \
         } \
     } while (0)
-#define CPUID_GST_FEATURE_RET_NOT_IMPL(a_IdReg, a_Field, a_NotImpl) \
+#define CPUID_GST_FEATURE_RET_NOT_IMPL(a_uLoad, a_uCfg, a_Field, a_NotImpl) \
     do { \
-        if (   (   RT_BF_GET(pGuestIdRegs->a_IdReg, a_Field) != (a_NotImpl) \
-                && RT_BF_GET(pVM->cpum.s.GuestIdRegs.a_IdReg, a_Field) == (a_NotImpl)) \
-            || RT_BF_GET(pGuestIdRegs->a_IdReg, a_Field) > RT_BF_GET(pVM->cpum.s.GuestIdRegs.a_IdReg, a_Field)) \
+        if (   (   RT_BF_GET(a_uLoad, a_Field) != (a_NotImpl) \
+                && RT_BF_GET(a_uCfg,  a_Field) == (a_NotImpl)) \
+            || RT_BF_GET(a_uLoad, a_Field) > RT_BF_GET(a_uCfg, a_Field)) \
         { \
             if (fStrictCpuIdChecks) \
                 return SSMR3SetLoadError(pSSM, VERR_SSM_LOAD_CPUID_MISMATCH, RT_SRC_POS, \
-                                         N_(#a_Field " is not supported by the host but has already exposed to the guest")); \
-            LogRel(("CPUM: " #a_Field " is not supported by the host but has already been exposed to the guest\n")); \
+                                         N_(#a_Field " is not supported by the guest config / host (%#x) but has already exposed to the guest (%#x)"),\
+                                         RT_BF_GET(a_uCfg, a_Field), RT_BF_GET(a_uLoad, a_Field) ); \
+            LogRel(("CPUM: " #a_Field " is not supported by the guest config / host (%#x) but has already been exposed to the guest (%#x)\n", \
+                    RT_BF_GET(a_uCfg, a_Field), RT_BF_GET(a_uLoad, a_Field) )); \
         } \
     } while (0)
-#define CPUID_GST_FEATURE_WRN(a_IdReg, a_Field) \
+#define CPUID_GST_FEATURE_WRN(a_uLoad, a_uCfg, a_Field) \
     do { \
-        if (RT_BF_GET(pGuestIdRegs->a_IdReg, a_Field) > RT_BF_GET(pVM->cpum.s.GuestIdRegs.a_IdReg, a_Field)) \
-            LogRel(("CPUM: " #a_Field " is not supported by the host but has already been exposed to the guest\n")); \
+        if (RT_BF_GET(a_uLoad, a_Field) > RT_BF_GET(a_uCfg, a_Field)) \
+            LogRel(("CPUM: " #a_Field " is not supported by the guest config / host (%#x) but has already been exposed to the guest (%#x)\n", \
+                    RT_BF_GET(a_uCfg, a_Field), RT_BF_GET(a_uLoad, a_Field) )); \
     } while (0)
-#define CPUID_GST_FEATURE_EMU(a_IdReg, a_Field) \
+#if 0 /** @todo emulatate how/what? */
+# define CPUID_GST_FEATURE_EMU(a_uLoad, a_uCfg, a_Field)  \
     do { \
-        if (RT_BF_GET(pGuestIdRegs->a_IdReg, a_Field) > RT_BF_GET(pVM->cpum.s.GuestIdRegs.a_IdReg, a_Field)) \
-            LogRel(("CPUM: Warning - " #a_Field " is not supported by the host but has already been exposed to the guest. This may impact performance.\n")); \
+        if (RT_BF_GET(a_uLoad, a_Field) > RT_BF_GET(a_uCfg, a_Field)) \
+            LogRel(("CPUM: Warning - " #a_Field " is not supported by the guest config / host (%#x) but has already been exposed to the guest (%#x). This may impact performance.\n", \
+                    RT_BF_GET(a_uCfg, a_Field), RT_BF_GET(a_uLoad, a_Field) )); \
     } while (0)
-#define CPUID_GST_FEATURE_IGN(a_IdReg, a_Field) do { } while (0)
+#endif
+#define CPUID_GST_FEATURE_IGN(a_uLoad, a_uCfg, a_Field) do { } while (0)
 
-    RT_NOREF(uVersion);
+
+    PCSUPARMSYSREGVAL pCfg;
+    PSUPARMSYSREGVAL  pLoad;
+    uint64_t          uCfg;
+    uint64_t          uLoad;
+#define CPUID_GET_VALUES_FOR_ID_REG(a_idReg) \
+    do { \
+        pCfg  = cpumR3CpuIdLookupGuestIdReg(pVM, (a_idReg)); \
+        uCfg  = pCfg  ? pCfg->uValue  : 0; \
+        pLoad = cpumCpuIdLookupIdReg(paIdRegs, cIdRegs, (a_idReg)); \
+        uLoad = pLoad ? pLoad->uValue : 0; \
+    } while (0)
+
+
     /*
      * Verify that we can support the features already exposed to the guest on
      * this host.
@@ -596,142 +1191,151 @@ static int cpumR3LoadCpuIdInner(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersion, PCC
      *      "EMU?" - Can this be emulated?
      */
     /* ID_AA64ISAR0_EL1 */
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar0El1, ARMV8_ID_AA64ISAR0_EL1_AES);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar0El1, ARMV8_ID_AA64ISAR0_EL1_SHA1);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar0El1, ARMV8_ID_AA64ISAR0_EL1_SHA2);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar0El1, ARMV8_ID_AA64ISAR0_EL1_CRC32);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar0El1, ARMV8_ID_AA64ISAR0_EL1_ATOMIC);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar0El1, ARMV8_ID_AA64ISAR0_EL1_TME);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar0El1, ARMV8_ID_AA64ISAR0_EL1_RDM);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar0El1, ARMV8_ID_AA64ISAR0_EL1_SHA3);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar0El1, ARMV8_ID_AA64ISAR0_EL1_SM3);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar0El1, ARMV8_ID_AA64ISAR0_EL1_SM4);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar0El1, ARMV8_ID_AA64ISAR0_EL1_DP);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar0El1, ARMV8_ID_AA64ISAR0_EL1_FHM);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar0El1, ARMV8_ID_AA64ISAR0_EL1_TS);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar0El1, ARMV8_ID_AA64ISAR0_EL1_TLB);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar0El1, ARMV8_ID_AA64ISAR0_EL1_RNDR);
+    CPUID_GET_VALUES_FOR_ID_REG(ARMV8_AARCH64_SYSREG_ID_AA64ISAR0_EL1);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR0_EL1_AES);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR0_EL1_SHA1);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR0_EL1_SHA2);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR0_EL1_CRC32);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR0_EL1_ATOMIC);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR0_EL1_TME);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR0_EL1_RDM);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR0_EL1_SHA3);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR0_EL1_SM3);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR0_EL1_SM4);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR0_EL1_DP);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR0_EL1_FHM);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR0_EL1_TS);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR0_EL1_TLB);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR0_EL1_RNDR);
 
     /* ID_AA64ISAR1_EL1 */
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar1El1, ARMV8_ID_AA64ISAR1_EL1_DPB);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar1El1, ARMV8_ID_AA64ISAR1_EL1_APA);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar1El1, ARMV8_ID_AA64ISAR1_EL1_API);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar1El1, ARMV8_ID_AA64ISAR1_EL1_FJCVTZS);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar1El1, ARMV8_ID_AA64ISAR1_EL1_LRCPC);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar1El1, ARMV8_ID_AA64ISAR1_EL1_GPA);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar1El1, ARMV8_ID_AA64ISAR1_EL1_GPI);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar1El1, ARMV8_ID_AA64ISAR1_EL1_FRINTTS);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar1El1, ARMV8_ID_AA64ISAR1_EL1_SB);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar1El1, ARMV8_ID_AA64ISAR1_EL1_SPECRES);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar1El1, ARMV8_ID_AA64ISAR1_EL1_BF16);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar1El1, ARMV8_ID_AA64ISAR1_EL1_DGH);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar1El1, ARMV8_ID_AA64ISAR1_EL1_I8MM);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar1El1, ARMV8_ID_AA64ISAR1_EL1_XS);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar1El1, ARMV8_ID_AA64ISAR1_EL1_LS64);
+    CPUID_GET_VALUES_FOR_ID_REG(ARMV8_AARCH64_SYSREG_ID_AA64ISAR1_EL1);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR1_EL1_DPB);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR1_EL1_APA);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR1_EL1_API);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR1_EL1_FJCVTZS);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR1_EL1_LRCPC);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR1_EL1_GPA);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR1_EL1_GPI);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR1_EL1_FRINTTS);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR1_EL1_SB);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR1_EL1_SPECRES);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR1_EL1_BF16);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR1_EL1_DGH);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR1_EL1_I8MM);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR1_EL1_XS);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR1_EL1_LS64);
 
     /* ID_AA64ISAR2_EL1 */
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar2El1, ARMV8_ID_AA64ISAR2_EL1_WFXT);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar2El1, ARMV8_ID_AA64ISAR2_EL1_RPRES);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar2El1, ARMV8_ID_AA64ISAR2_EL1_GPA3);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar2El1, ARMV8_ID_AA64ISAR2_EL1_APA3);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar2El1, ARMV8_ID_AA64ISAR2_EL1_MOPS);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar2El1, ARMV8_ID_AA64ISAR2_EL1_BC);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Isar2El1, ARMV8_ID_AA64ISAR2_EL1_PACFRAC);
+    CPUID_GET_VALUES_FOR_ID_REG(ARMV8_AARCH64_SYSREG_ID_AA64ISAR2_EL1);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR2_EL1_WFXT);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR2_EL1_RPRES);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR2_EL1_GPA3);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR2_EL1_APA3);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR2_EL1_MOPS);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR2_EL1_BC);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64ISAR2_EL1_PACFRAC);
 
     /* ID_AA64PFR0_EL1 */
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr0El1,  ARMV8_ID_AA64PFR0_EL1_EL0);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr0El1,  ARMV8_ID_AA64PFR0_EL1_EL1);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr0El1,  ARMV8_ID_AA64PFR0_EL1_EL2);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr0El1,  ARMV8_ID_AA64PFR0_EL1_EL3);
-    CPUID_GST_FEATURE_RET_NOT_IMPL(u64RegIdAa64Pfr0El1, ARMV8_ID_AA64PFR0_EL1_FP,      ARMV8_ID_AA64PFR0_EL1_FP_NOT_IMPL);      /* Special not implemented value. */
-    CPUID_GST_FEATURE_RET_NOT_IMPL(u64RegIdAa64Pfr0El1, ARMV8_ID_AA64PFR0_EL1_ADVSIMD, ARMV8_ID_AA64PFR0_EL1_ADVSIMD_NOT_IMPL); /* Special not implemented value. */
-    CPUID_GST_FEATURE_IGN(u64RegIdAa64Pfr0El1,  ARMV8_ID_AA64PFR0_EL1_GIC);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr0El1,  ARMV8_ID_AA64PFR0_EL1_RAS);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr0El1,  ARMV8_ID_AA64PFR0_EL1_SVE);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr0El1,  ARMV8_ID_AA64PFR0_EL1_SEL2);
+    CPUID_GET_VALUES_FOR_ID_REG(ARMV8_AARCH64_SYSREG_ID_AA64PFR0_EL1);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64PFR0_EL1_EL0);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64PFR0_EL1_EL1);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64PFR0_EL1_EL2);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64PFR0_EL1_EL3);
+    CPUID_GST_FEATURE_RET_NOT_IMPL(uLoad, uCfg, ARMV8_ID_AA64PFR0_EL1_FP,      ARMV8_ID_AA64PFR0_EL1_FP_NOT_IMPL);      /* Special not implemented value. */
+    CPUID_GST_FEATURE_RET_NOT_IMPL(uLoad, uCfg, ARMV8_ID_AA64PFR0_EL1_ADVSIMD, ARMV8_ID_AA64PFR0_EL1_ADVSIMD_NOT_IMPL); /* Special not implemented value. */
+    CPUID_GST_FEATURE_IGN(         uLoad, uCfg, ARMV8_ID_AA64PFR0_EL1_GIC);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64PFR0_EL1_RAS);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64PFR0_EL1_SVE);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64PFR0_EL1_SEL2);
     /** @todo MPAM */
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr0El1,  ARMV8_ID_AA64PFR0_EL1_AMU);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr0El1,  ARMV8_ID_AA64PFR0_EL1_DIT);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr0El1,  ARMV8_ID_AA64PFR0_EL1_RME);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr0El1,  ARMV8_ID_AA64PFR0_EL1_CSV2);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr0El1,  ARMV8_ID_AA64PFR0_EL1_CSV3);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64PFR0_EL1_AMU);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64PFR0_EL1_DIT);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64PFR0_EL1_RME);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64PFR0_EL1_CSV2);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64PFR0_EL1_CSV3);
 
     /* ID_AA64PFR1_EL1 */
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr1El1,  ARMV8_ID_AA64PFR1_EL1_BT);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr1El1,  ARMV8_ID_AA64PFR1_EL1_SSBS);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr1El1,  ARMV8_ID_AA64PFR1_EL1_MTE);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr1El1,  ARMV8_ID_AA64PFR1_EL1_RASFRAC);
+    CPUID_GET_VALUES_FOR_ID_REG(ARMV8_AARCH64_SYSREG_ID_AA64PFR1_EL1);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64PFR1_EL1_BT);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64PFR1_EL1_SSBS);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64PFR1_EL1_MTE);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64PFR1_EL1_RASFRAC);
     /** @todo MPAM. */
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr1El1,  ARMV8_ID_AA64PFR1_EL1_SME);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr1El1,  ARMV8_ID_AA64PFR1_EL1_RNDRTRAP);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr1El1,  ARMV8_ID_AA64PFR1_EL1_CSV2FRAC);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Pfr1El1,  ARMV8_ID_AA64PFR1_EL1_NMI);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64PFR1_EL1_SME);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64PFR1_EL1_RNDRTRAP);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64PFR1_EL1_CSV2FRAC);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64PFR1_EL1_NMI);
 
     /* ID_AA64MMFR0_EL1 */
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr0El1, ARMV8_ID_AA64MMFR0_EL1_PARANGE);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr0El1, ARMV8_ID_AA64MMFR0_EL1_ASIDBITS);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr0El1, ARMV8_ID_AA64MMFR0_EL1_BIGEND);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr0El1, ARMV8_ID_AA64MMFR0_EL1_SNSMEM);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr0El1, ARMV8_ID_AA64MMFR0_EL1_BIGENDEL0);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr0El1, ARMV8_ID_AA64MMFR0_EL1_TGRAN16);
-    CPUID_GST_FEATURE_RET_NOT_IMPL(u64RegIdAa64Mmfr0El1, ARMV8_ID_AA64MMFR0_EL1_TGRAN64, ARMV8_ID_AA64MMFR0_EL1_TGRAN64_NOT_IMPL);
-    CPUID_GST_FEATURE_RET_NOT_IMPL(u64RegIdAa64Mmfr0El1, ARMV8_ID_AA64MMFR0_EL1_TGRAN4,  ARMV8_ID_AA64MMFR0_EL1_TGRAN4_NOT_IMPL);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr0El1, ARMV8_ID_AA64MMFR0_EL1_TGRAN16_2);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr0El1, ARMV8_ID_AA64MMFR0_EL1_TGRAN64_2);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr0El1, ARMV8_ID_AA64MMFR0_EL1_TGRAN4_2);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr0El1, ARMV8_ID_AA64MMFR0_EL1_EXS);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr0El1, ARMV8_ID_AA64MMFR0_EL1_FGT);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr0El1, ARMV8_ID_AA64MMFR0_EL1_ECV);
+    CPUID_GET_VALUES_FOR_ID_REG(ARMV8_AARCH64_SYSREG_ID_AA64MMFR0_EL1);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64MMFR0_EL1_PARANGE);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64MMFR0_EL1_ASIDBITS);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64MMFR0_EL1_BIGEND);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64MMFR0_EL1_SNSMEM);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64MMFR0_EL1_BIGENDEL0);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64MMFR0_EL1_TGRAN16);
+    CPUID_GST_FEATURE_RET_NOT_IMPL(uLoad, uCfg, ARMV8_ID_AA64MMFR0_EL1_TGRAN64, ARMV8_ID_AA64MMFR0_EL1_TGRAN64_NOT_IMPL);
+    CPUID_GST_FEATURE_RET_NOT_IMPL(uLoad, uCfg, ARMV8_ID_AA64MMFR0_EL1_TGRAN4,  ARMV8_ID_AA64MMFR0_EL1_TGRAN4_NOT_IMPL);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64MMFR0_EL1_TGRAN16_2);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64MMFR0_EL1_TGRAN64_2);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64MMFR0_EL1_TGRAN4_2);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64MMFR0_EL1_EXS);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64MMFR0_EL1_FGT);
+    CPUID_GST_FEATURE_RET(         uLoad, uCfg, ARMV8_ID_AA64MMFR0_EL1_ECV);
 
     /* ID_AA64MMFR1_EL1 */
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr1El1, ARMV8_ID_AA64MMFR1_EL1_HAFDBS);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr1El1, ARMV8_ID_AA64MMFR1_EL1_VMIDBITS);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr1El1, ARMV8_ID_AA64MMFR1_EL1_VHE);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr1El1, ARMV8_ID_AA64MMFR1_EL1_HPDS);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr1El1, ARMV8_ID_AA64MMFR1_EL1_LO);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr1El1, ARMV8_ID_AA64MMFR1_EL1_PAN);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr1El1, ARMV8_ID_AA64MMFR1_EL1_SPECSEI);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr1El1, ARMV8_ID_AA64MMFR1_EL1_XNX);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr1El1, ARMV8_ID_AA64MMFR1_EL1_TWED);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr1El1, ARMV8_ID_AA64MMFR1_EL1_ETS);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr1El1, ARMV8_ID_AA64MMFR1_EL1_HCX);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr1El1, ARMV8_ID_AA64MMFR1_EL1_AFP);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr1El1, ARMV8_ID_AA64MMFR1_EL1_NTLBPA);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr1El1, ARMV8_ID_AA64MMFR1_EL1_TIDCP1);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr1El1, ARMV8_ID_AA64MMFR1_EL1_CMOW);
+    CPUID_GET_VALUES_FOR_ID_REG(ARMV8_AARCH64_SYSREG_ID_AA64MMFR1_EL1);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR1_EL1_HAFDBS);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR1_EL1_VMIDBITS);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR1_EL1_VHE);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR1_EL1_HPDS);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR1_EL1_LO);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR1_EL1_PAN);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR1_EL1_SPECSEI);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR1_EL1_XNX);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR1_EL1_TWED);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR1_EL1_ETS);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR1_EL1_HCX);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR1_EL1_AFP);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR1_EL1_NTLBPA);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR1_EL1_TIDCP1);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR1_EL1_CMOW);
 
     /* ID_AA64MMFR2_EL1 */
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr2El1, ARMV8_ID_AA64MMFR2_EL1_CNP);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr2El1, ARMV8_ID_AA64MMFR2_EL1_UAO);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr2El1, ARMV8_ID_AA64MMFR2_EL1_LSM);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr2El1, ARMV8_ID_AA64MMFR2_EL1_IESB);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr2El1, ARMV8_ID_AA64MMFR2_EL1_VARANGE);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr2El1, ARMV8_ID_AA64MMFR2_EL1_CCIDX);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr2El1, ARMV8_ID_AA64MMFR2_EL1_CNP);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr2El1, ARMV8_ID_AA64MMFR2_EL1_NV);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr2El1, ARMV8_ID_AA64MMFR2_EL1_ST);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr2El1, ARMV8_ID_AA64MMFR2_EL1_AT);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr2El1, ARMV8_ID_AA64MMFR2_EL1_IDS);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr2El1, ARMV8_ID_AA64MMFR2_EL1_FWB);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr2El1, ARMV8_ID_AA64MMFR2_EL1_TTL);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr2El1, ARMV8_ID_AA64MMFR2_EL1_BBM);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr2El1, ARMV8_ID_AA64MMFR2_EL1_EVT);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Mmfr2El1, ARMV8_ID_AA64MMFR2_EL1_E0PD);
+    CPUID_GET_VALUES_FOR_ID_REG(ARMV8_AARCH64_SYSREG_ID_AA64MMFR2_EL1);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR2_EL1_CNP);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR2_EL1_UAO);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR2_EL1_LSM);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR2_EL1_IESB);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR2_EL1_VARANGE);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR2_EL1_CCIDX);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR2_EL1_CNP);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR2_EL1_NV);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR2_EL1_ST);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR2_EL1_AT);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR2_EL1_IDS);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR2_EL1_FWB);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR2_EL1_TTL);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR2_EL1_BBM);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR2_EL1_EVT);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64MMFR2_EL1_E0PD);
 
     /* ID_AA64DFR0_EL1 */
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_DEBUGVER);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_TRACEVER);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_PMUVER);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_BRPS);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_WRPS);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_CTXCMPS);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_PMSVER);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_DOUBLELOCK);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_TRACEFILT);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_TRACEBUFFER);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_MTPMU);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_BRBE);
-    CPUID_GST_FEATURE_RET(u64RegIdAa64Dfr0El1, ARMV8_ID_AA64DFR0_EL1_HPMN0);
+    CPUID_GET_VALUES_FOR_ID_REG(ARMV8_AARCH64_SYSREG_ID_AA64DFR0_EL1);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64DFR0_EL1_DEBUGVER);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64DFR0_EL1_TRACEVER);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64DFR0_EL1_PMUVER);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64DFR0_EL1_BRPS);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64DFR0_EL1_WRPS);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64DFR0_EL1_CTXCMPS);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64DFR0_EL1_PMSVER);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64DFR0_EL1_DOUBLELOCK);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64DFR0_EL1_TRACEFILT);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64DFR0_EL1_TRACEBUFFER);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64DFR0_EL1_MTPMU);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64DFR0_EL1_BRBE);
+    CPUID_GST_FEATURE_RET(uLoad, uCfg, ARMV8_ID_AA64DFR0_EL1_HPMN0);
 
 #undef CPUID_GST_FEATURE_RET
 #undef CPUID_GST_FEATURE_RET_NOT_IMPL
@@ -740,9 +1344,76 @@ static int cpumR3LoadCpuIdInner(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersion, PCC
 #undef CPUID_GST_FEATURE_IGN
 
     /*
-     * We're good, commit the CPU ID registers.
+     * Any ID registers missing in the loaded state should be zeroed if this
+     * is a new state we're loading.
+     *
+     * For the old structure based state, we'll keep the values as-is and just
+     * add them to the array to keep existing load behaviour.
+     *
+     * Note the code ASSUMES that both arrays are sorted!
      */
-    pVM->cpum.s.GuestIdRegs = *pGuestIdRegs;
+    if (pVM->cpum.s.GuestInfo.cIdRegs)
+    {
+#ifdef VBOX_STRICT
+        uint32_t                idCfgPrev   = 0;
+        uint32_t                idLoadPrev  = 0;
+#endif
+        uint32_t const          cCfgIdRegs  = pVM->cpum.s.GuestInfo.cIdRegs;
+        PCSUPARMSYSREGVAL const paCfgIdRegs = pVM->cpum.s.GuestInfo.paIdRegsR3;
+        for (uint32_t idxCfg = 0, idxLoad = 0; idxCfg < cCfgIdRegs; idxCfg++)
+        {
+            uint32_t const idCfgReg = paCfgIdRegs[idxCfg].idReg;
+            Assert(idCfgPrev < idCfgReg);
+
+            /* Skip load registers not in the config list.  */
+            while (idxLoad < cIdRegs && paIdRegs[idxLoad].idReg < idCfgReg)
+            {
+#ifdef VBOX_STRICT
+                Assert(idLoadPrev < paIdRegs[idxLoad].idReg);
+                idLoadPrev = paIdRegs[idxLoad].idReg;
+#endif
+                idxLoad++;
+            }
+
+            if (idxLoad >= cIdRegs || paIdRegs[idxLoad].idReg != idCfgReg)
+            {
+                paIdRegs = (PSUPARMSYSREGVAL)RTMemRealloc(paIdRegs, sizeof(paIdRegs[0]) * (cIdRegs + 1));
+                AssertLogRelReturn(paIdRegs, VERR_NO_MEMORY);
+
+                if (idxLoad < cIdRegs)
+                {
+                    Assert(paIdRegs[idxLoad].idReg > idCfgReg);
+                    memmove(&paIdRegs[idxLoad + 1], &paIdRegs[idxLoad], sizeof(paIdRegs[0]) * (cIdRegs - idxLoad));
+                }
+
+                paIdRegs[idxLoad].idReg = idCfgReg;
+                if (fNewVersion)
+                {
+                    paIdRegs[idxLoad].fFlags = paCfgIdRegs[idxCfg].fFlags | SUP_ARM_SYS_REG_VAL_F_LOAD_ZERO;
+                    paIdRegs[idxLoad].uValue = 0;
+                }
+                else
+                {
+                    paIdRegs[idxLoad].fFlags = paCfgIdRegs[idxCfg].fFlags;
+                    paIdRegs[idxLoad].uValue = paCfgIdRegs[idxCfg].uValue;
+                }
+                idxLoad++;
+#ifdef VBOX_STRICT
+                idLoadPrev = idCfgReg;
+#endif
+            }
+#ifdef VBOX_STRICT
+            idCfgPrev = idCfgReg;
+#endif
+        }
+    }
+
+    /*
+     * Seems we're good, commit the CPU ID registers.
+     */
+    RTMemFree(pVM->cpum.s.GuestInfo.paIdRegsR3);
+    pVM->cpum.s.GuestInfo.paIdRegsR3 = paIdRegs;
+    pVM->cpum.s.GuestInfo.cIdRegs    = cIdRegs;
     return VINF_SUCCESS;
 }
 
@@ -757,10 +1428,107 @@ static int cpumR3LoadCpuIdInner(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersion, PCC
  */
 int cpumR3LoadCpuIdArmV8(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersion)
 {
-    CPUMARMV8IDREGS GuestIdRegs;
-    int rc = SSMR3GetStructEx(pSSM, &GuestIdRegs, sizeof(GuestIdRegs), 0, g_aCpumArmV8IdRegsFields, NULL);
-    AssertRCReturn(rc, rc);
+    /*
+     * Load the ID register values.
+     */
+    uint32_t            cIdRegs;
+    PSUPARMSYSREGVAL    paIdRegs;
+    if (uVersion >= CPUM_SAVED_STATE_VERSION_ARMV8_IDREGS)
+    {
+        int rc = SSMR3GetU32(pSSM, &cIdRegs);
+        AssertRCReturn(rc, rc);
+        if (cIdRegs > 256)
+            return SSMR3SetLoadError(pSSM, VERR_SSM_DATA_UNIT_FORMAT_CHANGED, RT_SRC_POS,
+                                     N_("Too many ID registers: %u (%#x), max 256"), cIdRegs, cIdRegs);
+        if (cIdRegs < 2)
+            return SSMR3SetLoadError(pSSM, VERR_SSM_DATA_UNIT_FORMAT_CHANGED, RT_SRC_POS,
+                                     N_("Too free ID registers: %u (%#x), min 2"), cIdRegs, cIdRegs);
 
-    return cpumR3LoadCpuIdInner(pVM, pSSM, uVersion, &GuestIdRegs);
+        /* Load the values first without doing any validation. */
+        paIdRegs = (PSUPARMSYSREGVAL)RTMemAllocZ(sizeof(paIdRegs[0]) * cIdRegs);
+        AssertReturn(paIdRegs, VERR_NO_MEMORY);
+        for (uint32_t i = 0; i < cIdRegs; i++)
+        {
+            SSMR3GetU32(pSSM, &paIdRegs[i].idReg);
+            SSMR3GetU64(pSSM, &paIdRegs[i].uValue);
+            paIdRegs[i].fFlags = SUP_ARM_SYS_REG_VAL_F_FROM_SAVED_STATE;
+        }
+        uint32_t uTerm = 0;
+        rc = SSMR3GetU32(pSSM, &uTerm);
+        AssertLogRelMsgStmt(RT_FAILURE(rc) || uTerm == UINT32_MAX, ("uTerm=%#x\n", uTerm),
+                            rc = VERR_SSM_DATA_UNIT_FORMAT_CHANGED);
+        if (RT_SUCCESS(rc))
+        {
+            /* The array shall be sorted and the values within the system register ID range. */
+            for (uint32_t i = 0, idPrev = 0 /* ASSUMES no zero ID register */; i < cIdRegs; i++)
+            {
+                uint32_t const idReg = paIdRegs[i].idReg;
+                AssertLogRelMsgStmt(idReg > idPrev, ("#%u: idReg=%#x vs idPrev=%#x\n", i, idReg, idPrev),
+                                    rc = VERR_SSM_DATA_UNIT_FORMAT_CHANGED);
+                AssertLogRelMsgStmt(idReg <= ARMV8_AARCH64_SYSREG_ID_CREATE(3, 7, 15, 15, 7), ("#%u: idReg=%#x\n", i, idReg),
+                                    rc = VERR_SSM_DATA_UNIT_FORMAT_CHANGED);
+                idPrev = idReg;
+            }
+        }
+        if (RT_FAILURE(rc))
+        {
+            RTMemFree(paIdRegs);
+            return rc;
+        }
+    }
+    else
+    {
+        /* Old structure-based format. */
+        CPUMARMV8OLDIDREGS OldIdRegs;
+        int rc = SSMR3GetStructEx(pSSM, &OldIdRegs, sizeof(OldIdRegs), 0, g_aCpumArmV8OldIdRegsFields, NULL);
+        AssertRCReturn(rc, rc);
+
+        /* Convert the structure to the new array format. */
+        paIdRegs = (PSUPARMSYSREGVAL)RTMemAllocZ(sizeof(paIdRegs[0]) * RT_ELEMENTS(g_aArmV8OldIdRegsOffsetsAndIds));
+        AssertReturn(paIdRegs, VERR_NO_MEMORY);
+        for (size_t i = 0; i < RT_ELEMENTS(g_aArmV8OldIdRegsOffsetsAndIds); i++)
+        {
+            paIdRegs[i].idReg  = g_aArmV8OldIdRegsOffsetsAndIds[i].idReg;
+            paIdRegs[i].fFlags = SUP_ARM_SYS_REG_VAL_F_FROM_SAVED_STATE;
+            paIdRegs[i].uValue = *(uint64_t *)((uintptr_t)&OldIdRegs + g_aArmV8OldIdRegsOffsetsAndIds[i].off);
+        }
+
+        RTSortShell(paIdRegs, RT_ELEMENTS(g_aArmV8OldIdRegsOffsetsAndIds), sizeof(paIdRegs[0]), cpumCpuIdSysRegValSortCmp, NULL);
+        cIdRegs = RT_ELEMENTS(g_aArmV8OldIdRegsOffsetsAndIds);
+    }
+
+    /*
+     * Go over the IDs an mark those that shouldn't be set as such.
+     */
+    uint32_t cFound = 0;
+    for (uint32_t i = 0; i < cIdRegs; i++)
+    {
+        uint32_t const idReg = paIdRegs[i].idReg;
+        uint32_t       j     = 0;
+        while (j < RT_ELEMENTS(g_aSysIdRegs) && g_aSysIdRegs[j].idReg != idReg)
+            j++;
+        if (j < RT_ELEMENTS(g_aSysIdRegs))
+        {
+            if (!g_aSysIdRegs[j].fSet)
+                paIdRegs[i].fFlags |= SUP_ARM_SYS_REG_VAL_F_NOSET;
+            cFound++;
+        }
+    }
+    /* not quite sure about this heuristic... */
+    int rc;
+    if (cIdRegs < 2 || cFound >= RT_MIN(cIdRegs / 2, RT_ELEMENTS(g_aSysIdRegs) / 2))
+    {
+        /*
+         * Sanitize the loaded ID registers and apply them.
+         */
+        rc = cpumR3LoadCpuIdInner(pVM, pSSM, paIdRegs, cIdRegs, uVersion >= CPUM_SAVED_STATE_VERSION_ARMV8_IDREGS);
+    }
+    else
+        rc = SSMR3SetLoadError(pSSM, VERR_SSM_DATA_UNIT_FORMAT_CHANGED, RT_SRC_POS,
+                               N_("Loaded too many unknown ID register: cSysRegs=%u cFound=%u RT_ELEMENTS(g_aSysIdRegs)=%u\n"),
+                               cIdRegs, cFound, RT_ELEMENTS(g_aSysIdRegs));
+    if (RT_FAILURE(rc))
+        RTMemFree(paIdRegs);
+    return rc;
 }
 

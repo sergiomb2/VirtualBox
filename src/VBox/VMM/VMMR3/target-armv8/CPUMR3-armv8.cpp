@@ -543,12 +543,11 @@ DECLCALLBACK(int) cpumR3LoadExecTarget(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersi
     /*
      * Validate version.
      */
-    if (   uVersion != CPUM_SAVED_STATE_VERSION
-        && uVersion != CPUM_SAVED_STATE_VERSION_ARMV8_V1)
-    {
-        AssertMsgFailed(("cpumR3LoadExec: Invalid version uVersion=%d!\n", uVersion));
-        return VERR_SSM_UNSUPPORTED_DATA_UNIT_VERSION;
-    }
+    AssertMsgReturn(   uVersion == CPUM_SAVED_STATE_VERSION_ARMV8_IDREGS
+                    || uVersion == CPUM_SAVED_STATE_VERSION_ARMV8_V2
+                    || uVersion == CPUM_SAVED_STATE_VERSION_ARMV8_V1,
+                    ("cpumR3LoadExec: Invalid version uVersion=%d!\n", uVersion),
+                    VERR_SSM_UNSUPPORTED_DATA_UNIT_VERSION);
 
     if (uPass == SSM_PASS_FINAL)
     {
@@ -571,7 +570,7 @@ DECLCALLBACK(int) cpumR3LoadExecTarget(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersi
             rc = SSMR3GetStructEx(pSSM, pGstCtx, sizeof(*pGstCtx), 0, g_aCpumCtxFields, NULL);
             AssertRCReturn(rc, rc);
 
-            if (uVersion == CPUM_SAVED_STATE_VERSION_ARMV8_V2)
+            if (uVersion >= CPUM_SAVED_STATE_VERSION_ARMV8_V2)
             {
                 rc = SSMR3GetStructEx(pSSM, pGstCtx, sizeof(*pGstCtx), 0, g_aCpumCtxFieldsV2, NULL);
                 AssertRCReturn(rc, rc);

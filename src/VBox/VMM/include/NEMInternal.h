@@ -345,11 +345,11 @@ typedef struct NEM
     uint64_t                    u64CntFrqHz;
     /** The vTimer offset programmed. */
     uint64_t                    u64VTimerOff;
+    /** @} */
     /** Dirty tracking slots. */
     NEMHVMMIO2REGION            aMmio2DirtyTracking[8];
     /** The vCPU config. */
     hv_vcpu_config_t            hVCpuCfg;
-    /** @} */
 # elif defined(VBOX_VMM_TARGET_X86)
     /** Set if hv_vm_space_create() was called successfully. */
     bool                        fCreatedAsid : 1;
@@ -535,6 +535,7 @@ typedef struct NEMCPU
 # elif defined(VBOX_VMM_TARGET_ARMV8)
     /** Flag whether syncing the CNTV_CTL_EL0/CNTV_CVAL_EL0 registers to Hyper-V is required. */
     bool                        fSyncCntvRegs;
+#define WITH_NEW_CPUM_IDREG_INTERFACE
 # endif
 
     /** @name Statistics
@@ -583,9 +584,12 @@ typedef struct NEMCPU
     bool                        fVTimerActivated;
     /** Flag whether to update the vTimer offset. */
     bool                        fVTimerOffUpdate;
+#define WITH_NEW_CPUM_IDREG_INTERFACE
+#  ifndef WITH_NEW_CPUM_IDREG_INTERFACE
     /** Flag whether the ID registers were synced to the guest context
      * (for first guest exec call on the EMT after loading the saved state). */
     bool                        fIdRegsSynced;
+#  endif
 
 # elif defined(VBOX_VMM_TARGET_X86)
     /** The vCPU handle associated with the EMT executing this vCPU. */

@@ -2038,16 +2038,19 @@ VMM_INT_DECL(void) CPUMCpuIdApplyX86HostArchCapabilities(PVMCC pVM, bool fHasArc
 # endif /* defined(RT_ARCH_X86) || defined(RT_ARCH_AMD64) */
 
 #endif /* defined(RT_ARCH_X86) || defined(RT_ARCH_AMD64) || defined(VBOX_VMM_TARGET_X86) */
-#if defined(RT_ARCH_ARM64) && defined(IN_RING3) /** @todo port to ring-0 as needed. */
 
+#if (defined(RT_ARCH_ARM64) || defined(VBOX_VMM_TARGET_ARMV8)) && defined(IN_RING3)
 /** @callback_method_impl{FNRTSORTCMP} */
-static DECLCALLBACK(int) cpumCpuIdSysRegValSortCmp(void const *pvElement1, void const *pvElement2, void *pvUser)
+DECLCALLBACK(int) cpumCpuIdSysRegValSortCmp(void const *pvElement1, void const *pvElement2, void *pvUser)
 {
     RT_NOREF(pvUser);
     PCSUPARMSYSREGVAL const pElm1 = (PCSUPARMSYSREGVAL)pvElement1;
     PCSUPARMSYSREGVAL const pElm2 = (PCSUPARMSYSREGVAL)pvElement2;
     return pElm1->idReg < pElm2->idReg ? -1 : pElm1->idReg > pElm2->idReg ? 1 : 0;
 }
+#endif
+
+#if defined(RT_ARCH_ARM64) && defined(IN_RING3) /** @todo port to ring-0 as needed. */
 
 /**
  * Used by CPUMCpuIdCollectIdSysRegsFromArmV8Host to lookup @a idReg in the
@@ -2139,8 +2142,11 @@ VMMDECL(int) CPUMCpuIdCollectIdSysRegsFromArmV8Host(PSUPARMSYSREGVAL *ppaSysRegs
         }
         if (RT_SUCCESS(rc))
         {
+            RTSortShell(paSysRegs, cSysRegs, sizeof(paSysRegs[0]), cpumCpuIdSysRegValSortCmp, NULL);
+
             *pcSysRegs  = cSysRegs;
             *ppaSysRegs = paSysRegs;
+            LogRel(("CPUM: Collected %u host ID registers using SUPR3ArmQuerySysRegs.\n", cSysRegs));
             return rc;
         }
     }
@@ -2364,6 +2370,7 @@ VMMDECL(int) CPUMCpuIdCollectIdSysRegsFromArmV8Host(PSUPARMSYSREGVAL *ppaSysRegs
          *       we're assuming it's mostly unfiltered and will use it instead of
          *       the DB entry...
          */
+        uint32_t cNonProfileRegs = cSysRegs;
         for (uint32_t iRegSet = 0; iRegSet < 2; iRegSet++)
         {
             PCSUPARMSYSREGVAL const paSrcRegs = iRegSet ? pDbEntry->aVariants[0].paSysRegVals : pDbEntry->paSysRegCmnVals;
@@ -2379,6 +2386,7 @@ VMMDECL(int) CPUMCpuIdCollectIdSysRegsFromArmV8Host(PSUPARMSYSREGVAL *ppaSysRegs
                     {
                         paSysRegs[idxDst].uValue = paSrcRegs[iSrcReg].uValue;
                         paSysRegs[idxDst].fFlags = SUP_ARM_SYS_REG_VAL_F_FROM_DB;
+                        cNonProfileRegs -= 1;
                     }
                 }
                 else
@@ -2398,7 +2406,11 @@ VMMDECL(int) CPUMCpuIdCollectIdSysRegsFromArmV8Host(PSUPARMSYSREGVAL *ppaSysRegs
                 }
             }
         }
+        LogRel(("CPUM: Matched host CPU profile '%s' (%u%% score).  Collected a combined %u ID registers, %u of which are not from the profile.\n",
+                pDbEntry->Core.pszName, uScore, cSysRegs, cNonProfileRegs));
     }
+    else
+        LogRel(("CPUM: Collected %u host ID registers from various ring-3 sources; no matching profile.\n", cSysRegs));
 #  endif
 
 # else  /* !IN_RING3 */
