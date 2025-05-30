@@ -20606,6 +20606,7 @@ Snapshot 1 (B.vdi)            Snapshot 1 (B.vdi)
     </attribute>
 
     <method name="describeFileExtensions" const="yes">
+      <rest name="description" request="get" path="/mediumformat/{id}/"/>
       <desc>
         Returns two arrays describing the supported file extensions.
 
@@ -20626,6 +20627,7 @@ Snapshot 1 (B.vdi)            Snapshot 1 (B.vdi)
     </method>
 
     <method name="describeProperties" const="yes">
+      <rest name="description" request="get" path="/mediumformat/{id}/property/"/>
       <desc>
         Returns several arrays describing the properties supported by this
         format.
