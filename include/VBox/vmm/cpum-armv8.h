@@ -240,7 +240,7 @@ typedef FNCPUMARMCPUIDREGQUERY *PFNCPUMARMCPUIDREGQUERY;
  * @param   puUpdatedValue  Where to return the updated value on success.
  */
 typedef DECLCALLBACKTYPE(int, FNCPUMARMCPUIDREGUPDATE,(PVM pVM, PVMCPU pVCpu, uint32_t idReg,
-                                                       uint64_t uNewValue, void *pvUser, uint64_t *puUpdateValue));
+                                                       uint64_t uNewValue, void *pvUser, uint64_t *puUpdatedValue));
 /** Pointer to FNCPUMARMCPUIDREGUPDATE. */
 typedef FNCPUMARMCPUIDREGUPDATE *PFNCPUMARMCPUIDREGUPDATE;
 

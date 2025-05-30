@@ -1557,10 +1557,10 @@ static DECLCALLBACK(int) enmR3DarwinNativeCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, u
  * @callback_method_impl{FNCPUMARMCPUIDREGUPDATE}
  */
 static DECLCALLBACK(int) enmR3DarwinNativeCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t idReg,
-                                                         uint64_t uValue, void *pvUser, uint64_t *puUpdateValue)
+                                                         uint64_t uValue, void *pvUser, uint64_t *puUpdatedValue)
 {
-    if (puUpdateValue)
-        *puUpdateValue = 0;
+    if (puUpdatedValue)
+        *puUpdatedValue = 0;
     VMCPU_ASSERT_EMT(pVCpu);
     RT_NOREF(pVM);
 
@@ -1581,8 +1581,8 @@ static DECLCALLBACK(int) enmR3DarwinNativeCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, 
         case ARMV8_AARCH64_SYSREG_CLIDR_EL1:
         case ARMV8_AARCH64_SYSREG_CTR_EL0:
         case ARMV8_AARCH64_SYSREG_DCZID_EL0:
-            if (puUpdateValue)
-                *puUpdateValue = uValue;
+            if (puUpdatedValue)
+                *puUpdatedValue = uValue;
             return VINF_SUCCESS;
     }
 
@@ -1600,8 +1600,8 @@ static DECLCALLBACK(int) enmR3DarwinNativeCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, 
         Assert(rcHvGet2 == HV_SUCCESS); RT_NOREF(rcHvGet2);
         LogRelFlow(("enmR3DarwinNativeCpuIdRegUpdate: idReg=%#x: old=%#RX64 new=%#RX64 -> %#RX64\n",
                     idReg, uOldValue, uValue, uUpdatedValue));
-        if (puUpdateValue)
-            *puUpdateValue = rcHvGet2 == HV_SUCCESS ? uUpdatedValue : uValue;
+        if (puUpdatedValue)
+            *puUpdatedValue = rcHvGet2 == HV_SUCCESS ? uUpdatedValue : uValue;
         return VINF_SUCCESS;
     }
     LogRel(("enmR3DarwinNativeCpuIdRegUpdate: hv_vcpu_set_sys_reg/%#x/%#RX64 -> %#x %s (OldValue=%#RX64 rcHvGet=%#x %s)\n",
@@ -1629,8 +1629,8 @@ static DECLCALLBACK(int) enmR3DarwinNativeCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, 
            ID registers from CPUMARMV8OLDIDREGS. */
         if (pvUser && rcHvSet == HV_BAD_ARGUMENT && uValue == 0)
         {
-            if (puUpdateValue)
-                *puUpdateValue = 0;
+            if (puUpdatedValue)
+                *puUpdatedValue = 0;
             return VINF_SUCCESS;
         }
 
