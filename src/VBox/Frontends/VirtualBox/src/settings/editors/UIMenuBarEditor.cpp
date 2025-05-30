@@ -672,7 +672,7 @@ void UIMenuBarEditorWidget::setRestrictionsOfMenuHelp(UIExtraDataMetaDefs::MenuH
 void UIMenuBarEditorWidget::sltRetranslateUI()
 {
     /* Translate widget itself: */
-    setToolTip(tr("Allows to modify VM menu-bar contents."));
+    setToolTip(tr("Configure the virtual machine menus"));
 
     /* Translate close-button if necessary: */
     if (!m_fStartedFromVMSettings && m_pButtonClose)

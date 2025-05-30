@@ -505,7 +505,7 @@ void UIStatusBarEditorWidget::setStatusBarConfiguration(const QList<IndicatorTyp
 void UIStatusBarEditorWidget::sltRetranslateUI()
 {
     /* Translate widget itself: */
-    setToolTip(tr("Allows to modify VM status-bar contents."));
+    setToolTip(tr("Configure the virtual machine status bar"));
 
     /* Translate close-button if necessary: */
     if (!m_fStartedFromVMSettings && m_pButtonClose)
