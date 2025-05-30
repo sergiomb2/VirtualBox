@@ -209,7 +209,7 @@ void UINetworkSettingsEditor::sltRetranslateUI()
     if (m_pCheckboxFeature)
     {
         m_pCheckboxFeature->setText(tr("&Enable Network Adapter"));
-        m_pCheckboxFeature->setToolTip(tr("When checked, plugs this virtual network adapter into the virtual machine."));
+        m_pCheckboxFeature->setToolTip(tr("Plug this virtual network adapter into the virtual machine"));
     }
 
     updateMinimumLayoutHint();
