@@ -107,7 +107,7 @@ void UIProcessorFeaturesEditor::setMinimumLayoutIndent(int iIndent)
 void UIProcessorFeaturesEditor::sltRetranslateUI()
 {
     if (m_pLabel)
-        m_pLabel->setText(tr("CPU Features"));
+        m_pLabel->setText(tr("Features"));
     if (m_pCheckBoxEnablePae)
     {
         m_pCheckBoxEnablePae->setText(tr("PA&E/NX"));

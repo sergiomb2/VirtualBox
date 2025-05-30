@@ -78,7 +78,7 @@ void UIDisplayScreenFeaturesEditor::setMinimumLayoutIndent(int iIndent)
 void UIDisplayScreenFeaturesEditor::sltRetranslateUI()
 {
     if (m_pLabel)
-        m_pLabel->setText(tr("Use These Features"));
+        m_pLabel->setText(tr("Features"));
     if (m_pCheckBoxEnable3DAcceleration)
     {
         m_pCheckBoxEnable3DAcceleration->setText(tr("&3D Acceleration"));

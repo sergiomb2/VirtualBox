@@ -168,7 +168,7 @@ void UIMotherboardFeaturesEditor::handleFilterChange()
 void UIMotherboardFeaturesEditor::sltRetranslateUI()
 {
     if (m_pLabel)
-        m_pLabel->setText(tr("Use These Features"));
+        m_pLabel->setText(tr("Features"));
     if (m_pCheckBoxEnableIoApic)
     {
         m_pCheckBoxEnableIoApic->setText(tr("&I/O APIC"));

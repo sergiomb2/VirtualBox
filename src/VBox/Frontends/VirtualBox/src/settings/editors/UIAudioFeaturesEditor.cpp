@@ -97,7 +97,7 @@ void UIAudioFeaturesEditor::setMinimumLayoutIndent(int iIndent)
 void UIAudioFeaturesEditor::sltRetranslateUI()
 {
     if (m_pLabel)
-        m_pLabel->setText(tr("Audio Features"));
+        m_pLabel->setText(tr("Features"));
     if (m_pCheckBoxEnableOutput)
     {
         m_pCheckBoxEnableOutput->setText(tr("Audio &Output"));
