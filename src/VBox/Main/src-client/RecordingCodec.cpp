@@ -506,8 +506,10 @@ static DECLCALLBACK(int) recordingCodecVPXEncode(PRECORDINGCODEC pCodec, PRECORD
     vrc = RecordingUtilsCoordsCropCenter(&pCodec->Parms, &sx, &sy, &sw, &sh, &dx, &dy);
     if (vrc == VINF_SUCCESS) /* vrc might be VWRN_RECORDING_ENCODING_SKIPPED to skip encoding. */
     {
-        Log3Func(("Encoding source %RI32,%RI32 (%RI32x%RI32) to %RI32,%RI32 (%zu bytes)\n",
-                  sx, sy, sw, sh, dx, dy, sw * sh * (pFront->Info.uBPP / 8)));
+        Log3Func(("Encoding source %RI32,%RI32 (%RI32x%RI32) to dest %RI32,%RI32 (%RU32x%RU32) -- %zu bytes\n",
+                  sx, sy, sw, sh,
+                  dx, dy, pCodec->Parms.u.Video.uWidth, pCodec->Parms.u.Video.uHeight,
+                  (size_t)(sw * sh * (pFront->Info.uBPP / 8))));
 #ifdef DEBUG
         AssertReturn(sw      <= (int32_t)pFront->Info.uWidth,  VERR_INVALID_PARAMETER);
         AssertReturn(sh      <= (int32_t)pFront->Info.uHeight, VERR_INVALID_PARAMETER);

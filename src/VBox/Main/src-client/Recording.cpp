@@ -1355,7 +1355,7 @@ int RecordingContext::SendVideoFrame(uint32_t uScreen, PRECORDINGVIDEOFRAME pFra
 
     LogFlowFunc(("uScreen=%RU32, offX=%RU32, offY=%RU32, w=%RU32, h=%RU32 (%zu bytes), msTimestamp=%RU64\n",
                  uScreen, pFrame->Pos.x, pFrame->Pos.y, pFrame->Info.uWidth, pFrame->Info.uHeight,
-                 pFrame->Info.uHeight * pFrame->Info.uWidth * (pFrame->Info.uBPP / 8), msTimestamp));
+                 size_t(pFrame->Info.uHeight * pFrame->Info.uWidth * (pFrame->Info.uBPP / 8)), msTimestamp));
 
     if (!pFrame->pau8Buf) /* Empty / invalid frame, skip. */
         return VINF_SUCCESS;
