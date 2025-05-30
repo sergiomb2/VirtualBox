@@ -106,7 +106,7 @@ void UIUSBSettingsEditor::sltRetranslateUI()
     if (m_pCheckboxFeature)
     {
         m_pCheckboxFeature->setText(tr("Enable &USB Controller"));
-        m_pCheckboxFeature->setToolTip(tr("When checked, enables the virtual USB controller of this machine."));
+        m_pCheckboxFeature->setToolTip(tr("The virtual USB controller of this machine will be enabled"));
     }
 }
 
