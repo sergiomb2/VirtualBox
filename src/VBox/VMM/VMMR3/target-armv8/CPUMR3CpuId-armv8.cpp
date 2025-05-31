@@ -618,9 +618,9 @@ VMMR3_INT_DECL(int) CPUMR3QueryGuestIdRegs(PVM pVM, PCPUMARMV8IDREGS pIdRegs)
  */
 static struct
 {
-    uint32_t idReg;
-    uint32_t fSet : 1;
-    uint32_t fAssert : 1;
+    uint32_t    idReg;
+    uint32_t    fSet : 1;
+    uint32_t    fAssert : 1;
     const char *pszName;
 } const g_aSysIdRegs[] =
 {
@@ -637,7 +637,7 @@ static struct
     READ_SYS_REG_NAMED_EX(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2, a_SysRegName, true)
 #define READ_SYS_REG_UNDEF(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2) \
     {   ARMV8_AARCH64_SYSREG_ID_CREATE(a_Op0, a_Op1, a_CRn, a_CRm, a_Op2), true, 0, \
-        #a_Op0 "," #a_Op1 "," #a_CRn "," #a_CRm "," #a_Op2 }
+        "s" #a_Op0 "_" #a_Op1 "_c" #a_CRn "_c" #a_CRm "_" #a_Op2 /* gnu assembly compatible format */ }
 
     /*
      * Standard ID registers.
@@ -650,7 +650,7 @@ static struct
     /* The first three seems to be in a sparse block. Haven't found any docs on
        what the Op2 values 1-4 and 7 may do if read. */
     READ_SYS_REG_NAMED(3, 0, 0, 0, 0, MIDR_EL1),
-    READ_SYS_REG_NOSET(3, 0, 0, 0, 5, MPIDR_EL1),
+    READ_SYS_REG_NAMED(3, 0, 0, 0, 5, MPIDR_EL1),
     READ_SYS_REG_NAMED(3, 0, 0, 0, 6, REVIDR_EL1),
 
     /* AArch64 feature registers
@@ -791,7 +791,7 @@ static struct
 /**
  * Gets the name of the ID register for logging.
  */
-static const char *cpumR3GetIdRegName(uint32_t idReg, char pszFallback[32])
+VMMR3_INT_DECL(const char *) CPUMR3CpuIdGetIdRegName(uint32_t idReg, char pszFallback[32])
 {
     for (uint32_t i = 0; i < RT_ELEMENTS(g_aSysIdRegs); i++)
         if (g_aSysIdRegs[i].idReg == idReg)
@@ -804,6 +804,88 @@ static const char *cpumR3GetIdRegName(uint32_t idReg, char pszFallback[32])
                 ARMV8_AARCH64_SYSREG_ID_GET_OP2(idReg));
     return pszFallback;
 }
+
+
+static PSUPARMSYSREGVAL cpumCpuIdLookupOrInsertIdReg(PSUPARMSYSREGVAL *ppaIdRegs, uint32_t *pcIdRegs,
+                                                     uint32_t idReg, uint64_t uInsertValue)
+{
+    /*
+     * Find the location we should insert the register.
+     * Doing a linear search here because binary is too much bother.
+     */
+    PSUPARMSYSREGVAL paIdRegs = *ppaIdRegs;
+    uint32_t         cIdRegs  = *pcIdRegs;
+    uint32_t         idx      = 0;
+    while (idx < cIdRegs && paIdRegs[idx].idReg < idReg)
+        idx++;
+    if (idx < cIdRegs && paIdRegs[idx].idReg == idReg)
+        return &paIdRegs[idx];
+    Assert(idx >= cIdRegs || paIdRegs[idx].idReg > idReg);
+
+    /*
+     * Reallocate the array and make space for the new entry.
+     */
+    paIdRegs = (PSUPARMSYSREGVAL)RTMemRealloc(paIdRegs, sizeof(paIdRegs[0]) * (cIdRegs + 1));
+    AssertReturn(paIdRegs, NULL);
+    *ppaIdRegs = paIdRegs;
+
+    if (idx < cIdRegs)
+        memmove(&paIdRegs[idx + 1], &paIdRegs[idx], sizeof(paIdRegs[0]) * (cIdRegs - idx));
+
+    paIdRegs[idx].idReg  = idReg;
+    paIdRegs[idx].fFlags = SUP_ARM_SYS_REG_VAL_F_FROM_CPUM;
+    paIdRegs[idx].uValue = uInsertValue;
+
+    *pcIdRegs = cIdRegs + 1;
+
+    return &paIdRegs[idx];
+}
+
+
+/**
+ * Sets up the multiprocessor affinity register (MPIDR_EL1) for all vCPUs.
+ *
+ * @returns VBox status code.
+ * @param   pVM         The cross context VM structure.
+ */
+static int cpumCpuIdSetupMpIdr(PVM pVM)
+{
+    /* This code only deals with 256 cores at the moment. */
+    AssertLogRelReturn(pVM->cCpus <= 256, VERR_TOO_MANY_CPUS);
+
+    /*
+     * Set it up for vCPU #0.
+     */
+    PSUPARMSYSREGVAL pMpIdr = cpumCpuIdLookupOrInsertIdReg(&pVM->cpum.s.GuestInfo.paIdRegsR3, &pVM->cpum.s.GuestInfo.cIdRegs,
+                                                           ARMV8_AARCH64_SYSREG_MPIDR_EL1, 0 /*uInsertValue*/);
+    AssertReturn(pMpIdr, VERR_NO_MEMORY);
+    if (pVM->cCpus == 1)
+        pMpIdr->uValue = RT_BIT_64(31) /* RES1 */
+                       | RT_BIT_64(30) /* uniprocessor system */;
+    else
+    {
+        uint64_t const fMT = pMpIdr->uValue & RT_BIT_64(24); /* Preserve the MT bit. */
+        pMpIdr->uValue = RT_BIT_64(31) /* RES1 */ | fMT;
+
+        /*
+         * Then for any other vCPUs.
+         */
+        for (uint32_t idCpu = 1; idCpu < pVM->cCpus; idCpu++)
+        {
+            PVMCPU const pVCpu = pVM->apCpusR3[idCpu];
+            pMpIdr = cpumCpuIdLookupOrInsertIdReg(&pVCpu->cpum.s.paIdRegsR3, &pVCpu->cpum.s.cIdRegs,
+                                                  ARMV8_AARCH64_SYSREG_MPIDR_EL1, 0 /*uInsertValue*/);
+            AssertReturn(pMpIdr, VERR_NO_MEMORY);
+
+            pMpIdr->uValue = RT_BIT_64(31) /* RES1 */
+                           | fMT
+                           | idCpu /* Aff0 = idCpu */;
+        }
+    }
+
+    return VINF_SUCCESS;
+}
+
 
 /**
  * Populate guest feature ID registers.
@@ -828,22 +910,13 @@ VMMR3_INT_DECL(int) CPUMR3PopulateGuestFeaturesViaCallbacks(PVM pVM, PVMCPU pVCp
 {
     Assert(pfnUpdate);
 
-    /** @todo MIDR_EL1 and MPIDR_EL1 (and probably a few others) should be set per
-     *        VCpu. Not urgent, as MS WHv seems to be using a single MIDR value for
-     *        all VCpus and Apple zeros MIDR the part number and stuff.
-     *
-     *        The MPIDR register is a NOSET register at the moment, so,
-     *        not so important either.  OTOH, on Apple we must set it for each
-     *        VCpu whereas on MS it has sensible defaults, so it would probably
-     *        be a good idea to centralize the setting here in CPUM than having
-     *        each NEM backend do it themselves.  This would also help a lot with
-     *        pure IEM execution later on. */
-
     /*
      * If pfnQuery is given, we must determin the guest feature register values first.
      */
     if (pfnQuery)
     {
+        Assert(pVCpu->idCpu == 0);
+
         /*
          * Read the configuration.
          */
@@ -911,6 +984,13 @@ VMMR3_INT_DECL(int) CPUMR3PopulateGuestFeaturesViaCallbacks(PVM pVM, PVMCPU pVCp
 #endif
 
         /*
+         * The multiprocessor affinity register, MPIDR_EL1, may need setup and
+         * extra per-CPU copies.
+         */
+        rc = cpumCpuIdSetupMpIdr(pVM);
+        AssertRCReturn(rc, rc);
+
+        /*
          * Pre-explode the CPU ID register info.
          */
         rc = CPUMCpuIdExplodeFeaturesArmV8FromSysRegs(paIdRegs, cIdRegs, &pVM->cpum.s.GuestFeatures);
@@ -932,37 +1012,55 @@ VMMR3_INT_DECL(int) CPUMR3PopulateGuestFeaturesViaCallbacks(PVM pVM, PVMCPU pVCp
 
     /*
      * Set the values.
+     *
+     * We traverse pVM->cpum.s.GuestInfo.paIdRegsR3 in parallel to the sparse
+     * override table pVCpu->cpum.s.paIdRegsR3.  This ASSUMES that the override
+     * table is correctly sorted and does NOT contain anything that isn't in
+     * the main table!
      */
-    int                     rcRet    = VINF_SUCCESS;
-    PSUPARMSYSREGVAL  const paIdRegs = pVM->cpum.s.GuestInfo.paIdRegsR3;
-    uint32_t const          cIdRegs  = pVM->cpum.s.GuestInfo.cIdRegs;
-    for (uint32_t i = 0; i < cIdRegs; i++)
+    int                     rcRet        = VINF_SUCCESS;
+    PSUPARMSYSREGVAL  const paIdRegsOvrd = pVCpu->cpum.s.paIdRegsR3;
+    uint32_t const          cIdRegsOvrd  = pVCpu->cpum.s.cIdRegs;
+    PSUPARMSYSREGVAL  const paIdRegs     = pVM->cpum.s.GuestInfo.paIdRegsR3;
+    uint32_t const          cIdRegs      = pVM->cpum.s.GuestInfo.cIdRegs;
+    for (uint32_t i = 0, iOvrd = 0; i < cIdRegs; i++)
+    {
+        uint32_t const idReg = paIdRegs[i].idReg;
+        AssertLogRel(iOvrd >= cIdRegsOvrd || paIdRegsOvrd[iOvrd].idReg >= idReg);
+
         if (!(paIdRegs[i].fFlags & SUP_ARM_SYS_REG_VAL_F_NOSET))
         {
-            char      szName[32];
-            uint64_t  uValue = paIdRegs[i].uValue;
-            int const rc2    = pfnUpdate(pVM, pVCpu, paIdRegs[i].idReg, uValue, pvUser, &uValue);
+            char           szName[32];
+            uint64_t const uNewValue     = iOvrd >= cIdRegsOvrd || paIdRegsOvrd[iOvrd].idReg != idReg
+                                         ? paIdRegs[i].uValue : paIdRegsOvrd[iOvrd].uValue;
+            uint64_t       uUpdatedValue = uNewValue;
+            int const      rc2           = pfnUpdate(pVM, pVCpu, idReg, uNewValue, pvUser, &uUpdatedValue);
             if (RT_SUCCESS(rc2))
             {
-                if (uValue != paIdRegs[i].uValue && pfnQuery)
+                if (uUpdatedValue != uNewValue && pfnQuery)
                 {
                     LogRel(("CPUM: idReg=%#x (%s) pfnUpdate adjusted %#RX64 -> %#RX64\n",
-                            paIdRegs[i].idReg, cpumR3GetIdRegName(paIdRegs[i].idReg, szName), paIdRegs[i].uValue, uValue));
-                    paIdRegs[i].uValue = uValue;
+                            idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uNewValue, uUpdatedValue));
+                    Assert(cIdRegsOvrd == 0);
+                    paIdRegs[i].uValue = uUpdatedValue;
                 }
                 else
-                    AssertLogRelMsg(uValue == paIdRegs[i].uValue,
-                                    ("idCpu=%u idReg=%#x (%s) value: %#RX64 -> %#RX64\n", pVCpu->idCpu, paIdRegs[i].idReg,
-                                     cpumR3GetIdRegName(paIdRegs[i].idReg, szName), paIdRegs[i].uValue, uValue));
+                    AssertLogRelMsg(uUpdatedValue == uNewValue,
+                                    ("idCpu=%u idReg=%#x (%s) value: %#RX64 -> %#RX64\n", pVCpu->idCpu, idReg,
+                                     CPUMR3CpuIdGetIdRegName(idReg, szName), uNewValue, uUpdatedValue));
             }
             else
             {
                 LogRel(("CPUM: Error: pfnUpdate(idCpu=%u idReg=%#x (%s) value=%#RX64) failed: %Rrc\n", pVCpu->idCpu,
-                        paIdRegs[i].idReg, cpumR3GetIdRegName(paIdRegs[i].idReg, szName), paIdRegs[i].uValue, rc2));
+                        idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uNewValue, rc2));
                 if (RT_SUCCESS(rcRet))
                     rcRet = rc2;
             }
         }
+
+        if (iOvrd < cIdRegsOvrd && paIdRegsOvrd[iOvrd].idReg == idReg)
+            iOvrd += 1;
+    }
     return rcRet;
 }
 
@@ -1093,7 +1191,7 @@ static struct
 void cpumR3SaveCpuId(PVM pVM, PSSMHANDLE pSSM)
 {
     /*
-     * Save all the CPU ID leaves.
+     * Save all the main CPU ID register values.
      */
     PCSUPARMSYSREGVAL const paIdRegs = pVM->cpum.s.GuestInfo.paIdRegsR3;
     uint32_t const          cIdRegs  = pVM->cpum.s.GuestInfo.cIdRegs;
@@ -1104,6 +1202,24 @@ void cpumR3SaveCpuId(PVM pVM, PSSMHANDLE pSSM)
         SSMR3PutU64(pSSM, paIdRegs[i].uValue);
     }
     SSMR3PutU32(pSSM, UINT32_MAX);
+
+    /*
+     * Save the per-vCPU overrides.
+     * Since vCPU #0 doesn't have any overrides, we start with #1.
+     */
+    for (VMCPUID idCpu = 1; idCpu < pVM->cCpus; idCpu++)
+    {
+        PVMCPU const            pVCpu        = pVM->apCpusR3[idCpu];
+        PCSUPARMSYSREGVAL const paIdRegsOvrd = pVCpu->cpum.s.paIdRegsR3;
+        uint32_t const          cIdRegsOvrd  = pVCpu->cpum.s.cIdRegs;
+        SSMR3PutU32(pSSM, cIdRegsOvrd);
+        for (uint32_t i = 0; i < cIdRegsOvrd; i++)
+        {
+            SSMR3PutU32(pSSM, paIdRegsOvrd[i].idReg);
+            SSMR3PutU64(pSSM, paIdRegsOvrd[i].uValue);
+        }
+        SSMR3PutU32(pSSM, RT_MAKE_U32(idCpu, 0xfeed));
+    }
 }
 
 
@@ -1112,6 +1228,8 @@ void cpumR3SaveCpuId(PVM pVM, PSSMHANDLE pSSM)
  *
  * @returns VBox status code.
  * @param   pVM         The cross context VM structure.
+ * @param   pVCpu       The VMCPU structure to apply @a paIdRegs as overrides
+ *                      to, NULL for the main structure.
  * @param   pSSM        The saved state handle.
  * @param   paIdRegs    The ID register values being loaded and installed.
  *                      On success ownership is taken over this array.
@@ -1120,7 +1238,8 @@ void cpumR3SaveCpuId(PVM pVM, PSSMHANDLE pSSM)
  * @param   fNewVersion Set if we're loading a new state version.  Clear when
  *                      loading one based on CPUMARMV8OLDIDREGS.
  */
-static int cpumR3LoadCpuIdInner(PVM pVM, PSSMHANDLE pSSM, PSUPARMSYSREGVAL paIdRegs, uint32_t cIdRegs, bool fNewVersion)
+static int cpumR3LoadCpuIdInner(PVM pVM, PVMCPU pVCpu, PSSMHANDLE pSSM,
+                                PSUPARMSYSREGVAL paIdRegs, uint32_t cIdRegs, bool fNewVersion)
 {
     /*
      * This can be skipped.
@@ -1175,14 +1294,18 @@ static int cpumR3LoadCpuIdInner(PVM pVM, PSSMHANDLE pSSM, PSUPARMSYSREGVAL paIdR
 #endif
 #define CPUID_GST_FEATURE_IGN(a_uLoad, a_uCfg, a_Field) do { } while (0)
 
+    PSUPARMSYSREGVAL * const  ppaIdRegsDst = pVCpu ? &pVCpu->cpum.s.paIdRegsR3 : &pVM->cpum.s.GuestInfo.paIdRegsR3;
+    uint32_t * const          pcIdRegsDst  = pVCpu ? &pVCpu->cpum.s.cIdRegs    : &pVM->cpum.s.GuestInfo.cIdRegs;
 
-    PCSUPARMSYSREGVAL pCfg;
-    PSUPARMSYSREGVAL  pLoad;
-    uint64_t          uCfg;
-    uint64_t          uLoad;
+    PSUPARMSYSREGVAL const    paIdRegsCfg  = *ppaIdRegsDst;
+    uint32_t   const          cIdRegsCfg   = *pcIdRegsDst;
+    PCSUPARMSYSREGVAL         pCfg;
+    PSUPARMSYSREGVAL          pLoad;
+    uint64_t                  uCfg;
+    uint64_t                  uLoad;
 #define CPUID_GET_VALUES_FOR_ID_REG(a_idReg) \
     do { \
-        pCfg  = cpumR3CpuIdLookupGuestIdReg(pVM, (a_idReg)); \
+        pCfg  = cpumCpuIdLookupIdReg(paIdRegsCfg, cIdRegsCfg, (a_idReg)); \
         uCfg  = pCfg  ? pCfg->uValue  : 0; \
         pLoad = cpumCpuIdLookupIdReg(paIdRegs, cIdRegs, (a_idReg)); \
         uLoad = pLoad ? pLoad->uValue : 0; \
@@ -1356,14 +1479,14 @@ static int cpumR3LoadCpuIdInner(PVM pVM, PSSMHANDLE pSSM, PSUPARMSYSREGVAL paIdR
 
     /*
      * Any ID registers missing in the loaded state should be zeroed if this
-     * is a new state we're loading.
+     * is a new state we're loading.  This is not necessary for the overrides.
      *
      * For the old structure based state, we'll keep the values as-is and just
      * add them to the array to keep existing load behaviour.
      *
      * Note the code ASSUMES that both arrays are sorted!
      */
-    if (pVM->cpum.s.GuestInfo.cIdRegs)
+    if (!pVCpu && pVM->cpum.s.GuestInfo.cIdRegs)
     {
 #ifdef VBOX_STRICT
         uint32_t                idCfgPrev   = 0;
@@ -1422,9 +1545,9 @@ static int cpumR3LoadCpuIdInner(PVM pVM, PSSMHANDLE pSSM, PSUPARMSYSREGVAL paIdR
     /*
      * Seems we're good, commit the CPU ID registers.
      */
-    RTMemFree(pVM->cpum.s.GuestInfo.paIdRegsR3);
-    pVM->cpum.s.GuestInfo.paIdRegsR3 = paIdRegs;
-    pVM->cpum.s.GuestInfo.cIdRegs    = cIdRegs;
+    RTMemFree(*ppaIdRegsDst);
+    *ppaIdRegsDst = paIdRegs;
+    *pcIdRegsDst  = cIdRegs;
     return VINF_SUCCESS;
 }
 
@@ -1440,7 +1563,7 @@ static int cpumR3LoadCpuIdInner(PVM pVM, PSSMHANDLE pSSM, PSUPARMSYSREGVAL paIdR
 int cpumR3LoadCpuIdArmV8(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersion)
 {
     /*
-     * Load the ID register values.
+     * Load the main ID register values.
      */
     uint32_t            cIdRegs;
     PSUPARMSYSREGVAL    paIdRegs;
@@ -1532,11 +1655,63 @@ int cpumR3LoadCpuIdArmV8(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersion)
         /*
          * Sanitize the loaded ID registers and apply them.
          */
-        rc = cpumR3LoadCpuIdInner(pVM, pSSM, paIdRegs, cIdRegs, uVersion >= CPUM_SAVED_STATE_VERSION_ARMV8_IDREGS);
+        rc = cpumR3LoadCpuIdInner(pVM, NULL, pSSM, paIdRegs, cIdRegs, uVersion >= CPUM_SAVED_STATE_VERSION_ARMV8_IDREGS);
+
+        /*
+         * Load per-cpu override values.
+         */
+        if (RT_SUCCESS(rc) && uVersion >= CPUM_SAVED_STATE_VERSION_ARMV8_IDREGS2)
+        {
+            /* There are no override values for vCPU #0, so we start the loading with #1. */
+            AssertLogRel(pVM->apCpusR3[0]->cpum.s.cIdRegs == 0);
+            for (uint32_t idCpu = 1; idCpu < pVM->cCpus; idCpu++)
+            {
+                PVMCPU const pVCpu = pVM->apCpusR3[idCpu];
+
+                /* The the register count and validate it: */
+                uint32_t cIdRegsOvrd = 0;
+                rc = SSMR3GetU32(pSSM, &cIdRegsOvrd);
+                AssertRCReturn(rc, rc);
+                if (cIdRegsOvrd > cIdRegs) /* Using the saved state value here, as we may have extra zero'ing entries. */
+                    return SSMR3SetLoadError(pSSM, VERR_SSM_DATA_UNIT_FORMAT_CHANGED, RT_SRC_POS,
+                                             N_("Too many override ID registers for vCPU #%u: %u (%#x), only %u main regs"),
+                                             idCpu, cIdRegsOvrd, cIdRegsOvrd, cIdRegs);
+
+                /* Load the values first without doing any validation. */
+                paIdRegs = (PSUPARMSYSREGVAL)RTMemAllocZ(sizeof(paIdRegs[0]) * cIdRegsOvrd);
+                AssertReturn(paIdRegs, VERR_NO_MEMORY);
+                for (uint32_t i = 0; i < cIdRegsOvrd; i++)
+                {
+                    SSMR3GetU32(pSSM, &paIdRegs[i].idReg);
+                    SSMR3GetU64(pSSM, &paIdRegs[i].uValue);
+                    paIdRegs[i].fFlags = SUP_ARM_SYS_REG_VAL_F_FROM_SAVED_STATE;
+                }
+                uint32_t uTerm = 0;
+                rc = SSMR3GetU32(pSSM, &uTerm);
+                AssertRCBreak(rc);
+                AssertLogRelMsgBreakStmt(uTerm == RT_MAKE_U32(idCpu, 0xfeed),
+                                         ("uTerm=%#x\n", uTerm), rc = VERR_SSM_DATA_UNIT_FORMAT_CHANGED);
+
+                /* The array shall be sorted and the values must be in the main table. */
+                for (uint32_t i = 0, idPrev = 0 /* ASSUMES no zero ID register */; i < cIdRegsOvrd; i++)
+                {
+                    uint32_t const idReg = paIdRegs[i].idReg;
+                    AssertLogRelMsgStmt(idReg > idPrev, ("#%u: idReg=%#x vs idPrev=%#x\n", i, idReg, idPrev),
+                                        rc = VERR_SSM_DATA_UNIT_FORMAT_CHANGED);
+                    AssertLogRelMsgStmt(cpumR3CpuIdLookupGuestIdReg(pVM, idReg) != NULL, ("#%u: idReg=%#x\n", i, idReg),
+                                        rc = VERR_SSM_DATA_UNIT_FORMAT_CHANGED);
+                    idPrev = idReg;
+                }
+                AssertRCBreak(rc);
+
+                /* Sanitize and install. */
+                rc = cpumR3LoadCpuIdInner(pVM, pVCpu, pSSM, paIdRegs, cIdRegsOvrd, true);
+            }
+        }
     }
     else
         rc = SSMR3SetLoadError(pSSM, VERR_SSM_DATA_UNIT_FORMAT_CHANGED, RT_SRC_POS,
-                               N_("Loaded too many unknown ID register: cSysRegs=%u cFound=%u RT_ELEMENTS(g_aSysIdRegs)=%u\n"),
+                               N_("Loaded too many unknown ID registers: cSysRegs=%u cFound=%u RT_ELEMENTS(g_aSysIdRegs)=%u\n"),
                                cIdRegs, cFound, RT_ELEMENTS(g_aSysIdRegs));
     if (RT_FAILURE(rc))
         RTMemFree(paIdRegs);

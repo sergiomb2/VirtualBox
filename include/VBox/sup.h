@@ -224,6 +224,7 @@ typedef SUPARMSYSREGVAL const *PCSUPARMSYSREGVAL;
 #define SUP_ARM_SYS_REG_VAL_F_FROM_REGISTRY      UINT32_C(0x00000004) /**< From windows registry*/
 #define SUP_ARM_SYS_REG_VAL_F_FROM_SYSFS         UINT32_C(0x00000005) /**< From linux sysfs. */
 #define SUP_ARM_SYS_REG_VAL_F_FROM_USERLAND      UINT32_C(0x00000006) /**< From linux userland MRS emulation, i.e. sanitized. */
+#define SUP_ARM_SYS_REG_VAL_F_FROM_CPUM          UINT32_C(0x00000007) /**< Created by CPUM. */
 #define SUP_ARM_SYS_REG_VAL_F_FROM_MASK          UINT32_C(0x00000007) /**< Register source mask. */
 #define SUP_ARM_SYS_REG_VAL_F_LOAD_ZERO          UINT32_C(0x40000000) /**< Zeroed by state loading (CPUM internal). */
 #define SUP_ARM_SYS_REG_VAL_F_NOSET              UINT32_C(0x80000000) /**< Do not set (CPUM internal). */

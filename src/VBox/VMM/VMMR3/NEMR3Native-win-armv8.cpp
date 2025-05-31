@@ -1052,7 +1052,7 @@ static struct
 /**
  * @callback_method_impl{FNCPUMARMCPUIDREGQUERY}
  */
-static DECLCALLBACK(int) enmR3WinCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, uint32_t idReg, void *pvUser, uint64_t *puValue)
+static DECLCALLBACK(int) nemR3WinCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, uint32_t idReg, void *pvUser, uint64_t *puValue)
 {
     RT_NOREF_PV(pvUser);
     *puValue = 0;
@@ -1065,7 +1065,7 @@ static DECLCALLBACK(int) enmR3WinCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, uint32_t i
         iReg++;
     if (iReg >= RT_ELEMENTS(g_aNemWinArmIdRegs))
     {
-        LogFlow(("enmR3WinCpuIdRegQuery: Unknown register: %#x\n", idReg));
+        LogFlow(("nemR3WinCpuIdRegQuery: Unknown register: %#x\n", idReg));
         return VERR_CPUM_UNSUPPORTED_ID_REGISTER;
     }
 
@@ -1087,13 +1087,13 @@ static DECLCALLBACK(int) enmR3WinCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, uint32_t i
         HRESULT const  hrc2   = WHvGetVirtualProcessorRegisters(pVM->nem.s.hPartition, idCpu2, &enmName, 1, &Value);
         if (SUCCEEDED(hrc2))
         {
-            LogRel(("enmR3WinCpuIdRegQuery: TODO: mixed up fPerVCpu setting for idReg=%#x/%s: %d -> %Rhrc, while %d works\n",
+            LogRel(("nemR3WinCpuIdRegQuery: TODO: mixed up fPerVCpu setting for idReg=%#x/%s: %d -> %Rhrc, while %d works\n",
                     idReg, g_aNemWinArmIdRegs[iReg].pszName, idCpu, hrc, idCpu2));
             idCpu = idCpu2;
             hrc   = hrc2;
         }
     }
-    LogRel2(("enmR3WinCpuIdRegQuery: WHvGetVirtualProcessorRegisters(,%d, %#x (%s),) -> %Rhrc %#RX64\n",
+    LogRel2(("nemR3WinCpuIdRegQuery: WHvGetVirtualProcessorRegisters(,%d, %#x (%s),) -> %Rhrc %#RX64\n",
              idCpu, g_aNemWinArmIdRegs[iReg].enmHvName, g_aNemWinArmIdRegs[iReg].pszName, hrc, Value.Reg64));
     if (SUCCEEDED(hrc))
     {
@@ -1119,7 +1119,7 @@ static DECLCALLBACK(int) enmR3WinCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, uint32_t i
 /**
  * @callback_method_impl{FNCPUMARMCPUIDREGUPDATE}
  */
-static DECLCALLBACK(int) enmR3WinCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t idReg, uint64_t uValue, void *pvUser,
+static DECLCALLBACK(int) nemR3WinCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t idReg, uint64_t uValue, void *pvUser,
                                                 uint64_t *puUpdatedValue)
 {
     if (puUpdatedValue)
@@ -1134,7 +1134,7 @@ static DECLCALLBACK(int) enmR3WinCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t 
         iReg++;
     if (iReg >= RT_ELEMENTS(g_aNemWinArmIdRegs))
     {
-        LogFlow(("enmR3WinCpuIdRegUpdate: Unknown register: %#x\n", idReg));
+        LogFlow(("nemR3WinCpuIdRegUpdate: Unknown register: %#x\n", idReg));
         return VERR_CPUM_UNSUPPORTED_ID_REGISTER;
     }
 
@@ -1157,7 +1157,7 @@ static DECLCALLBACK(int) enmR3WinCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t 
         HRESULT const  hrc2   = WHvGetVirtualProcessorRegisters(pVM->nem.s.hPartition, idCpu2, &enmName, 1, &OldValue);
         if (SUCCEEDED(hrc2))
         {
-            LogRel(("enmR3WinCpuIdRegUpdate: TODO: mixed up fPerVCpu setting for idReg=%#x/%s: %d -> %Rhrc, while %d works\n",
+            LogRel(("nemR3WinCpuIdRegUpdate: TODO: mixed up fPerVCpu setting for idReg=%#x/%s: %d -> %Rhrc, while %d works\n",
                     idReg, g_aNemWinArmIdRegs[iReg].pszName, idCpu, hrcGet, idCpu2));
             idCpu  = idCpu2;
             hrcGet = hrc2;
@@ -1179,21 +1179,26 @@ static DECLCALLBACK(int) enmR3WinCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t 
     WHV_REGISTER_VALUE NewValue   = {};
     NewValue.Reg64 = uValue;
     HRESULT const      hrcSet     = WHvSetVirtualProcessorRegisters(hPartition, idCpu, &enmName, 1, &NewValue);
-    LogRelFlow(("enmR3WinCpuIdRegUpdate: WHvSetVirtualProcessorRegisters(,%d, %#x (%s), %#RX64) -> %Rhrc\n",
-                idCpu, g_aNemWinArmIdRegs[iReg].enmHvName, g_aNemWinArmIdRegs[iReg].pszName, uValue, hrcSet));
     Assert(SUCCEEDED(hrcGet) == SUCCEEDED(hrcSet)); RT_NOREF(hrcGet);
     if (SUCCEEDED(hrcSet))
     {
         WHV_REGISTER_VALUE UpdatedValue = {};
         HRESULT const  hrcGet2 = WHvGetVirtualProcessorRegisters(hPartition, idCpu, &enmName, 1, &UpdatedValue);
         Assert(SUCCEEDED(hrcGet2));
-        LogRelFlow(("enmR3WinCpuIdRegUpdate: idReg=%#x (%s) idCpu=%d: old=%#RX64 new=%#RX64 -> %#RX64\n",
-                    idReg, g_aNemWinArmIdRegs[iReg].pszName, idCpu, OldValue.Reg64, uValue, UpdatedValue.Reg64));
+
+        if (UpdatedValue.Reg64 != uValue)
+            LogRel(("nemR3WinCpuIdRegUpdate: idCpu=%d idReg=%#x (%s): old=%#RX64 new=%#RX64 -> %#RX64\n",
+                    idCpu, idReg, g_aNemWinArmIdRegs[iReg].pszName, OldValue.Reg64, uValue, UpdatedValue.Reg64));
+        else if (OldValue.Reg64 != uValue || LogRelIsFlowEnabled())
+            LogRel(("nemR3WinCpuIdRegUpdate: idCpu=%d idReg=%#x (%s): old=%#RX64 new=%#RX64\n",
+                    idCpu, idReg, g_aNemWinArmIdRegs[iReg].pszName, OldValue.Reg64, uValue));
 
         if (puUpdatedValue)
             *puUpdatedValue = SUCCEEDED(hrcGet2) ? UpdatedValue.Reg64 : uValue;
         return VINF_SUCCESS;
     }
+    LogRel(("nemR3WinCpuIdRegUpdate: WHvSetVirtualProcessorRegisters(,%#x, %#x (%s), %#RX64) -> %Rhrc\n",
+            idCpu, g_aNemWinArmIdRegs[iReg].enmHvName, g_aNemWinArmIdRegs[iReg].pszName, uValue, hrcSet));
 
     AssertLogRelMsgReturn(!g_aNemWinArmIdRegs[iReg].fMustWork,
                           ("NEM: hrcSet=%Rhrc idReg=%#x (%s)\n", hrcSet, idReg, g_aNemWinArmIdRegs[iReg].pszName),
@@ -1284,15 +1289,15 @@ static int nemR3NativeInitSetupVm(PVM pVM)
         PVMCPU const pVCpu = pVM->apCpusR3[idCpu];
 #if 1 /* just curious */
         uint64_t  uMidr   = 0;
-        int const rcMidr  = enmR3WinCpuIdRegQuery(pVM, pVCpu, ARMV8_AARCH64_SYSREG_MIDR_EL1, NULL, &uMidr);
+        int const rcMidr  = nemR3WinCpuIdRegQuery(pVM, pVCpu, ARMV8_AARCH64_SYSREG_MIDR_EL1, NULL, &uMidr);
         uint64_t  uMpIdr  = 0;
-        int const rcMpIdr = enmR3WinCpuIdRegQuery(pVM, pVCpu, ARMV8_AARCH64_SYSREG_MPIDR_EL1, NULL, &uMpIdr);
+        int const rcMpIdr = nemR3WinCpuIdRegQuery(pVM, pVCpu, ARMV8_AARCH64_SYSREG_MPIDR_EL1, NULL, &uMpIdr);
         LogRel(("NEM: Debug: CPU #%u: default MIDR_EL1=%#RX64 (%Rrc),  default MPIDR_EL1=%#RX64 (%Rrc)\n",
                 idCpu, uMidr, rcMidr, uMpIdr, rcMpIdr));
 #endif
         if (idCpu == 0)
         {
-            rc = CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVCpu, enmR3WinCpuIdRegQuery, enmR3WinCpuIdRegUpdate, NULL /*pvUser*/);
+            rc = CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVCpu, nemR3WinCpuIdRegQuery, nemR3WinCpuIdRegUpdate, NULL /*pvUser*/);
             if (RT_FAILURE(rc))
                 return VMSetError(pVM, VERR_NEM_VM_CREATE_FAILED, RT_SRC_POS,
                                   "CPUMR3PopulateGuestFeaturesViaCallbacks failed on vCPU #%u: %Rrc", idCpu, rc);
@@ -1308,7 +1313,7 @@ static int nemR3NativeInitSetupVm(PVM pVM)
         }
         else
         {
-            rc = CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVCpu, NULL /*pfnQuery*/, enmR3WinCpuIdRegUpdate, NULL /*pvUser*/);
+            rc = CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVCpu, NULL /*pfnQuery*/, nemR3WinCpuIdRegUpdate, NULL /*pvUser*/);
             if (RT_FAILURE(rc))
                 return VMSetError(pVM, VERR_NEM_VM_CREATE_FAILED, RT_SRC_POS,
                                   "CPUMR3PopulateGuestFeaturesViaCallbacks failed on vCPU #%u: %Rrc", idCpu, rc);
@@ -1567,7 +1572,7 @@ static DECLCALLBACK(int) nemR3WinLoad(PVM pVM, PSSMHANDLE pSSM, uint32_t uVersio
 static DECLCALLBACK(int) nemR3WinLoadDone(PVM pVM, PSSMHANDLE pSSM)
 {
     VM_ASSERT_EMT(pVM);
-    int rc = CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVM->apCpusR3[0], NULL, enmR3WinCpuIdRegUpdate, pSSM /*pvUser*/);
+    int rc = CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVM->apCpusR3[0], NULL, nemR3WinCpuIdRegUpdate, pSSM /*pvUser*/);
     if (RT_FAILURE(rc))
         return SSMR3SetLoadError(pSSM, rc, RT_SRC_POS, "CPUMR3PopulateGuestFeaturesViaCallbacks failed: %Rrc", rc);
     return VINF_SUCCESS;

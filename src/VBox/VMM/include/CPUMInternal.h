@@ -115,7 +115,7 @@ typedef uint64_t STAMCOUNTER;
 #if defined(VBOX_VMM_TARGET_X86)
 # define CPUM_SAVED_STATE_VERSION               CPUM_SAVED_STATE_VERSION_HWVIRT_VMX_4
 #elif defined(VBOX_VMM_TARGET_ARMV8)
-# define CPUM_SAVED_STATE_VERSION               CPUM_SAVED_STATE_VERSION_ARMV8_IDREGS
+# define CPUM_SAVED_STATE_VERSION               CPUM_SAVED_STATE_VERSION_ARMV8_IDREGS2
 #endif
 
 #if defined(VBOX_VMM_TARGET_X86)
@@ -162,6 +162,8 @@ typedef uint64_t STAMCOUNTER;
 #endif
 
 #if defined(VBOX_VMM_TARGET_ARMV8)
+/** Saving per-vCPU ID register overrides. */
+# define CPUM_SAVED_STATE_VERSION_ARMV8_IDREGS2 4
 /** More flexible ID registers saving. */
 # define CPUM_SAVED_STATE_VERSION_ARMV8_IDREGS  3
 /** Adds ACTLR_EL1 to the ARMv8 saved state. */
@@ -546,6 +548,17 @@ typedef struct CPUMCPU
     /** Old hypervisor context, only used for combined DRx values now.
      * Must be aligned on a 64-byte boundary. */
     CPUMHYPERCTX            Hyper;
+#endif
+#if defined(VBOX_VMM_TARGET_ARMV8)
+    /** Overrides for CPUMINFO::paIdRegsR3 (on the heap, sorted by idReg).
+     * Typically, only MPIDR_EL1 and maybe MIDR_EL1 is in this list.
+     * @note This list must _not_ contain anything that isn't in the master list
+     *       (CPUMINFO::paIdRegsR3), as that would unncessarily complicate code
+     *       working the two lists.  The master list is created for vCPU 0,
+     *       so it will typically have zero entries here. */
+    R3PTRTYPE(PSUPARMSYSREGVAL) paIdRegsR3;
+    /** Number of registers in paIdRegsR3.   */
+    uint32_t                cIdRegs;
 #endif
 
 #ifdef VBOX_WITH_CRASHDUMP_MAGIC
