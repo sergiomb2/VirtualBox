@@ -205,7 +205,7 @@ static RTGCPHYS gitsGetBaseRegPhysAddr(uint64_t uGitsBaseReg)
 
 static void gitsCmdQueueSetError(PPDMDEVINS pDevIns, PGITSDEV pGitsDev, GITSDIAG enmDiag, bool fStallQueue)
 {
-    Log4Func(("enmDiag=%#RX32 (%s) fStallQueue=%RTbool\n", enmDiag, gitsGetDiagDescription(enmDiag)));
+    Log4Func(("enmDiag=%#RX32 (%s) fStallQueue=%RTbool\n", enmDiag, gitsGetDiagDescription(enmDiag), fStallQueue));
 
     GIC_CRIT_SECT_ENTER(pDevIns);
 
@@ -532,8 +532,8 @@ DECL_HIDDEN_CALLBACK(void) gitsR3DbgInfo(PCGITSDEV pGitsDev, PCDBGFINFOHLP pHlp)
             bool const     fIndirect   = RT_BOOL(RT_BF_GET(uReg, GITS_BF_CTRL_REG_BASER_INDIRECT));
             const char *pszType        = s_apszType[idxType];
             pHlp->pfnPrintf(pHlp, "  GITS_BASER[%u]      = %#RX64\n", i, uReg);
-            pHlp->pfnPrintf(pHlp, "    Size               = %#x (pages=%u total=%.Rhcb)\n", uSize, cPages, cbItsTable);
-            pHlp->pfnPrintf(pHlp, "    Page size          = %#x (%.Rhcb)\n", idxPageSize, s_acbPageSize[idxPageSize]);
+            pHlp->pfnPrintf(pHlp, "    Size               = %#x (pages=%u total=%.0Rhcb)\n", uSize, cPages, cbItsTable);
+            pHlp->pfnPrintf(pHlp, "    Page size          = %#x (%.0Rhcb)\n", idxPageSize, s_acbPageSize[idxPageSize]);
             pHlp->pfnPrintf(pHlp, "    Shareability       = %#x\n",      RT_BF_GET(uReg, GITS_BF_CTRL_REG_BASER_SHAREABILITY));
             pHlp->pfnPrintf(pHlp, "    Phys addr          = %#RX64 (addr=%#RX64)\n", uReg & GITS_BF_CTRL_REG_BASER_PHYS_ADDR_MASK,
                                                                                      gitsGetBaseRegPhysAddr(uReg));
@@ -552,7 +552,7 @@ DECL_HIDDEN_CALLBACK(void) gitsR3DbgInfo(PCGITSDEV pGitsDev, PCDBGFINFOHLP pHlp)
         uint8_t const  uSize  = RT_BF_GET(uReg, GITS_BF_CTRL_REG_CBASER_SIZE);
         uint16_t const cPages = uSize > 0 ? uSize + 1 : 0;
         pHlp->pfnPrintf(pHlp, "  GITS_CBASER        = %#RX64\n", uReg);
-        pHlp->pfnPrintf(pHlp, "    Size               = %#x (pages=%u total=%.Rhcb)\n", uSize, cPages, _4K * cPages);
+        pHlp->pfnPrintf(pHlp, "    Size               = %#x (pages=%u total=%.0Rhcb)\n", uSize, cPages, _4K * cPages);
         pHlp->pfnPrintf(pHlp, "    Shareability       = %#x\n",      RT_BF_GET(uReg, GITS_BF_CTRL_REG_CBASER_SHAREABILITY));
         pHlp->pfnPrintf(pHlp, "    Phys addr          = %#RX64\n",   uReg & GITS_BF_CTRL_REG_CBASER_PHYS_ADDR_MASK);
         pHlp->pfnPrintf(pHlp, "    Outer cache        = %#x\n",      RT_BF_GET(uReg, GITS_BF_CTRL_REG_CBASER_OUTER_CACHE));
