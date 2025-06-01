@@ -483,7 +483,7 @@ static DECLCALLBACK(int) gicItsR3CmdQueueThread(PPDMDEVINS pDevIns, PPDMTHREAD p
     uint16_t const cMaxPages = GITS_BF_CTRL_REG_CBASER_SIZE_MASK + 1;
     size_t const   cbCmds    = cMaxPages << GITS_CMD_QUEUE_PAGE_SHIFT;
     void *pvCmds = RTMemAllocZ(cbCmds);
-    AssertLogRelMsgReturn(pvCmds, ("Failed to alloc %.Rhcb (%zu bytes) for the GITS command queue\n", cbCmds, cbCmds),
+    AssertLogRelMsgReturn(pvCmds, ("Failed to alloc %.0Rhcb (%zu bytes) for the GITS command queue\n", cbCmds, cbCmds),
                           VERR_NO_MEMORY);
 
     while (pThread->enmState == PDMTHREADSTATE_RUNNING)
@@ -749,10 +749,10 @@ static DECLCALLBACK(int) gicR3LoadExec(PPDMDEVINS pDevIns, PSSMHANDLE pSSM, uint
     /*
      * Finally, perform sanity checks.
      */
-    if (pGicDev->uArchRev <= GIC_DIST_REG_PIDR2_ARCHREV_GICV4)
+    if (pGicDev->uArchRev <= GIC_DIST_REG_PIDR2_ARCHREV_GICV4) /** @todo r=bird: This doesn't seem tight enough judging from the error message... */
     { /* likely */ }
     else
-        return pHlp->pfnSSMSetCfgError(pSSM, RT_SRC_POS, N_("Invalid uArchRev, got %u expected range [1,31]"), pGicDev->uArchRev,
+        return pHlp->pfnSSMSetCfgError(pSSM, RT_SRC_POS, N_("Invalid uArchRev, got %u expected range [%u,%u]"), pGicDev->uArchRev,
                                        GIC_DIST_REG_PIDR2_ARCHREV_GICV1, GIC_DIST_REG_PIDR2_ARCHREV_GICV4);
     if (pGicDev->uArchRevMinor == 1)
     { /* likely */ }
