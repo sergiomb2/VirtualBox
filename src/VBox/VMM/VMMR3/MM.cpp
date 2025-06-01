@@ -340,35 +340,19 @@ static int mmR3InitRamArmV8(PVM pVM, PCFGMNODE pMMCfg)
     {
         char szMemRegion[512]; RT_ZERO(szMemRegion);
         rc = CFGMR3GetName(pCur, &szMemRegion[0], sizeof(szMemRegion));
-        if (RT_FAILURE(rc))
-        {
-            LogRel(("Failed to query memory region name -> %Rrc\n", rc));
-            break;
-        }
+        AssertLogRelMsgBreak(RT_SUCCESS(rc), ("Failed to query memory region name -> %Rrc\n", rc));
 
         uint64_t u64GCPhysStart = 0;
         rc = CFGMR3QueryU64(pCur, "GCPhysStart", &u64GCPhysStart);
-        if (RT_FAILURE(rc))
-        {
-            LogRel(("Failed to query \"GCPhysStart\" for memory region %s -> %Rrc\n", szMemRegion, rc));
-            break;
-        }
+        AssertLogRelMsgBreak(RT_SUCCESS(rc), ("Failed to query \"GCPhysStart\" for memory region %s -> %Rrc\n", szMemRegion, rc));
 
         uint64_t u64MemSize = 0;
         rc = CFGMR3QueryU64(pCur, "Size", &u64MemSize);
-        if (RT_FAILURE(rc))
-        {
-            LogRel(("Failed to query \"Size\" for memory region %s -> %Rrc\n", szMemRegion, rc));
-            break;
-        }
+        AssertLogRelMsgBreak(RT_SUCCESS(rc), ("Failed to query \"Size\" for memory region %s -> %Rrc\n", szMemRegion, rc));
 
         rc = PGMR3PhysRegisterRam(pVM, u64GCPhysStart, u64MemSize, "Conventional RAM");
-        if (RT_FAILURE(rc))
-        {
-            LogRel(("Failed to register memory region '%s' GCPhysStart=%RGp Size=%#RX64 -> %Rrc\n",
-                    szMemRegion, u64GCPhysStart, u64MemSize));
-            break;
-        }
+        AssertLogRelMsgBreak(RT_SUCCESS(rc), ("Failed to register memory region '%s' GCPhysStart=%RGp Size=%#RX64 -> %Rrc\n",
+                                              szMemRegion, u64GCPhysStart, u64MemSize, rc));
 
         char *pszFilename = NULL;
         rc = CFGMR3QueryStringAlloc(pCur, "PrepopulateFromFile", &pszFilename);
@@ -380,10 +364,7 @@ static int mmR3InitRamArmV8(PVM pVM, PCFGMNODE pMMCfg)
                 break;
         }
         else if (rc != VERR_CFGM_VALUE_NOT_FOUND)
-        {
-            LogRel(("Failed to query \"PrepopulateFromFile\" for memory region %s -> %Rrc\n", szMemRegion, rc));
-            break;
-        }
+            AssertLogRelMsgFailedBreak(("Failed to query \"PrepopulateFromFile\" for memory region %s -> %Rrc\n", szMemRegion, rc));
         else
             rc = VINF_SUCCESS;
 
