@@ -153,10 +153,10 @@ void UISharedFolderDetailsEditor::sltRetranslateUI()
     if (m_pLabelName)
         m_pLabelName->setText(tr("Folder Name"));
     if (m_pEditorName)
-        m_pEditorName->setToolTip(tr("The name of the shared folder "
+        m_pEditorName->setToolTip(tr("Name of the shared folder "
                                      "(as it will be seen by the guest OS)"));
     if (m_pSelectorPath)
-        m_pSelectorPath->setToolTip(tr("The path of the shared folder"));
+        m_pSelectorPath->setToolTip(tr("Path of the shared folder"));
     if (m_pButtonBox && m_pButtonBox->button(QDialogButtonBox::Ok))
         m_pButtonBox->button(QDialogButtonBox::Ok)->setToolTip(tr("Apply the changes and close this dialog"));
     if (m_pButtonBox && m_pButtonBox->button(QDialogButtonBox::Cancel))
@@ -165,19 +165,19 @@ void UISharedFolderDetailsEditor::sltRetranslateUI()
     if (m_pCheckBoxReadonly)
     {
         m_pCheckBoxReadonly->setText(tr("&Read-only"));
-        m_pCheckBoxReadonly->setToolTip(tr("The guest OS will not be able "
+        m_pCheckBoxReadonly->setToolTip(tr("Guest OS will not be able "
                                            "to write to the specified shared folder"));
     }
     if (m_pCheckBoxAutoMount)
     {
         m_pCheckBoxAutoMount->setText(tr("&Auto-mount"));
-        m_pCheckBoxAutoMount->setToolTip(tr("The guest OS will try to "
+        m_pCheckBoxAutoMount->setToolTip(tr("Guest OS will try to "
                                             "automatically mount the shared folder on startup"));
     }
     if (m_pLabelAutoMountPoint)
-        m_pLabelAutoMountPoint->setText(tr("Mount point"));
+        m_pLabelAutoMountPoint->setText(tr("Mount Point"));
     if (m_pEditorAutoMountPoint)
-        m_pEditorAutoMountPoint->setToolTip(tr("The path to automatically mount the folder in the guest. "
+        m_pEditorAutoMountPoint->setToolTip(tr("Path to automatically mount the folder in the guest. "
                                                "A drive letter (e.g. 'G:') for Windows and OS/2 guests, "
                                                "path for the others. If left empty the guest will pick "
                                                "something fitting."));
