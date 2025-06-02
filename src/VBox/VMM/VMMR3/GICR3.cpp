@@ -749,7 +749,8 @@ static DECLCALLBACK(int) gicR3LoadExec(PPDMDEVINS pDevIns, PSSMHANDLE pSSM, uint
     /*
      * Finally, perform sanity checks.
      */
-    if (pGicDev->uArchRev <= GIC_DIST_REG_PIDR2_ARCHREV_GICV4) /** @todo r=bird: This doesn't seem tight enough judging from the error message... */
+    if (   pGicDev->uArchRev >= GIC_DIST_REG_PIDR2_ARCHREV_GICV1
+        && pGicDev->uArchRev <= GIC_DIST_REG_PIDR2_ARCHREV_GICV4)
     { /* likely */ }
     else
         return pHlp->pfnSSMSetCfgError(pSSM, RT_SRC_POS, N_("Invalid uArchRev, got %u expected range [%u,%u]"), pGicDev->uArchRev,
