@@ -87,7 +87,7 @@ void UIAudioHostDriverEditor::sltRetranslateUI()
             const KAudioDriverType enmType = m_pCombo->itemData(i).value<KAudioDriverType>();
             m_pCombo->setItemText(i, gpConverter->toString(enmType));
         }
-        m_pCombo->setToolTip(tr("The audio output driver. The Null Audio Driver makes the guest "
+        m_pCombo->setToolTip(tr("Audio output driver. The Null Audio Driver makes the guest "
                                 "see an audio card, however every access to it will be ignored."));
     }
 }
