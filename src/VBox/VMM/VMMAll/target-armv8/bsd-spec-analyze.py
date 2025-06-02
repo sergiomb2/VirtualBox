@@ -3704,36 +3704,12 @@ class IEMArmGenerator(object):
 
         class CExprHelperFeatures(object):
             """ Helper class for creating C-expressions from the is-supported AST expressions. """
-            def __init__(self, fFromSysRegs):
-                self.fFromSysRegs = fFromSysRegs;
+            def __init__(self):
                 self.dVars        = {}      # Type: Dict[str, ArmRegister]
                 self.idxFeatures  = 0;
 
-            # Mapping register names to CPUMARMV8IDREGS members.
-            kdRegNmToStructMember = {
-                'ID_AA64PFR0_EL1':  'u64RegIdAa64Pfr0El1',
-                'ID_AA64PFR1_EL1':  'u64RegIdAa64Pfr1El1',
-                'ID_AA64DFR0_EL1':  'u64RegIdAa64Dfr0El1',
-                'ID_AA64DFR1_EL1':  'u64RegIdAa64Dfr1El1',
-                'ID_AA64AFR0_EL1':  'u64RegIdAa64Afr0El1',
-                'ID_AA64AFR1_EL1':  'u64RegIdAa64Afr1El1',
-                'ID_AA64ISAR0_EL1': 'u64RegIdAa64Isar0El1',
-                'ID_AA64ISAR1_EL1': 'u64RegIdAa64Isar1El1',
-                'ID_AA64ISAR2_EL1': 'u64RegIdAa64Isar2El1',
-                'ID_AA64MMFR0_EL1': 'u64RegIdAa64Mmfr0El1',
-                'ID_AA64MMFR1_EL1': 'u64RegIdAa64Mmfr1El1',
-                'ID_AA64MMFR2_EL1': 'u64RegIdAa64Mmfr2El1',
-                'CLIDR_EL1':        'u64RegClidrEl1',
-                'CTR_EL0':          'u64RegCtrEl0',
-                'DCZID_EL0':        'u64RegDczidEl0',
-            };
-
             def _lookupSysRegValueExpr(self, oReg):
-                if self.fFromSysRegs:
-                    return 'cpumCpuIdLookupSysReg(paSysRegs, cSysRegs, %s)' % (oReg.getVBoxConstant());
-                if oReg.sState == 'AArch64' and oReg.sName in self.kdRegNmToStructMember:
-                    return 'pIdRegs->%s' % (self.kdRegNmToStructMember[oReg.sName]);
-                return '0 /* %s is not part of CPUMARMV8IDREGS */' % (oReg.sName,);
+                return 'cpumCpuIdLookupSysReg(paSysRegs, cSysRegs, %s)' % (oReg.getVBoxConstant());
 
             def getFieldInfo(self, sName, sVar = '', sNamespace = ''):
                 if sNamespace and sVar:
@@ -3827,7 +3803,7 @@ class IEMArmGenerator(object):
             '    int rcRet = VINF_SUCCESS;',
         ];
         asTodo  = []
-        oHelper = CExprHelperFeatures(True);
+        oHelper = CExprHelperFeatures();
         for oHelper.idxFeatures, oFeature in enumerate(aoFeatures):
             sFeatureMemberNm = g_dSpecFeatToCpumFeat.get(oFeature.sName, oFeature.sName);
             if sFeatureMemberNm is oFeature.sName:
@@ -3873,42 +3849,10 @@ class IEMArmGenerator(object):
         ];
 
         #
-        # Same again, but with CPUMARMV8IDREGS as input.
-        #
-        asLines += [
-            '',
-            '',
-            '/**',
-            ' * Explodes ARMv8+ features from an CPUMARMV8IDREGS structure.',
-            ' *',
-            ' * @returns VBox status code',
-            ' * @param   pIdRegs     The system register values.',
-            ' * @param   pFeatures   The structure to explode the features into.',
-            ' */',
-            'DECLHIDDEN(int) cpumCpuIdExplodeFeaturesArmV8FromIdRegs(PCCPUMARMV8IDREGS pIdRegs, CPUMFEATURESARMV8 *pFeatures)',
-            '{',
-            '    int rcRet = VINF_SUCCESS;',
-        ];
-        asTodo  = []
-        oHelper = CExprHelperFeatures(False);
-        for oHelper.idxFeatures, oFeature in enumerate(aoFeatures):
-            sFeatureMemberNm = g_dSpecFeatToCpumFeat.get(oFeature.sName, oFeature.sName);
-            sLine = '    pFeatures->%-22s = %s;' % (sFeatureMemberNm, oFeature.oSupportExpr.toCExpr(oHelper),)
-            sLine = '%-116s /* %s */' % (sLine, oFeature.sName,);
-            asLines.append(sLine);
-        asLines += asMissing;
-        asLines += [
-            '',
-            '    return rcRet;',
-            '}'
-        ];
-
-        #
         # Write a dumper function for the CPUMFEATURESARMV8 structure.
         #
         cchMaxFeatNm = max(len(sKey) for sKey in g_dSpecFeatToCpumFeat);
         asLines += [
-            '',
             '',
             '#ifdef IN_RING3',
             '',

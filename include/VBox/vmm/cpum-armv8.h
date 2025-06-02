@@ -206,10 +206,7 @@ DECLINLINE(bool) CPUMIsGuestIn64BitCodeEx(PCCPUMCTX pCtx)
  */
 
 VMMR3DECL(int)          CPUMR3SysRegRangesInsert(PVM pVM, PCCPUMSYSREGRANGE pNewRange);
-VMMR3DECL(int)          CPUMR3PopulateFeaturesByIdRegisters(PVM pVM, PCCPUMARMV8IDREGS pIdRegs);
 VMMR3_INT_DECL(const char *) CPUMR3CpuIdGetIdRegName(uint32_t idReg, char pszFallback[32]);
-
-VMMR3_INT_DECL(int)     CPUMR3QueryGuestIdRegs(PVM pVM, PCPUMARMV8IDREGS pIdRegs);
 
 /**
  * Callback used by CPUMR3PopulateGuestFeaturesViaCallbacks to query a

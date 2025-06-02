@@ -311,26 +311,12 @@ static const struct
     { KVM_ARM64_REG_SYS_CREATE(ARMV8_AARCH64_SYSREG_APIBKeyLo_EL1), RT_UOFFSETOF(CPUMCTX, Apib.Low.u64)  },
     { KVM_ARM64_REG_SYS_CREATE(ARMV8_AARCH64_SYSREG_APIBKeyHi_EL1), RT_UOFFSETOF(CPUMCTX, Apib.High.u64) }
 };
-/** ID registers. */
-static const struct
-{
-    uint64_t         idKvmReg;
-    uint32_t         offIdStruct;
-} s_aIdRegs[] =
-{
-    { KVM_ARM64_REG_SYS_CREATE(ARMV8_AARCH64_SYSREG_ID_AA64DFR0_EL1),   RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Dfr0El1)  },
-    { KVM_ARM64_REG_SYS_CREATE(ARMV8_AARCH64_SYSREG_ID_AA64DFR1_EL1),   RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Dfr1El1)  },
-    { KVM_ARM64_REG_SYS_CREATE(ARMV8_AARCH64_SYSREG_ID_AA64ISAR0_EL1),  RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Isar0El1) },
-    { KVM_ARM64_REG_SYS_CREATE(ARMV8_AARCH64_SYSREG_ID_AA64ISAR1_EL1),  RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Isar1El1) },
-    { KVM_ARM64_REG_SYS_CREATE(ARMV8_AARCH64_SYSREG_ID_AA64MMFR0_EL1),  RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Mmfr0El1) },
-    { KVM_ARM64_REG_SYS_CREATE(ARMV8_AARCH64_SYSREG_ID_AA64MMFR1_EL1),  RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Mmfr1El1) },
-    { KVM_ARM64_REG_SYS_CREATE(ARMV8_AARCH64_SYSREG_ID_AA64MMFR2_EL1),  RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Mmfr2El1) },
-    { KVM_ARM64_REG_SYS_CREATE(ARMV8_AARCH64_SYSREG_ID_AA64PFR0_EL1),   RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Pfr0El1)  },
-    { KVM_ARM64_REG_SYS_CREATE(ARMV8_AARCH64_SYSREG_ID_AA64PFR1_EL1),   RT_UOFFSETOF(CPUMARMV8IDREGS, u64RegIdAa64Pfr1El1)  }
-};
 
 
 
+/*********************************************************************************************************************************
+*   Internal Functions                                                                                                           *
+*********************************************************************************************************************************/
 /* Forward declarations of things called by the template. */
 static int nemR3LnxInitSetupVm(PVM pVM, PRTERRINFO pErrInfo);
 

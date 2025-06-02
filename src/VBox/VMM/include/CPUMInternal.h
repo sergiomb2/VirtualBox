@@ -596,7 +596,6 @@ DECLHIDDEN(void)    cpumCpuIdExplodeFeaturesX86VmxFromSupMsrs(PCSUPHWVIRTMSRS pM
 void                cpumCpuIdExplodeArchCapabilities(CPUMFEATURESX86 *pFeatures, bool fHasArchCap, uint64_t fArchVal);
 # endif /* defined(RT_ARCH_X86) || defined(RT_ARCH_AMD64) || defined(VBOX_VMM_TARGET_X86) */
 # if defined(RT_ARCH_ARM64) || defined(VBOX_VMM_TARGET_ARMV8)
-DECLHIDDEN(int)     cpumCpuIdExplodeFeaturesArmV8FromIdRegs(PCCPUMARMV8IDREGS pIdRegs, CPUMFEATURESARMV8 *pFeatures);
 DECLCALLBACK(int)   cpumCpuIdSysRegValSortCmp(void const *pvElement1, void const *pvElement2, void *pvUser);
 # endif
 
