@@ -87,7 +87,7 @@ void UIParavirtProviderEditor::sltRetranslateUI()
             const KParavirtProvider enmType = m_pCombo->itemData(i).value<KParavirtProvider>();
             m_pCombo->setItemText(i, gpConverter->toString(enmType));
         }
-        m_pCombo->setToolTip(tr("The paravirtualization guest interface provider used by this virtual machine"));
+        m_pCombo->setToolTip(tr("Paravirtualization guest interface provider used by this virtual machine"));
     }
 }
 

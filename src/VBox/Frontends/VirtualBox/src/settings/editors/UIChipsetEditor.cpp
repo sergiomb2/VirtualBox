@@ -87,7 +87,7 @@ void UIChipsetEditor::sltRetranslateUI()
             const KChipsetType enmType = m_pCombo->itemData(i).value<KChipsetType>();
             m_pCombo->setItemText(i, gpConverter->toString(enmType));
         }
-        m_pCombo->setToolTip(tr("Select chipset emulation"));
+        m_pCombo->setToolTip(tr("Emulated chipset type"));
     }
 }
 

@@ -193,7 +193,7 @@ void UIMotherboardFeaturesEditor::sltRetranslateUI()
     if (m_pPushButtonResetSecureBoot)
     {
         m_pPushButtonResetSecureBoot->setText(tr("&Reset Secure Boot Keys"));
-        m_pPushButtonResetSecureBoot->setToolTip(tr("Resets secure boot keys to default"));
+        m_pPushButtonResetSecureBoot->setToolTip(tr("Reset secure boot keys to default"));
     }
 }
 
