@@ -96,7 +96,7 @@ void UIVisualStateEditor::sltRetranslateUI()
             const UIVisualStateType enmType = m_pCombo->itemData(i).value<UIVisualStateType>();
             m_pCombo->setItemText(i, gpConverter->toString(enmType));
         }
-        m_pCombo->setToolTip(tr("The virtual machine visual appearance. If machine is running it will be applied "
+        m_pCombo->setToolTip(tr("Virtual machine visual appearance. If machine is running it will be applied "
                                 "as soon as possible, otherwise desired one will be defined."));
     }
 }
