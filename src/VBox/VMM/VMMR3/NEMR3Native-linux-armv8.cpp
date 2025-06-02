@@ -482,7 +482,7 @@ static DECLCALLBACK(int) nemR3LnxArmCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, uint32_
  * @callback_method_impl{FNCPUMARMCPUIDREGUPDATE}
  */
 static DECLCALLBACK(int) nemR3LnxArmCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t idReg,
-                                                   uint64_t uValue, void *pvUser, uint64_t *puUpdatedValue)
+                                                   uint64_t uNewValue, void *pvUser, uint64_t *puUpdatedValue)
 {
     if (puUpdatedValue)
         *puUpdatedValue = 0;
@@ -498,7 +498,7 @@ static DECLCALLBACK(int) nemR3LnxArmCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32
     char      szName[32];
     uint64_t  uOldValue = 0;
     int const rcGet     = nemR3LnxKvmQueryRegU64(pVCpu, KVM_ARM64_REG_SYS_CREATE(idReg), &uOldValue);
-    int const rcSet     = nemR3LnxKvmSetRegU64(  pVCpu, KVM_ARM64_REG_SYS_CREATE(idReg), &uValue);
+    int const rcSet     = nemR3LnxKvmSetRegU64(  pVCpu, KVM_ARM64_REG_SYS_CREATE(idReg), &uNewValue);
     Assert(RT_SUCCESS(rcGet) == RT_SUCCESS(rcSet)); RT_NOREF(rcGet);
     if (RT_SUCCESS(rcSet))
     {
@@ -506,19 +506,19 @@ static DECLCALLBACK(int) nemR3LnxArmCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32
         int const rcGet2        = nemR3LnxKvmQueryRegU64(pVCpu, KVM_ARM64_REG_SYS_CREATE(idReg), &uUpdatedValue);
         AssertRC(rcGet2);
 
-        if (uValue != uUpdatedValue)
+        if (uNewValue != uUpdatedValue)
             LogRel(("nemR3LnxArmCpuIdRegUpdate: idCpu=%#x idReg=%#x (%s): old=%#RX64 new=%#RX64 -> %#RX64\n",
-                    pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uOldValue, uValue, uUpdatedValue));
-        else if (uOldValue != uValue || LogRelIsFlowEnabled())
+                    pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uOldValue, uNewValue, uUpdatedValue));
+        else if (uOldValue != uNewValue || LogRelIsFlowEnabled())
             LogRel(("nemR3LnxArmCpuIdRegUpdate: idCpu=%#x idReg=%#x (%s): old=%#RX64 new=%#RX64\n",
-                    pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uOldValue, uValue));
+                    pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uOldValue, uNewValue));
 
         if (puUpdatedValue)
-            *puUpdatedValue = RT_SUCCESS(rcGet2) ? uUpdatedValue : uValue;
+            *puUpdatedValue = RT_SUCCESS(rcGet2) ? uUpdatedValue : uNewValue;
         return VINF_SUCCESS;
     }
     LogRel(("nemR3LnxArmCpuIdRegUpdate: nemR3LnxKvmSetRegU64(%#x, %#x (%s), %#RX64) -> %Rrc (OldValue=%#RX64 rcGet=%Rrc)\n",
-            pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uValue, rcSet, uOldValue, rcGet));
+            pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uNewValue, rcSet, uOldValue, rcGet));
 
     /* This shall work for the following: */
     AssertLogRelMsgReturn(   idReg != ARMV8_AARCH64_SYSREG_ID_AA64DFR0_EL1
@@ -550,7 +550,7 @@ static DECLCALLBACK(int) nemR3LnxArmCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32
             || idReg == ARMV8_AARCH64_SYSREG_AIDR_EL1) )
     {
         if (puUpdatedValue)
-            *puUpdatedValue = uValue;
+            *puUpdatedValue = uNewValue;
         return VINF_SUCCESS;
     }
 

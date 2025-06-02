@@ -1533,7 +1533,7 @@ static DECLCALLBACK(int) nemR3DarwinArmCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, uint
  * @callback_method_impl{FNCPUMARMCPUIDREGUPDATE}
  */
 static DECLCALLBACK(int) nemR3DarwinArmCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t idReg,
-                                                      uint64_t uValue, void *pvUser, uint64_t *puUpdatedValue)
+                                                      uint64_t uNewValue, void *pvUser, uint64_t *puUpdatedValue)
 {
     if (puUpdatedValue)
         *puUpdatedValue = 0;
@@ -1558,7 +1558,7 @@ static DECLCALLBACK(int) nemR3DarwinArmCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uin
         case ARMV8_AARCH64_SYSREG_CTR_EL0:
         case ARMV8_AARCH64_SYSREG_DCZID_EL0:
             if (puUpdatedValue)
-                *puUpdatedValue = uValue;
+                *puUpdatedValue = uNewValue;
             return VINF_SUCCESS;
     }
 
@@ -1568,7 +1568,7 @@ static DECLCALLBACK(int) nemR3DarwinArmCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uin
     char              szName[32];
     uint64_t          uOldValue = 0;
     hv_return_t const rcHvGet   = hv_vcpu_get_sys_reg(pVCpu->nem.s.hVCpu, (hv_sys_reg_t)idReg, &uOldValue);
-    hv_return_t const rcHvSet   = hv_vcpu_set_sys_reg(pVCpu->nem.s.hVCpu, (hv_sys_reg_t)idReg, uValue);
+    hv_return_t const rcHvSet   = hv_vcpu_set_sys_reg(pVCpu->nem.s.hVCpu, (hv_sys_reg_t)idReg, uNewValue);
     Assert((rcHvGet == HV_SUCCESS) == (rcHvSet == HV_SUCCESS)); RT_NOREF(rcHvGet);
     if (rcHvSet == HV_SUCCESS)
     {
@@ -1576,19 +1576,19 @@ static DECLCALLBACK(int) nemR3DarwinArmCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uin
         hv_return_t const rcHvGet2      = hv_vcpu_get_sys_reg(pVCpu->nem.s.hVCpu, (hv_sys_reg_t)idReg, &uUpdatedValue);
         Assert(rcHvGet2 == HV_SUCCESS); RT_NOREF(rcHvGet2);
 
-        if (uValue != uUpdatedValue)
+        if (uNewValue != uUpdatedValue)
             LogRel(("nemR3DarwinArmCpuIdRegUpdate: idCpu=%#x idReg=%#x (%s): old=%#RX64 new=%#RX64 -> %#RX64\n",
-                    pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uOldValue, uValue, uUpdatedValue));
-        else if (uOldValue != uValue || LogRelIsFlowEnabled())
+                    pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uOldValue, uNewValue, uUpdatedValue));
+        else if (uOldValue != uNewValue || LogRelIsFlowEnabled())
             LogRel(("nemR3DarwinArmCpuIdRegUpdate: idCpu=%#x idReg=%#x (%s): old=%#RX64 new=%#RX64\n",
-                    pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uOldValue, uValue));
+                    pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uOldValue, uNewValue));
 
         if (puUpdatedValue)
-            *puUpdatedValue = rcHvGet2 == HV_SUCCESS ? uUpdatedValue : uValue;
+            *puUpdatedValue = rcHvGet2 == HV_SUCCESS ? uUpdatedValue : uNewValue;
         return VINF_SUCCESS;
     }
     LogRel(("nemR3DarwinArmCpuIdRegUpdate: hv_vcpu_set_sys_reg(%#x, %#x (%s), %#RX64) -> %#x %s (OldValue=%#RX64 rcHvGet=%#x %s)\n",
-            pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uValue, rcHvSet, nemR3DarwinHvStatusName(rcHvSet),
+            pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uNewValue, rcHvSet, nemR3DarwinHvStatusName(rcHvSet),
             uOldValue, rcHvGet, nemR3DarwinHvStatusName(rcHvGet)));
 
     /* This shall work for the following: */
@@ -1611,7 +1611,7 @@ static DECLCALLBACK(int) nemR3DarwinArmCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uin
         /* HACK ALERT: If we're loading state, we ignore registers that cannot
            be set provide the new value is zero. This handles the unsupported
            ID registers from CPUMARMV8OLDIDREGS. */
-        if (pvUser && rcHvSet == HV_BAD_ARGUMENT && uValue == 0)
+        if (pvUser && rcHvSet == HV_BAD_ARGUMENT && uNewValue == 0)
         {
             if (puUpdatedValue)
                 *puUpdatedValue = 0;

@@ -1119,7 +1119,7 @@ static DECLCALLBACK(int) nemR3WinCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, uint32_t i
 /**
  * @callback_method_impl{FNCPUMARMCPUIDREGUPDATE}
  */
-static DECLCALLBACK(int) nemR3WinCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t idReg, uint64_t uValue, void *pvUser,
+static DECLCALLBACK(int) nemR3WinCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t idReg, uint64_t uNewValue, void *pvUser,
                                                 uint64_t *puUpdatedValue)
 {
     if (puUpdatedValue)
@@ -1167,9 +1167,9 @@ static DECLCALLBACK(int) nemR3WinCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t 
     /* Quietly skip setting partition wide registers if this isn't vCPU #0.  */
     if (idCpu == WHV_ANY_VP && pVCpu->idCpu != 0 && SUCCEEDED(hrcGet))
     {
-        Assert(OldValue.Reg64 == uValue);
+        Assert(OldValue.Reg64 == uNewValue);
         if (puUpdatedValue)
-            *puUpdatedValue = uValue;
+            *puUpdatedValue = uNewValue;
         return VINF_SUCCESS;
     }
 
@@ -1177,7 +1177,7 @@ static DECLCALLBACK(int) nemR3WinCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t 
      * Do the setting and query the updated value on success.
      */
     WHV_REGISTER_VALUE NewValue   = {};
-    NewValue.Reg64 = uValue;
+    NewValue.Reg64 = uNewValue;
     HRESULT const      hrcSet     = WHvSetVirtualProcessorRegisters(hPartition, idCpu, &enmName, 1, &NewValue);
     Assert(SUCCEEDED(hrcGet) == SUCCEEDED(hrcSet)); RT_NOREF(hrcGet);
     if (SUCCEEDED(hrcSet))
@@ -1186,19 +1186,19 @@ static DECLCALLBACK(int) nemR3WinCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t 
         HRESULT const  hrcGet2 = WHvGetVirtualProcessorRegisters(hPartition, idCpu, &enmName, 1, &UpdatedValue);
         Assert(SUCCEEDED(hrcGet2));
 
-        if (UpdatedValue.Reg64 != uValue)
+        if (UpdatedValue.Reg64 != uNewValue)
             LogRel(("nemR3WinCpuIdRegUpdate: idCpu=%d idReg=%#x (%s): old=%#RX64 new=%#RX64 -> %#RX64\n",
-                    idCpu, idReg, g_aNemWinArmIdRegs[iReg].pszName, OldValue.Reg64, uValue, UpdatedValue.Reg64));
-        else if (OldValue.Reg64 != uValue || LogRelIsFlowEnabled())
+                    idCpu, idReg, g_aNemWinArmIdRegs[iReg].pszName, OldValue.Reg64, uNewValue, UpdatedValue.Reg64));
+        else if (OldValue.Reg64 != uNewValue || LogRelIsFlowEnabled())
             LogRel(("nemR3WinCpuIdRegUpdate: idCpu=%d idReg=%#x (%s): old=%#RX64 new=%#RX64\n",
-                    idCpu, idReg, g_aNemWinArmIdRegs[iReg].pszName, OldValue.Reg64, uValue));
+                    idCpu, idReg, g_aNemWinArmIdRegs[iReg].pszName, OldValue.Reg64, uNewValue));
 
         if (puUpdatedValue)
-            *puUpdatedValue = SUCCEEDED(hrcGet2) ? UpdatedValue.Reg64 : uValue;
+            *puUpdatedValue = SUCCEEDED(hrcGet2) ? UpdatedValue.Reg64 : uNewValue;
         return VINF_SUCCESS;
     }
     LogRel(("nemR3WinCpuIdRegUpdate: WHvSetVirtualProcessorRegisters(,%#x, %#x (%s), %#RX64) -> %Rhrc\n",
-            idCpu, g_aNemWinArmIdRegs[iReg].enmHvName, g_aNemWinArmIdRegs[iReg].pszName, uValue, hrcSet));
+            idCpu, g_aNemWinArmIdRegs[iReg].enmHvName, g_aNemWinArmIdRegs[iReg].pszName, uNewValue, hrcSet));
 
     AssertLogRelMsgReturn(!g_aNemWinArmIdRegs[iReg].fMustWork,
                           ("NEM: hrcSet=%Rhrc idReg=%#x (%s)\n", hrcSet, idReg, g_aNemWinArmIdRegs[iReg].pszName),
