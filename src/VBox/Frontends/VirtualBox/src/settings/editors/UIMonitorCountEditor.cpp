@@ -86,7 +86,7 @@ void UIMonitorCountEditor::sltRetranslateUI()
     if (m_pLabel)
         m_pLabel->setText(tr("Number of Virtual Mo&nitors"));
 
-    const QString strToolTip = tr("The number of virtual monitors the virtual machine has");
+    const QString strToolTip = tr("Number of virtual monitors the virtual machine has");
     if (m_pSlider)
         m_pSlider->setToolTip(strToolTip);
     if (m_pSpinBox)

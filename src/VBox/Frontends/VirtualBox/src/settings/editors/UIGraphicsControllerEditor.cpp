@@ -88,7 +88,7 @@ void UIGraphicsControllerEditor::sltRetranslateUI()
             const KGraphicsControllerType enmType = m_pCombo->itemData(i).value<KGraphicsControllerType>();
             m_pCombo->setItemText(i, gpConverter->toString(enmType));
         }
-        m_pCombo->setToolTip(tr("The graphics controller type the virtual machine will use"));
+        m_pCombo->setToolTip(tr("Graphics controller type the virtual machine will use"));
     }
 }
 

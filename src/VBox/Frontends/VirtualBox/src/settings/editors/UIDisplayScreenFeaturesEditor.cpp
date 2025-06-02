@@ -82,8 +82,8 @@ void UIDisplayScreenFeaturesEditor::sltRetranslateUI()
     if (m_pCheckBoxEnable3DAcceleration)
     {
         m_pCheckBoxEnable3DAcceleration->setText(tr("&3D Acceleration"));
-        m_pCheckBoxEnable3DAcceleration->setToolTip(tr("The virtual machine will be given access "
-                                                       "to the 3D graphics capabilities available on the host"));
+        m_pCheckBoxEnable3DAcceleration->setToolTip(tr("The VM will be given access to the 3D graphics "
+                                                       "capabilities available on the host"));
     }
 }
 

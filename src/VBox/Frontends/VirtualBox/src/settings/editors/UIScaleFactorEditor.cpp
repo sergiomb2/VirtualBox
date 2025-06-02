@@ -190,10 +190,10 @@ void UIScaleFactorEditor::sltRetranslateUI()
             for (int i = 1; i < m_pMonitorComboBox->count(); ++i)
                 m_pMonitorComboBox->setItemText(i, tr("Monitor %1").arg(i));
         }
-        m_pMonitorComboBox->setToolTip(tr("The index of virtual monitor guest screen scale factor being defined for"));
+        m_pMonitorComboBox->setToolTip(tr("Index of virtual monitor guest screen scale factor being defined for"));
     }
 
-    const QString strToolTip = tr("The guest screen scale factor the virtual machine has");
+    const QString strToolTip = tr("Guest screen scale factor the virtual machine has");
     if (m_pScaleSlider)
         m_pScaleSlider->setToolTip(strToolTip);
     if (m_pScaleSpinBox)

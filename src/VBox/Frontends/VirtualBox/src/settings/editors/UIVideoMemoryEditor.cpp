@@ -171,7 +171,7 @@ void UIVideoMemoryEditor::sltRetranslateUI()
     if (m_pLabelMemory)
         m_pLabelMemory->setText(tr("Video &Memory"));
 
-    const QString strToolTip(tr("The amount of video memory the virtual machine has"));
+    const QString strToolTip(tr("Amount of video memory the virtual machine has"));
     if (m_pSlider)
         m_pSlider->setToolTip(strToolTip);
     if (m_pSpinBox)

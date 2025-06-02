@@ -175,7 +175,7 @@ void UIVRDESettingsEditor::sltRetranslateUI()
     if (m_pCheckboxFeature)
     {
         m_pCheckboxFeature->setText(tr("&Enable Server"));
-        m_pCheckboxFeature->setToolTip(tr("The VM will act as a Remote Desktop Protocol (RDP) server, allowing "
+        m_pCheckboxFeature->setToolTip(tr("VM will act as a Remote Desktop Protocol (RDP) server, allowing "
                                           "remote clients to connect and operate the VM (when it is running) using a standard "
                                           "RDP client"));
     }
