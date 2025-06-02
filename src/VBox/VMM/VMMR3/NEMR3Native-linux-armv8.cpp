@@ -59,13 +59,18 @@
 *   Defined Constants And Macros                                                                                                 *
 *********************************************************************************************************************************/
 
-/** Core register group. */
+/** Core register group.
+ * Shorthand for: KVM_REG_ARM64 | KVM_REG_SIZE_U64  | KVM_REG_ARM_CORE */
 #define KVM_ARM64_REG_CORE_GROUP  UINT64_C(0x6030000000100000)
-/** System register group. */
+/** System register group.
+ * Shorthand for: KVM_REG_ARM64 | KVM_REG_SIZE_U64  | KVM_REG_ARM64_SYSREG */
 #define KVM_ARM64_REG_SYS_GROUP   UINT64_C(0x6030000000130000)
-/** System register group. */
+/** System register group.
+ * Shorthand for: KVM_REG_ARM64 | KVM_REG_SIZE_U128 | KVM_REG_ARM_CORE
+ *                | (offsetof(kvm_regs.fp_regs.vregs) / sizeof(uint32_t)) */
 #define KVM_ARM64_REG_SIMD_GROUP  UINT64_C(0x6040000000100050)
-/** FP register group. */
+/** FP register group.
+ * Shorthand for: KVM_REG_ARM64 | KVM_REG_SIZE_U32  | KVM_REG_ARM_CORE  */
 #define KVM_ARM64_REG_FP_GROUP    UINT64_C(0x6020000000100000)
 
 #define KVM_ARM64_REG_CORE_CREATE(a_idReg)   (KVM_ARM64_REG_CORE_GROUP | ((uint64_t)(a_idReg) & 0xffff))
@@ -106,12 +111,8 @@ struct kvm_smccc_filter
   uint8_t  action;
   uint8_t  pad[15];
 };
-#endif
+#endif /* !KVM_ARM_VM_SMCCC_CTRL */
 
-
-/*********************************************************************************************************************************
-*   Structures and Typedefs                                                                                                      *
-*********************************************************************************************************************************/
 
 
 /*********************************************************************************************************************************
@@ -359,7 +360,7 @@ static int nemR3LnxLogRegList(int fdVCpu)
 
     LogRel(("NEM: KVM vCPU registers:\n"));
 
-    for (uint32_t i = 0; i < RegList.cRegs; i++)
+    for (uint64_t i = 0; i < RegList.cRegs; i++)
         LogRel(("NEM:   %36s: %#RX64\n", "Unknown" /** @todo */, RegList.aRegs[i]));
 
     return VINF_SUCCESS;
@@ -456,6 +457,147 @@ DECLINLINE(int) nemR3LnxKvmSetRegPV(PVMCPUCC pVCpu, uint64_t idKvmReg, const voi
 
 
 /**
+ * @callback_method_impl{FNCPUMARMCPUIDREGQUERY}
+ */
+static DECLCALLBACK(int) nemR3LnxArmCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, uint32_t idReg, void *pvUser, uint64_t *puValue)
+{
+    *puValue = 0;
+    AssertReturn(pVCpu->idCpu == 0, VERR_INTERNAL_ERROR_4);
+    RT_NOREF(pVM, pvUser);
+
+    /*
+     * The system register ID scheme is the same as we're using in armv8.h.
+     */
+    int const rc = nemR3LnxKvmQueryRegU64(pVCpu, KVM_ARM64_REG_SYS_CREATE(idReg), puValue);
+    LogRelFlow(("nemR3LnxArmCpuIdRegQuery: nemR3LnxKvmQueryRegU64/%#RX64 -> %Rrc %#RX64\n",
+                KVM_ARM64_REG_SYS_CREATE(idReg), rc, *puValue));
+    if (RT_SUCCESS(rc))
+        return VINF_SUCCESS;
+
+    /* This shall work for the following: */
+    AssertLogRelMsgReturn(   idReg != ARMV8_AARCH64_SYSREG_ID_AA64DFR0_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64DFR1_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64ISAR0_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64ISAR1_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64MMFR0_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64MMFR1_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64MMFR2_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64PFR0_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64PFR1_EL1,
+                          ("rc=%Rrc idReg=%#x\n", rc, idReg),
+                          VERR_INTERNAL_ERROR_5);
+
+    /* Unsupported registers fail with ENOENT, which gets translated to VERR_FILE_NOT_FOUND: */
+    return rc == VERR_FILE_NOT_FOUND ? VERR_CPUM_UNSUPPORTED_ID_REGISTER : rc;
+}
+
+
+/**
+ * @callback_method_impl{FNCPUMARMCPUIDREGUPDATE}
+ */
+static DECLCALLBACK(int) nemR3LnxArmCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t idReg,
+                                                   uint64_t uValue, void *pvUser, uint64_t *puUpdatedValue)
+{
+    if (puUpdatedValue)
+        *puUpdatedValue = 0;
+    RT_NOREF(pVM, pvUser);
+
+    /*
+     * Do the setting.
+     *
+     * Note! The registers MIDR_EL1, REVIDR_EL1, and AIDR_EL1 are considered
+     *       invariant and cannot be modified.
+     *       (Search for invariant_sys_regs in arch/arm64/kvm/sys_regs.c)
+     */
+    char      szName[32];
+    uint64_t  uOldValue = 0;
+    int const rcGet     = nemR3LnxKvmQueryRegU64(pVCpu, KVM_ARM64_REG_SYS_CREATE(idReg), &uOldValue);
+    int const rcSet     = nemR3LnxKvmSetRegU64(  pVCpu, KVM_ARM64_REG_SYS_CREATE(idReg), &uValue);
+    Assert(RT_SUCCESS(rcGet) == RT_SUCCESS(rcSet)); RT_NOREF(rcGet);
+    if (RT_SUCCESS(rcSet))
+    {
+        uint64_t  uUpdatedValue = 0;
+        int const rcGet2        = nemR3LnxKvmQueryRegU64(pVCpu, KVM_ARM64_REG_SYS_CREATE(idReg), &uUpdatedValue);
+        AssertRC(rcGet2);
+
+        if (uValue != uUpdatedValue)
+            LogRel(("nemR3LnxArmCpuIdRegUpdate: idCpu=%#x idReg=%#x (%s): old=%#RX64 new=%#RX64 -> %#RX64\n",
+                    pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uOldValue, uValue, uUpdatedValue));
+        else if (uOldValue != uValue || LogRelIsFlowEnabled())
+            LogRel(("nemR3LnxArmCpuIdRegUpdate: idCpu=%#x idReg=%#x (%s): old=%#RX64 new=%#RX64\n",
+                    pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uOldValue, uValue));
+
+        if (puUpdatedValue)
+            *puUpdatedValue = RT_SUCCESS(rcGet2) ? uUpdatedValue : uValue;
+        return VINF_SUCCESS;
+    }
+    LogRel(("nemR3LnxArmCpuIdRegUpdate: nemR3LnxKvmSetRegU64(%#x, %#x (%s), %#RX64) -> %Rrc (OldValue=%#RX64 rcGet=%Rrc)\n",
+            pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uValue, rcSet, uOldValue, rcGet));
+
+    /* This shall work for the following: */
+    AssertLogRelMsgReturn(   idReg != ARMV8_AARCH64_SYSREG_ID_AA64DFR0_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64DFR1_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64ISAR0_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64ISAR1_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64MMFR0_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64MMFR1_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64MMFR2_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64PFR0_EL1
+                          && idReg != ARMV8_AARCH64_SYSREG_ID_AA64PFR1_EL1,
+                          ("rcSet=%Rrc idReg=%#x %s\n", rcSet, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName)),
+                          VERR_INTERNAL_ERROR_5);
+
+    /* Unsupported registers fail with ENOENT, which gets translated to VERR_FILE_NOT_FOUND: */
+    if (rcSet == VERR_FILE_NOT_FOUND)
+    {
+        Assert(rcGet == rcSet);
+        return VERR_CPUM_UNSUPPORTED_ID_REGISTER;
+    }
+
+    /* If the setting succeeded but the writing didn't, we probably try set an
+       unsupported value or write to an invariant register.  Return the initial
+       value for the three known invariants. */
+    if (   rcSet == VERR_INVALID_PARAMETER
+        && RT_SUCCESS(rcGet)
+        && (   idReg == ARMV8_AARCH64_SYSREG_MIDR_EL1
+            || idReg == ARMV8_AARCH64_SYSREG_REVIDR_EL1
+            || idReg == ARMV8_AARCH64_SYSREG_AIDR_EL1) )
+    {
+        if (puUpdatedValue)
+            *puUpdatedValue = uValue;
+        return VINF_SUCCESS;
+    }
+
+    return rcSet;
+}
+
+
+/**
+ * @callback_method_impl{PFNSSMINTLOADDONE,
+ *          For loading saved system ID registers.}
+ */
+static DECLCALLBACK(int) nemR3LnxArmLoadDone(PVM pVM, PSSMHANDLE pSSM)
+{
+    VM_ASSERT_EMT(pVM);
+    RT_NOREF(pSSM);
+
+    /*
+     * Call CPUMR3PopulateGuestFeaturesViaCallbacks for each VCpu to set the
+     * freshly loaded ID register values.  This ASSUMES that CPUM was able
+     * to sanitize the values after the load w/o the pfnUpdate status values.
+     */
+    for (VMCPUID idCpu = 0; idCpu < pVM->cCpus; idCpu++)
+    {
+        int rc = CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVM->apCpusR3[idCpu], NULL, nemR3LnxArmCpuIdRegUpdate, pSSM);
+        if (RT_FAILURE(rc))
+            return SSMR3SetLoadError(pSSM, rc, RT_SRC_POS,
+                                     "CPUMR3PopulateGuestFeaturesViaCallbacks failed on #%u: %Rrc", idCpu, rc);
+    }
+    return VINF_SUCCESS;
+}
+
+
+/**
  * Does the early setup of a KVM VM.
  *
  * @returns VBox status code.
@@ -503,22 +645,13 @@ static int nemR3LnxInitSetupVm(PVM pVM, PRTERRINFO pErrInfo)
             int rc = nemR3LnxLogRegList(pVCpu->nem.s.fdVCpu);
             if (RT_FAILURE(rc))
                 return RTErrInfoSetF(pErrInfo, VERR_NEM_VM_CREATE_FAILED, "Querying the supported register list failed with %Rrc", rc);
-
-            /* Need to query the ID registers and populate CPUM. */
-            CPUMARMV8IDREGS IdRegs; RT_ZERO(IdRegs);
-            for (uint32_t i = 0; i < RT_ELEMENTS(s_aIdRegs); i++)
-            {
-                uint64_t *pu64 = (uint64_t *)((uint8_t *)&IdRegs + s_aIdRegs[i].offIdStruct);
-                rc = nemR3LnxKvmQueryRegU64(pVCpu, s_aIdRegs[i].idKvmReg, pu64);
-                if (RT_FAILURE(rc))
-                    return VMSetError(pVM, VERR_NEM_VM_CREATE_FAILED, RT_SRC_POS,
-                                      "Querying register %#x failed: %Rrc", s_aIdRegs[i].idKvmReg, rc);
-            }
-
-            rc = CPUMR3PopulateFeaturesByIdRegisters(pVM, &IdRegs);
-            if (RT_FAILURE(rc))
-                return rc;
         }
+
+        int rc = CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVCpu, idCpu == 0 ? nemR3LnxArmCpuIdRegQuery : NULL,
+                                                         nemR3LnxArmCpuIdRegUpdate, NULL /*pvUser*/);
+        if (RT_FAILURE(rc))
+            return VMSetError(pVM, VERR_NEM_VM_CREATE_FAILED, RT_SRC_POS,
+                              "CPUMR3PopulateGuestFeaturesViaCallbacks/%u failed: %Rrc", idCpu, rc);
     }
 
     /*
@@ -541,6 +674,16 @@ static int nemR3LnxInitSetupVm(PVM pVM, PRTERRINFO pErrInfo)
                               "KVM_ARM_VM_SMCCC_FILTER", pErrInfo);
     if (RT_FAILURE(rc))
         return rc;
+
+    /*
+     * Register a saved state so we get a load-done notification and can load
+     * the saved ID registers.
+     */
+    rc = SSMR3RegisterInternal(pVM, "NEM-linux-arm64-notify", 0, 0, 0,
+                               NULL, NULL, NULL,
+                               NULL, NULL, NULL,
+                               NULL, NULL, nemR3LnxArmLoadDone);
+    AssertLogRelRCReturn(rc, rc);
 
     return VINF_SUCCESS;
 }

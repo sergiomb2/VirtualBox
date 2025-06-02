@@ -1464,7 +1464,7 @@ DECLHIDDEN(int) nemR3NativeInit(PVM pVM, bool fFallback, bool fForced)
 /**
  * @callback_method_impl{FNCPUMARMCPUIDREGQUERY}
  */
-static DECLCALLBACK(int) nemR3DarwinNativeCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, uint32_t idReg, void *pvUser, uint64_t *puValue)
+static DECLCALLBACK(int) nemR3DarwinArmCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, uint32_t idReg, void *pvUser, uint64_t *puValue)
 {
     *puValue = 0;
     AssertReturn(pVCpu->idCpu == 0, VERR_INTERNAL_ERROR_4);
@@ -1488,7 +1488,7 @@ static DECLCALLBACK(int) nemR3DarwinNativeCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, u
     if (enmFeatureReg != (hv_feature_reg_t)-1)
     {
         hv_return_t const rcHvGet = hv_vcpu_config_get_feature_reg(pVM->nem.s.hVCpuCfg, enmFeatureReg, puValue);
-        LogFlow(("nemR3DarwinNativeCpuIdRegQuery: hv_vcpu_config_get_feature_reg/%#x -> %#x%s %#RX64\n",
+        LogFlow(("nemR3DarwinArmCpuIdRegQuery: hv_vcpu_config_get_feature_reg/%#x -> %#x%s %#RX64\n",
                  idReg, rcHvGet, nemR3DarwinHvStatusName(rcHvGet), *puValue));
         AssertLogRelMsgReturn(rcHvGet == HV_SUCCESS,
                               ("rcHvGet=%#x %s idReg=%#x enmFeatureReg=%d\n",
@@ -1506,7 +1506,7 @@ static DECLCALLBACK(int) nemR3DarwinNativeCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, u
     AssertCompile(HV_SYS_REG_ID_AA64ISAR1_EL1 == ARMV8_AARCH64_SYSREG_ID_AA64ISAR1_EL1);
 
     hv_return_t const rcHvGet = hv_vcpu_get_sys_reg(pVCpu->nem.s.hVCpu, (hv_sys_reg_t)idReg, puValue);
-    LogRelFlow(("nemR3DarwinNativeCpuIdRegQuery: hv_vcpu_get_sys_reg/%#x -> %#x%s %#RX64\n",
+    LogRelFlow(("nemR3DarwinArmCpuIdRegQuery: hv_vcpu_get_sys_reg/%#x -> %#x%s %#RX64\n",
                 idReg, rcHvGet, nemR3DarwinHvStatusName(rcHvGet), *puValue));
     if (rcHvGet == HV_SUCCESS)
         return VINF_SUCCESS;
@@ -1532,8 +1532,8 @@ static DECLCALLBACK(int) nemR3DarwinNativeCpuIdRegQuery(PVM pVM, PVMCPU pVCpu, u
 /**
  * @callback_method_impl{FNCPUMARMCPUIDREGUPDATE}
  */
-static DECLCALLBACK(int) nemR3DarwinNativeCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t idReg,
-                                                         uint64_t uValue, void *pvUser, uint64_t *puUpdatedValue)
+static DECLCALLBACK(int) nemR3DarwinArmCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, uint32_t idReg,
+                                                      uint64_t uValue, void *pvUser, uint64_t *puUpdatedValue)
 {
     if (puUpdatedValue)
         *puUpdatedValue = 0;
@@ -1550,7 +1550,7 @@ static DECLCALLBACK(int) nemR3DarwinNativeCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, 
 
     /*
      * Ignore attempts to set the three registers that aren't available via the
-     * hv_vcpu_get_sys_reg API (see nemR3DarwinNativeCpuIdRegQuery).
+     * hv_vcpu_get_sys_reg API (see nemR3DarwinArmCpuIdRegQuery).
      */
     switch (idReg)
     {
@@ -1577,17 +1577,17 @@ static DECLCALLBACK(int) nemR3DarwinNativeCpuIdRegUpdate(PVM pVM, PVMCPU pVCpu, 
         Assert(rcHvGet2 == HV_SUCCESS); RT_NOREF(rcHvGet2);
 
         if (uValue != uUpdatedValue)
-            LogRel(("nemR3DarwinNativeCpuIdRegUpdate: idCpu=%#x idReg=%#x (%s): old=%#RX64 new=%#RX64 -> %#RX64\n",
+            LogRel(("nemR3DarwinArmCpuIdRegUpdate: idCpu=%#x idReg=%#x (%s): old=%#RX64 new=%#RX64 -> %#RX64\n",
                     pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uOldValue, uValue, uUpdatedValue));
         else if (uOldValue != uValue || LogRelIsFlowEnabled())
-            LogRel(("nemR3DarwinNativeCpuIdRegUpdate: idCpu=%#x idReg=%#x (%s): old=%#RX64 new=%#RX64\n",
+            LogRel(("nemR3DarwinArmCpuIdRegUpdate: idCpu=%#x idReg=%#x (%s): old=%#RX64 new=%#RX64\n",
                     pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uOldValue, uValue));
 
         if (puUpdatedValue)
             *puUpdatedValue = rcHvGet2 == HV_SUCCESS ? uUpdatedValue : uValue;
         return VINF_SUCCESS;
     }
-    LogRel(("nemR3DarwinNativeCpuIdRegUpdate: hv_vcpu_set_sys_reg(%#x, %#x (%s), %#RX64) -> %#x %s (OldValue=%#RX64 rcHvGet=%#x %s)\n",
+    LogRel(("nemR3DarwinArmCpuIdRegUpdate: hv_vcpu_set_sys_reg(%#x, %#x (%s), %#RX64) -> %#x %s (OldValue=%#RX64 rcHvGet=%#x %s)\n",
             pVCpu->idCpu, idReg, CPUMR3CpuIdGetIdRegName(idReg, szName), uValue, rcHvSet, nemR3DarwinHvStatusName(rcHvSet),
             uOldValue, rcHvGet, nemR3DarwinHvStatusName(rcHvGet)));
 
@@ -1642,7 +1642,7 @@ static DECLCALLBACK(int) nemR3DarwinLoadDone(PVM pVM, PSSMHANDLE pSSM)
     for (VMCPUID idCpu = 0; idCpu < pVM->cCpus; idCpu++)
     {
         int const rc = VMR3ReqCallWait(pVM, idCpu, (PFNRT)CPUMR3PopulateGuestFeaturesViaCallbacks,
-                                       5, pVM, pVM->apCpusR3[idCpu], NULL, nemR3DarwinNativeCpuIdRegUpdate, pSSM);
+                                       5, pVM, pVM->apCpusR3[idCpu], NULL, nemR3DarwinArmCpuIdRegUpdate, pSSM);
         if (RT_FAILURE(rc))
             return SSMR3SetLoadError(pSSM, rc, RT_SRC_POS,
                                      "CPUMR3PopulateGuestFeaturesViaCallbacks failed on #%u: %Rrc", idCpu, rc);
@@ -1664,7 +1664,7 @@ static DECLCALLBACK(int) nemR3DarwinNativeInitVCpuOnEmt(PVM pVM, PVMCPU pVCpu, V
     if (idCpu == 0)
     {
         /* Create a new vCPU config for all the vCPUs (for
-           nemR3DarwinNativeCpuIdRegQuery to query).  As of 2025-05-30 there is
+           nemR3DarwinArmCpuIdRegQuery to query).  As of 2025-05-30 there is
            nothing officially settable on this config object. */
         Assert(pVM->nem.s.hVCpuCfg == NULL);
         pVM->nem.s.hVCpuCfg = hv_vcpu_config_create();
@@ -1678,8 +1678,8 @@ static DECLCALLBACK(int) nemR3DarwinNativeInitVCpuOnEmt(PVM pVM, PVMCPU pVCpu, V
         return VMSetError(pVM, VERR_NEM_VM_CREATE_FAILED, RT_SRC_POS,
                           "Call to hv_vcpu_create failed on vCPU %u: %#x (%Rrc)", idCpu, hrc, nemR3DarwinHvSts2Rc(hrc));
 
-    return CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVCpu, idCpu == 0 ? nemR3DarwinNativeCpuIdRegQuery : NULL,
-                                                   nemR3DarwinNativeCpuIdRegUpdate, NULL /*pvUser*/);
+    return CPUMR3PopulateGuestFeaturesViaCallbacks(pVM, pVCpu, idCpu == 0 ? nemR3DarwinArmCpuIdRegQuery : NULL,
+                                                   nemR3DarwinArmCpuIdRegUpdate, NULL /*pvUser*/);
 }
 
 
