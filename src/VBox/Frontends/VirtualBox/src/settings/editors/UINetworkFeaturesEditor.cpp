@@ -222,7 +222,7 @@ void UINetworkFeaturesEditor::sltRetranslateUI()
             const KNetworkAdapterType enmType = m_pComboAdapterType->itemData(i).value<KNetworkAdapterType>();
             m_pComboAdapterType->setItemText(i, gpConverter->toString(enmType));
         }
-        m_pComboAdapterType->setToolTip(tr("The type of the virtual network adapter. Depending on this value, VirtualBox "
+        m_pComboAdapterType->setToolTip(tr("Virtual network adapter type. Depending on this value, VirtualBox "
                                            "will provide different network hardware to the virtual machine."));
     }
 
@@ -235,14 +235,14 @@ void UINetworkFeaturesEditor::sltRetranslateUI()
             const KNetworkAdapterPromiscModePolicy enmType = m_pComboPromiscuousMode->itemData(i).value<KNetworkAdapterPromiscModePolicy>();
             m_pComboPromiscuousMode->setItemText(i, gpConverter->toString(enmType));
         }
-        m_pComboPromiscuousMode->setToolTip(tr("The promiscuous mode policy of the network adapter when attached to an "
+        m_pComboPromiscuousMode->setToolTip(tr("Promiscuous mode policy of the network adapter when attached to an "
                                                "internal network, host only network or a bridge"));
     }
 
     if (m_pLabelMAC)
         m_pLabelMAC->setText(tr("&MAC Address"));
     if (m_pEditorMAC)
-        m_pEditorMAC->setToolTip(tr("The MAC address of this adapter. It contains exactly 12 characters chosen from "
+        m_pEditorMAC->setToolTip(tr("MAC address of this adapter. It contains exactly 12 characters chosen from "
                                     "{0-9,A-F}. Note that the second character must be an even digit."));
     if (m_pButtonMAC)
         m_pButtonMAC->setToolTip(tr("Generate a new random MAC address"));
@@ -250,14 +250,14 @@ void UINetworkFeaturesEditor::sltRetranslateUI()
     if (m_pLabelGenericProperties)
         m_pLabelGenericProperties->setText(tr("Generic Properties"));
     if (m_pEditorGenericProperties)
-        m_pEditorGenericProperties->setToolTip(tr("The configuration settings for the network attachment driver. The "
+        m_pEditorGenericProperties->setToolTip(tr("Configuration settings for the network attachment driver. The "
                                                   "settings should be of the form name=value and will depend on the "
                                                   "driver. Use shift-enter to add a new entry."));
 
     if (m_pCheckBoxCableConnected)
     {
         m_pCheckBoxCableConnected->setText(tr("Virtual &Cable Connected"));
-        m_pCheckBoxCableConnected->setToolTip(tr("The virtual network cable will be plugged in"));
+        m_pCheckBoxCableConnected->setToolTip(tr("Virtual network cable will be plugged in"));
     }
 
     if (m_pButtonPortForwarding)
