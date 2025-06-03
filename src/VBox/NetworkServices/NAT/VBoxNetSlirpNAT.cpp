@@ -67,6 +67,7 @@
 #include <iprt/file.h>
 #include <iprt/semaphore.h>
 #include <iprt/cpp/utils.h>
+#include <limits.h>
 #include <VBox/log.h>
 
 #include <iprt/buildconfig.h>
@@ -503,8 +504,13 @@ int VBoxNetSlirpNAT::init()
     m_ProxyOptions.version = 6;
     m_ProxyOptions.restricted   = false;
     m_ProxyOptions.in_enabled   = true;
+    m_ProxyOptions.in6_enabled   = false;
     m_ProxyOptions.if_mtu       = m_u16Mtu;
-    m_ProxyOptions.disable_dhcp = true;
+
+    BOOL fNeedDhcpServer = false;
+    hrc = m_net->COMGETTER(NeedDhcpServer)(&fNeedDhcpServer);
+    AssertComRCReturn(hrc, VERR_INTERNAL_ERROR);
+    m_ProxyOptions.disable_dhcp = !fNeedDhcpServer;
 
     /* Get the settings related to IPv4. */
     rc = initIPv4();
@@ -723,9 +729,18 @@ int VBoxNetSlirpNAT::initIPv4()
     RTNETADDRIPV4 Addr4;
     Addr4.u = Net4.u | RT_H2N_U32_C(0x00000001);
 
-    memcpy(&m_ProxyOptions.vnetwork, &Net4, sizeof(in_addr));
-    memcpy(&m_ProxyOptions.vnetmask, &Mask4, sizeof(in_addr));
-    memcpy(&m_ProxyOptions.vhost,    &Addr4, sizeof(in_addr));
+    RTNETADDRIPV4 NameSrv4;
+    NameSrv4.u = Net4.u | RT_H2N_U32_C(0x00000003);
+
+    /** @todo r=jack: make this smarter. Let user configure DHCP space on FE */
+    RTNETADDRIPV4 Dhcp4;
+    Dhcp4.u = Net4.u | RT_H2N_U32_C(0x0000000F);
+
+    memcpy(&m_ProxyOptions.vnetwork,    &Net4,     sizeof(in_addr));
+    memcpy(&m_ProxyOptions.vnetmask,    &Mask4,    sizeof(in_addr));
+    memcpy(&m_ProxyOptions.vhost,       &Addr4,    sizeof(in_addr));
+    memcpy(&m_ProxyOptions.vdhcp_start, &Dhcp4,    sizeof(in_addr));
+    memcpy(&m_ProxyOptions.vnameserver, &NameSrv4, sizeof(in_addr));
 
 #if 0 /** @todo */
     /* Raw socket for ICMP. */

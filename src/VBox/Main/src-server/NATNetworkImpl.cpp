@@ -27,7 +27,9 @@
 
 #define LOG_GROUP LOG_GROUP_MAIN_NATNETWORK
 #include "NetworkServiceRunner.h"
-#include "DHCPServerImpl.h"
+#ifndef VBOX_WITH_LWIP_NAT
+# include "DHCPServerImpl.h"
+#endif
 #include "NATNetworkImpl.h"
 #include "AutoCaller.h"
 
@@ -68,7 +70,10 @@ struct NATNetwork::Data
     const ComObjPtr<EventSource> pEventSource;
 #ifdef VBOX_WITH_NAT_SERVICE
     NATNetworkServiceRunner NATRunner;
+# ifndef VBOX_WITH_LWIP_NAT
+    /** @todo r=jack: minimally invasive compile out, more stuff needs to be ripped out. */
     ComObjPtr<IDHCPServer> dhcpServer;
+# endif
 #endif
     /** weak VirtualBox parent */
     VirtualBox * const pVirtualBox;
@@ -78,6 +83,7 @@ struct NATNetwork::Data
 
     com::Utf8Str IPv4Gateway;
     com::Utf8Str IPv4NetworkMask;
+
     com::Utf8Str IPv4DhcpServer;
     com::Utf8Str IPv4DhcpServerLowerIp;
     com::Utf8Str IPv4DhcpServerUpperIp;
@@ -565,7 +571,9 @@ HRESULT NATNetwork::setNeedDhcpServer(const BOOL aNeedDhcpServer)
 
         m->s.fNeedDhcpServer = RT_BOOL(aNeedDhcpServer);
 
+#ifndef VBOX_WITH_LWIP_NAT
         i_recalculateIpv4AddressAssignments();
+#endif
 
     }
 
@@ -815,7 +823,7 @@ HRESULT NATNetwork::removePortForwardRule(BOOL aIsIpv6, const com::Utf8Str &aPor
     return S_OK;
 }
 
-
+#ifndef VBOX_WITH_LWIP_NAT
 void NATNetwork::i_updateDomainNameOption(ComPtr<IHost> &host)
 {
     com::Bstr domain;
@@ -937,6 +945,7 @@ void NATNetwork::i_updateDnsOptions()
         i_updateDomainNameServerOption(host);
     }
 }
+#endif
 
 
 HRESULT  NATNetwork::start()
@@ -950,6 +959,7 @@ HRESULT  NATNetwork::start()
 
     /* No portforwarding rules from command-line, all will be fetched via API */
 
+#ifndef VBOX_WITH_LWIP_NAT
     if (m->s.fNeedDhcpServer)
     {
         /*
@@ -1032,6 +1042,7 @@ HRESULT  NATNetwork::start()
             return E_FAIL;
         }
     }
+#endif
 
     if (RT_SUCCESS(m->NATRunner.start(false /* KillProcOnStop */)))
     {
@@ -1050,8 +1061,10 @@ HRESULT NATNetwork::stop()
 #ifdef VBOX_WITH_NAT_SERVICE
     m->pVirtualBox->i_onNATNetworkStartStop(m->s.strNetworkName, FALSE);
 
+#ifndef VBOX_WITH_LWIP_NAT
     if (!m->dhcpServer.isNull())
         m->dhcpServer->Stop();
+#endif
 
     if (RT_SUCCESS(m->NATRunner.stop()))
         return S_OK;
@@ -1124,6 +1137,7 @@ int NATNetwork::i_findFirstAvailableOffset(ADDRESSLOOKUPTYPE addrType, uint32_t 
     return VINF_SUCCESS;
 }
 
+#ifndef VBOX_WITH_LWIP_NAT
 int NATNetwork::i_recalculateIpv4AddressAssignments()
 {
     RTNETADDRIPV4 network, netmask;
@@ -1178,6 +1192,7 @@ int NATNetwork::i_recalculateIpv4AddressAssignments()
     LogFlowFunc(("getaway:%RTnaipv4, netmask:%RTnaipv4\n", gateway, netmask));
     return VINF_SUCCESS;
 }
+#endif
 
 
 int NATNetwork::i_recalculateIPv6Prefix()
