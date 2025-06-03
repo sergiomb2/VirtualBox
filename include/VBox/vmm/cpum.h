@@ -958,6 +958,11 @@ typedef struct CPUMFEATURESARMV8
     /** The CPU revision (from MIDR_EL1). */
     uint8_t         uRevision;
 
+    /** The expanded ID_AA64DFR0_EL1.BRPS value.  */
+    uint32_t        cBreakpoints : 7;
+    /** The expanded ID_AA64DFR0_EL1.WRPS value.  */
+    uint32_t        cWatchpoints : 7;
+
     /** Supports AArch64 (FEAT_AA64). */
     uint32_t        fAa64 : 1;
     /** Supports AArch64 in EL0 (FEAT_AA64EL0). */

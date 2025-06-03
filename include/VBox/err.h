@@ -59,6 +59,8 @@
 #define VERR_DONT_PANIC                     (-1001)
 /** Unsupported CPU. */
 #define VERR_UNSUPPORTED_CPU                (-1002)
+/** Unsupported CPU. */
+#define VWRN_UNSUPPORTED_CPU                (1002)
 /** Unsupported CPU mode. */
 #define VERR_UNSUPPORTED_CPU_MODE           (-1003)
 /** Page not present. */
@@ -732,6 +734,8 @@
 #define VINF_CPUM_MATCHED_BY_NAME               (1769)
 /** Unsupported CPU ID register. */
 #define VERR_CPUM_UNSUPPORTED_ID_REGISTER       (-1770)
+/** Unsupported CPU ID register value. */
+#define VERR_CPUM_UNSUPPORTED_ID_REG_VALUE      (-1771)
 /** @} */
 
 

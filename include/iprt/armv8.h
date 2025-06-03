@@ -2276,8 +2276,10 @@ typedef const ARMV8SPSREL2 *PCXARMV8SPSREL2;
 # define ARMV8_ID_AA64MMFR0_EL1_PARANGE_44BITS                  4
 /** Physical Address range is 48 bits, 256TiB. */
 # define ARMV8_ID_AA64MMFR0_EL1_PARANGE_48BITS                  5
-/** Physical Address range is 52 bits, 4PiB. */
+/** Physical Address range is 52 bits, 4PiB. (FEAT_LPA) */
 # define ARMV8_ID_AA64MMFR0_EL1_PARANGE_52BITS                  6
+/** Physical Address range is 56 bits, 64PiB. (FEAT_D128) */
+# define ARMV8_ID_AA64MMFR0_EL1_PARANGE_56BITS                  7
 /** Bit 4 - 7 - Number of ASID bits. */
 #define ARMV8_ID_AA64MMFR0_EL1_ASIDBITS_MASK                    (RT_BIT_64(4) | RT_BIT_64(5) | RT_BIT_64(6) | RT_BIT_64(7))
 #define ARMV8_ID_AA64MMFR0_EL1_ASIDBITS_SHIFT                   4
