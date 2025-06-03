@@ -63,7 +63,7 @@ extern unsigned int slirp_debug;
  * Map these onto logging and make them compatible with Visual C++.
  */
 # ifndef LOG_GROUP
-#  define LOG_GROUP LOG_GROUP_DRV_NAT
+#  define LOG_GROUP LOG_GROUP_NAT_SERVICE
 #  include <VBox/log.h>
 # endif
 # define DEBUG_ERROR(...)           do { Log2((__VA_ARGS__)); Log2(("\n")); } while (0)
