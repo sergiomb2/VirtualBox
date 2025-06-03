@@ -132,6 +132,25 @@ typedef const S2GDIRENTRY *PCS2GDIRENTRY;
 
 
 /**
+ * svn -> git branch map.
+ */
+typedef struct S2GBRANCH
+{
+    /** List node. */
+    RTLISTNODE      NdBranches;
+    /** The git branch to use. */
+    const char      *pszGitBranch;
+    /** Size of the prefix in characters. */
+    size_t          cchSvnPrefix;
+    /** The prefix in svn to match. */
+    RT_GCC_EXTENSION
+    char            achSvnPrefix[RT_FLEXIBLE_ARRAY];
+} S2GBRANCH;
+typedef S2GBRANCH *PS2GBRANCH;
+typedef const S2GBRANCH *PCS2GBRANCH;
+
+
+/**
  * The state for a single revision.
  */
 typedef struct S2GSVNREV
@@ -158,6 +177,9 @@ typedef struct S2GSVNREV
     const char      *pszGitAuthorEmail;
     /** The Git author's name. */
     const char      *pszGitAuthor;
+
+    /* The branch this revision operates on. */
+    PCS2GBRANCH     pBranch;
 
     /** List of changes in that revision, sorted by the path. */
     RTLISTANCHOR    LstChanges;
@@ -214,6 +236,8 @@ typedef struct S2GCTX
     S2GSCRATCHBUF    BufScratch;
     /** List of known externals with their revision to git commit hash map. */
     RTLISTANCHOR     LstExternals;
+    /** List of known branches. */
+    RTLISTANCHOR     LstBranches;
 } S2GCTX;
 /** Pointer to an svn -> git conversion context. */
 typedef S2GCTX *PS2GCTX;
@@ -270,6 +294,7 @@ static void s2gCtxInit(PS2GCTX pThis)
     pThis->StrSpaceAuthors = NULL;
     s2gScratchBufInit(&pThis->BufScratch);
     RTListInit(&pThis->LstExternals);
+    RTListInit(&pThis->LstBranches);
 }
 
 
@@ -699,6 +724,100 @@ static RTEXITCODE s2gLoadConfigExternals(PS2GCTX pThis, RTJSONVAL hJsonValExtern
 }
 
 
+static RTEXITCODE s2gLoadConfigBranch(PS2GCTX pThis, RTJSONVAL hBranch)
+{
+    RTEXITCODE rcExit = RTEXITCODE_SUCCESS;
+    RTJSONVAL hValSvnPrefix = NIL_RTJSONVAL;
+    int rc = RTJsonValueQueryByName(hBranch, "svn", &hValSvnPrefix);
+    if (RT_SUCCESS(rc))
+    {
+        RTJSONVAL hValGitBranch = NIL_RTJSONVAL;
+        rc = RTJsonValueQueryByName(hBranch, "git", &hValGitBranch);
+        if (RT_SUCCESS(rc))
+        {
+            const char *pszSvnPrefix = RTJsonValueGetString(hValSvnPrefix);
+            const char *pszGitBranch = RTJsonValueGetString(hValGitBranch);
+            if (pszSvnPrefix && pszGitBranch)
+            {
+                size_t const cchSvnPrefix = strlen(pszSvnPrefix);
+                size_t const cbGitBranch  = (strlen(pszGitBranch) + 1) * sizeof(char);
+                size_t const cbString   =   cchSvnPrefix * sizeof(char)
+                                          + cbGitBranch;
+                size_t const cbBranch = RT_UOFFSETOF_DYN(S2GBRANCH, achSvnPrefix[cbString]);
+                PS2GBRANCH pBranch = (PS2GBRANCH)RTMemAllocZ(cbBranch);
+                if (pBranch)
+                {
+                    pBranch->cchSvnPrefix = cchSvnPrefix;
+                    pBranch->pszGitBranch = &pBranch->achSvnPrefix[cchSvnPrefix];
+                    memcpy(&pBranch->achSvnPrefix[cchSvnPrefix], pszGitBranch, cbGitBranch);
+                    memcpy(&pBranch->achSvnPrefix[0], pszSvnPrefix, cchSvnPrefix);
+                    RTListAppend(&pThis->LstBranches, &pBranch->NdBranches);
+                }
+                else
+                    rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to allocate %zu bytes of memory for branch '%s'",
+                                            cbBranch, pszSvnPrefix);
+            }
+            else
+                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "The branch object is malformed");
+
+            RTJsonValueRelease(hValGitBranch);
+        }
+        else
+            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query 'git' from external object: %Rrc", rc);
+
+        RTJsonValueRelease(hValSvnPrefix);
+    }
+    else
+        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query 'svn' from external object: %Rrc", rc);
+
+    return rcExit;
+}
+
+
+static RTEXITCODE s2gLoadConfigBranches(PS2GCTX pThis, RTJSONVAL hJsonValBranches)
+{
+    if (RTJsonValueGetType(hJsonValBranches) != RTJSONVALTYPE_ARRAY)
+        return RTMsgErrorExit(RTEXITCODE_FAILURE, "'BranchMap' in '%s' is not a JSON array", pThis->pszCfgFilename);
+
+    RTJSONIT hIt = NIL_RTJSONIT;
+    int rc = RTJsonIteratorBeginArray(hJsonValBranches, &hIt);
+    if (rc == VERR_JSON_IS_EMPTY) /* Weird but okay. */
+        return RTEXITCODE_SUCCESS;
+    else if (RT_FAILURE(rc))
+        return RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to iterate over branch map: %Rrc", rc);
+
+    AssertRC(rc);
+    RTEXITCODE rcExit = RTEXITCODE_SUCCESS;
+    for (;;)
+    {
+        RTJSONVAL hBranch = NIL_RTJSONVAL;
+        rc = RTJsonIteratorQueryValue(hIt, &hBranch,  NULL /*ppszName*/);
+        if (RT_FAILURE(rc))
+        {
+            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to iterate over branch map: %Rrc", rc);
+            break;
+        }
+
+        rcExit = s2gLoadConfigBranch(pThis, hBranch);
+        RTJsonValueRelease(hBranch);
+        if (rcExit == RTEXITCODE_FAILURE)
+            break;
+
+        rc = RTJsonIteratorNext(hIt);
+        if (rc == VERR_JSON_ITERATOR_END)
+            break;
+        else if (RT_FAILURE(rc))
+        {
+            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to iterate over branch map: %Rrc", rc);
+            break;
+        }
+    }
+
+    RTJsonIteratorFree(hIt);
+    return rcExit;
+}
+
+
 static RTEXITCODE s2gLoadConfig(PS2GCTX pThis)
 {
     RTJSONVAL hRoot = NIL_RTJSONVAL;
@@ -728,7 +847,24 @@ static RTEXITCODE s2gLoadConfig(PS2GCTX pThis)
                         RTJsonValueRelease(hExternalsMap);
                     }
                     else if (rc != VERR_NOT_FOUND)
-                        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query ExternalsMap from '%s': %Rrc", pThis->pszCfgFilename, rc);
+                        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query ExternalsMap from '%s': %Rrc",
+                                                pThis->pszCfgFilename, rc);
+                    else
+                        rc = VINF_SUCCESS;
+
+                    if (RT_SUCCESS(rc))
+                    {
+                        RTJSONVAL hBranchMap = NIL_RTJSONVAL;
+                        rc = RTJsonValueQueryByName(hRoot, "BranchMap", &hBranchMap);
+                        if (RT_SUCCESS(rc))
+                        {
+                            rcExit = s2gLoadConfigBranches(pThis, hBranchMap);
+                            RTJsonValueRelease(hBranchMap);
+                        }
+                        else
+                            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query BranchMap from '%s': %Rrc",
+                                                    pThis->pszCfgFilename, rc);
+                    }
                 }
             }
             else if (rc != VERR_NOT_FOUND)
@@ -1218,7 +1354,8 @@ static RTEXITCODE s2gSvnPathIsEmptyDir(PCS2GSVNREV pRev, const char *pszSvnPath,
 }
 
 
-static RTEXITCODE s2gSvnDumpDirRecursiveWorker(PS2GCTX pThis, PS2GSVNREV pRev, svn_fs_root_t *pSvnFsRoot, apr_pool_t *pPool, const char *pszSvnPath, const char *pszGitPath)
+static RTEXITCODE s2gSvnDumpDirRecursiveWorker(PS2GCTX pThis, PS2GSVNREV pRev, svn_fs_root_t *pSvnFsRoot, apr_pool_t *pPool,
+                                               const char *pszSvnPath, const char *pszGitPath)
 {
     RTEXITCODE rcExit = RTEXITCODE_SUCCESS;
     apr_hash_t *pEntries;
@@ -1243,13 +1380,15 @@ static RTEXITCODE s2gSvnDumpDirRecursiveWorker(PS2GCTX pThis, PS2GSVNREV pRev, s
             {
                 int iCmp = strcmp(pItEntries->pszName, pszEntry);
                 if (!iCmp)
-                    return RTMsgErrorExit(RTEXITCODE_FAILURE, "Duplicate directory entry found in rev %d: %s", pRev->idRev, pszEntry);
+                    return RTMsgErrorExit(RTEXITCODE_FAILURE, "Duplicate directory entry found in rev %d: %s",
+                                          pRev->idRev, pszEntry);
                 else if (iCmp > 0)
                     break;
             }
             PS2GDIRENTRY pNew = (PS2GDIRENTRY)RTMemAllocZ(sizeof(*pNew));
             if (!pNew)
-                return RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to allocate new directory entry for path: %s/%s", pszSvnPath, pszEntry);
+                return RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to allocate new directory entry for path: %s/%s",
+                                      pszSvnPath, pszEntry);
             pNew->pszName = pszEntry;
 
             AssertRelease(pEntry->kind == svn_node_dir || pEntry->kind == svn_node_file);
@@ -1334,6 +1473,10 @@ static RTEXITCODE s2gSvnExportSinglePath(PS2GCTX pThis, PS2GSVNREV pRev, const c
         if (   pChange->change_kind == svn_fs_path_change_add
             || pChange->change_kind == svn_fs_path_change_modify)
         {
+            /* Dump the directory content if copied from another source. */
+            if (pChange->copyfrom_path != NULL)
+                rcExit = s2gSvnDumpDirRecursive(pThis, pRev, pChange->copyfrom_rev, pChange->copyfrom_path, pszGitPath);
+
             /* Check properties. */
             if (pChange->prop_mod)
             {
@@ -1364,7 +1507,7 @@ static RTEXITCODE s2gSvnExportSinglePath(PS2GCTX pThis, PS2GSVNREV pRev, const c
                 else
                 {
                     /* Replaced with an empty path -> delete. */
-                    int rc = s2gGitTransactionFileRemove(pThis->hGitRepo, pszSvnPath);
+                    int rc = s2gGitTransactionFileRemove(pThis->hGitRepo, pszGitPath);
                     if (RT_SUCCESS(rc))
                     {
                         /** @todo Check whether the directory is empty now and add a .gitignore file if it has not already due to
@@ -1429,6 +1572,7 @@ static RTEXITCODE s2gSvnRevisionExportPaths(PS2GCTX pThis, PS2GSVNREV pRev)
             const char *pszPath = (const char *)vkey;
             svn_fs_path_change2_t *pChange = (svn_fs_path_change2_t *)value;
 
+            /* Paths containing .git are invalid as git thinks these are other repositories. */
             const char *psz = RTStrStr(pszPath, "/.git");
             if (   psz
                 && (   psz[5] == '\0'
@@ -1438,70 +1582,107 @@ static RTEXITCODE s2gSvnRevisionExportPaths(PS2GCTX pThis, PS2GSVNREV pRev)
                 continue;
             }
 
-            /* Insert the change into the list sorted by path. */
-            /** @todo Speedup. */
-            PS2GSVNREVCHANGE pItChanges;
-            RTListForEach(&pRev->LstChanges, pItChanges, S2GSVNREVCHANGE, NdChanges)
-            {
-                int iCmp = strcmp(pItChanges->pszPath, pszPath);
-                if (!iCmp)
-                    return RTMsgErrorExit(RTEXITCODE_FAILURE, "Duplicate key found in rev %d: %s", pRev->idRev, pszPath);
-                else if (iCmp > 0)
-                    break;
-            }
             PS2GSVNREVCHANGE pNew = (PS2GSVNREVCHANGE)RTMemAllocZ(sizeof(*pNew));
             if (!pNew)
                 return RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to allocate new change record for path: %s", pszPath);
             pNew->pszPath = pszPath;
             pNew->pChange = pChange;
-            RTListNodeInsertBefore(&pItChanges->NdChanges, &pNew->NdChanges);
+
+            if (!RTListIsEmpty(&pRev->LstChanges))
+            {
+                /* Insert the change into the list sorted by path. */
+                /** @todo Speedup. */
+                PS2GSVNREVCHANGE pItChanges;
+                RTListForEach(&pRev->LstChanges, pItChanges, S2GSVNREVCHANGE, NdChanges)
+                {
+                    int iCmp = strcmp(pItChanges->pszPath, pszPath);
+                    if (!iCmp)
+                        return RTMsgErrorExit(RTEXITCODE_FAILURE, "Duplicate key found in rev %d: %s", pRev->idRev, pszPath);
+                    else if (iCmp > 0)
+                        break;
+                }
+
+                RTListNodeInsertBefore(&pItChanges->NdChanges, &pNew->NdChanges);
+            }
+            else
+                RTListAppend(&pRev->LstChanges, &pNew->NdChanges);
         }
 
-        /* Work on the changes. */
-        PS2GSVNREVCHANGE pIt;
-        RTListForEach(&pRev->LstChanges, pIt, S2GSVNREVCHANGE, NdChanges)
+        /* Get the branch we are working on for this revision. */
+        PCS2GSVNREVCHANGE pFirst = RTListGetFirst(&pRev->LstChanges, S2GSVNREVCHANGE, NdChanges);
+        if (pFirst)
         {
-            if (g_cVerbosity > 1)
-                RTMsgInfo("    %s %s\n", pIt->pszPath, s2gSvnChangeKindToStr(pIt->pChange->change_kind));
-
-            /* Query whether this is a directory. */
-            bool fIsDir = false;
-            svn_boolean_t SvnIsDir;
-            pSvnErr = svn_fs_is_dir(&SvnIsDir, pRev->pSvnFsRoot, pIt->pszPath, pRev->pPoolRev);
-            if (pSvnErr)
+            PCS2GBRANCH pBranch;
+            RTListForEach(&pThis->LstBranches, pBranch, S2GBRANCH, NdBranches)
             {
-                svn_error_trace(pSvnErr);
-                rcExit = RTEXITCODE_FAILURE;
-                break;
-            }
-            fIsDir = RT_BOOL(SvnIsDir);
-
-            /*
-             * If this is a directory which was just added without any properties check whether the next entry starts with the path,
-             * meaning we can skip it as git doesn't handle empty directories and we don't want unnecessary .gitignore
-             * files.
-             */
-            if (   fIsDir
-                && pIt->pChange->change_kind == svn_fs_path_change_add
-                && pIt->pChange->prop_mod == 0)
-            {
-                PS2GSVNREVCHANGE pNext = RTListGetNext(&pRev->LstChanges, pIt, S2GSVNREVCHANGE, NdChanges);
-                if (   pNext
-                    && RTStrStartsWith(pNext->pszPath, pIt->pszPath))
-                    continue;
-            }
-
-            if (RTStrStartsWith(pIt->pszPath, "/trunk"))
-            {
-                const char *pszGitPath = pIt->pszPath + sizeof("/trunk") - 1;
-                if (*pszGitPath == '/')
-                    pszGitPath++;
-
-                rcExit = s2gSvnExportSinglePath(pThis, pRev, pIt->pszPath, pszGitPath, fIsDir, pIt->pChange);
-                if (rcExit != RTEXITCODE_SUCCESS)
+                if (!RTStrNCmp(pFirst->pszPath, &pBranch->achSvnPrefix[0], pBranch->cchSvnPrefix))
+                {
+                    pRev->pBranch = pBranch;
                     break;
+                }
+            }
+
+            if (!pRev->pBranch)
+                return RTEXITCODE_SUCCESS;
+                //return RTMsgErrorExit(RTEXITCODE_FAILURE, "No branch mapping for path '%s'", pFirst->pszPath);
+
+            /* Work on the changes. */
+            PS2GSVNREVCHANGE pIt;
+            RTListForEach(&pRev->LstChanges, pIt, S2GSVNREVCHANGE, NdChanges)
+            {
+                svn_fs_path_change2_t *pChange = pIt->pChange;
+
+                if (g_cVerbosity > 1)
+                    RTMsgInfo("    %s %s\n", pIt->pszPath, s2gSvnChangeKindToStr(pChange->change_kind));
+
+                /* Query whether this is a directory. */
+                bool fIsDir = false;
+                svn_boolean_t SvnIsDir;
+                pSvnErr = svn_fs_is_dir(&SvnIsDir, pRev->pSvnFsRoot, pIt->pszPath, pRev->pPoolRev);
+                if (pSvnErr)
+                {
+                    svn_error_trace(pSvnErr);
+                    rcExit = RTEXITCODE_FAILURE;
+                    break;
+                }
+                fIsDir = RT_BOOL(SvnIsDir);
+
+                /*
+                 * If this is a directory which was just added without any properties check whether the next entry starts with the path,
+                 * meaning we can skip it as git doesn't handle empty directories and we don't want unnecessary .gitignore
+                 * files.
+                 */
+                if (   fIsDir
+                    && pChange->change_kind == svn_fs_path_change_add
+                    && pChange->prop_mod == 0
+                    && pChange->copyfrom_path == NULL
+                    && pChange->copyfrom_known == 0)
+                {
+                    PS2GSVNREVCHANGE pNext = RTListGetNext(&pRev->LstChanges, pIt, S2GSVNREVCHANGE, NdChanges);
+                    if (   pNext
+                        && RTStrStartsWith(pNext->pszPath, pIt->pszPath))
+                        continue;
+                }
+
+                if (!RTStrNCmp(pIt->pszPath, &pRev->pBranch->achSvnPrefix[0], pRev->pBranch->cchSvnPrefix))
+                {
+                    const char *pszGitPath = pIt->pszPath + pRev->pBranch->cchSvnPrefix;
+                    if (*pszGitPath == '/')
+                        pszGitPath++;
+
+                    rcExit = s2gSvnExportSinglePath(pThis, pRev, pIt->pszPath, pszGitPath, fIsDir, pChange);
+                    if (rcExit != RTEXITCODE_SUCCESS)
+                        break;
+                }
+                else
+                {
+                    rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Unsupported cross branch commit for path: %s", pIt->pszPath);
+                    break;
+                }
             }
         }
+        else
+            RTMsgWarning("Skipping empty commit");
     }
     else
     {
@@ -1529,6 +1710,7 @@ static RTEXITCODE s2gSvnExportRevision(PS2GCTX pThis, uint32_t idRev)
     Rev.idRev             = idRev;
     Rev.pszGitAuthor      = NULL;
     Rev.pszGitAuthorEmail = NULL;
+    Rev.pBranch           = NULL;
     svn_error_t *pSvnErr = svn_fs_revision_root(&Rev.pSvnFsRoot, pThis->pSvnFs, idRev, Rev.pPoolRev);
     if (!pSvnErr)
     {
