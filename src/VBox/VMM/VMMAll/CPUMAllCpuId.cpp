@@ -45,6 +45,9 @@
 #include <iprt/mem.h>
 #include <iprt/string.h>
 #include <iprt/x86-helpers.h>
+#if defined(RT_ARCH_ARM64)
+# include <iprt/system.h>
+#endif
 #if defined(RT_ARCH_ARM64) || defined(VBOX_VMM_TARGET_ARMV8)
 # include <iprt/armv8.h>
 # include <iprt/sort.h>
