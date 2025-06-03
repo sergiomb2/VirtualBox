@@ -230,6 +230,25 @@ RTDECL(int) RTJsonValueQueryInteger(RTJSONVAL hJsonVal, int64_t *pi64Num);
 RTDECL(int) RTJsonValueQueryNumber(RTJSONVAL hJsonVal, double *prdNum);
 
 /**
+ * Returns the numberof members of a given JSON object value.
+ *
+ * @returns Number of members of the given JSON object.
+ * @retval  0 if the object has no members or the JSON value is not an object.
+ * @param   hJsonVal        The JSON value handle.
+ */
+RTDECL(unsigned) RTJsonValueGetObjectMemberCount(RTJSONVAL hJsonVal);
+
+/**
+ * Returns the numberof members of a given JSON object value - extended version.
+ *
+ * @returns IPRT status code.
+ * @retval  VERR_JSON_VALUE_INVALID_TYPE if the JSON value is not an object.
+ * @param   hJsonVal        The JSON value handle.
+ * @param   pcMembers       Where to store the number of members for the given JSON object on success.
+ */
+RTDECL(int) RTJsonValueQueryObjectMemberCount(RTJSONVAL hJsonVal, unsigned *pcMembers);
+
+/**
  * Returns the value associated with a given name for the given JSON object value.
  *
  * @returns IPRT status code.

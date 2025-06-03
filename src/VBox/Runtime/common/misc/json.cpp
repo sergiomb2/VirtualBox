@@ -2030,6 +2030,25 @@ RTDECL(int) RTJsonValueQueryNumber(RTJSONVAL hJsonVal, double *prdNum)
     return VINF_SUCCESS;
 }
 
+RTDECL(unsigned) RTJsonValueGetObjectMemberCount(RTJSONVAL hJsonVal)
+{
+    PRTJSONVALINT pThis = hJsonVal;
+    RTJSON_ASSERT_VALID_HANDLE_AND_TYPE_RETURN(pThis, RTJSONVALTYPE_OBJECT, 0);
+
+    return pThis->Type.Object.cMembers;
+}
+
+RTDECL(int) RTJsonValueQueryObjectMemberCount(RTJSONVAL hJsonVal, unsigned *pcMembers)
+{
+    PRTJSONVALINT pThis = hJsonVal;
+    AssertPtrReturn(pThis, VERR_INVALID_HANDLE);
+    AssertPtrReturn(pcMembers, VERR_INVALID_POINTER);
+
+    RTJSON_TYPECHECK_RETURN(pThis, RTJSONVALTYPE_OBJECT);
+    *pcMembers = pThis->Type.Object.cMembers;
+    return VINF_SUCCESS;
+}
+
 RTDECL(int) RTJsonValueQueryByName(RTJSONVAL hJsonVal, const char *pszName, PRTJSONVAL phJsonVal)
 {
     PRTJSONVALINT pThis = hJsonVal;
