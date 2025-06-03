@@ -602,11 +602,9 @@ static DECLCALLBACK(int) pl061R3Attach(PPDMDEVINS pDevIns, unsigned iLUN, uint32
     if (RT_SUCCESS(rc))
     {
         pThisCC->pDrvGpio = PDMIBASE_QUERY_INTERFACE(pThisCC->pDrvBase, PDMIGPIOCONNECTOR);
-        if (!pThisCC->pDrvGpio)
-        {
-            AssertLogRelMsgFailed(("PL061#%d: instance %d has no GPIO interface!\n", pDevIns->iInstance));
-            return VERR_PDM_MISSING_INTERFACE;
-        }
+        AssertLogRelMsgReturn(pThisCC->pDrvGpio,
+                              ("PL061#%d: instance %d has no GPIO interface!\n", pDevIns->iInstance, pDevIns->iInstance),
+                              VERR_PDM_MISSING_INTERFACE);
     }
     else if (rc == VERR_PDM_NO_ATTACHED_DRIVER)
     {
