@@ -240,7 +240,7 @@ void UILanguageSettingsEditor::sltRetranslateUI()
     /* Translate tree-widget: */
     if (m_pTreeWidget)
     {
-        m_pTreeWidget->setWhatsThis(tr("Lists all available user interface languages. The effective language is written "
+        m_pTreeWidget->setWhatsThis(tr("Available user interface languages. The effective language is written "
                                        "in bold. Select Default to reset to the system default language."));
 
         /* Translate tree-widget header: */
