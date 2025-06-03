@@ -318,7 +318,7 @@ VMMR3DECL(int) CPUMR3Init(PVM pVM)
         rc = CPUMCpuIdCollectIdSysRegsFromArmV8Host(&pVM->cpum.s.paHostIdRegsR3, &pVM->cpum.s.cHostIdRegs);
         AssertLogRelRCReturn(rc, rc);
 
-        rc = CPUMCpuIdExplodeFeaturesArmV8FromSysRegs(pVM->cpum.s.paHostIdRegsR3, pVM->cpum.s.cHostIdRegs, &g_CpumHostFeatures.s);
+        rc = CPUMCpuIdExplodeFeaturesArmV8(pVM->cpum.s.paHostIdRegsR3, pVM->cpum.s.cHostIdRegs, &g_CpumHostFeatures.s);
         AssertLogRelRCReturn(rc, rc);
 
 #else

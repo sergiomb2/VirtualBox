@@ -853,7 +853,7 @@ VMMR3_INT_DECL(int) CPUMR3PopulateGuestFeaturesViaCallbacks(PVM pVM, PVMCPU pVCp
         /*
          * Pre-explode the CPU ID register info.
          */
-        rc = CPUMCpuIdExplodeFeaturesArmV8FromSysRegs(paIdRegs, cIdRegs, &pVM->cpum.s.GuestFeatures);
+        rc = CPUMCpuIdExplodeFeaturesArmV8(paIdRegs, cIdRegs, &pVM->cpum.s.GuestFeatures);
         AssertLogRelRCReturn(rc, rc);
 
         /*
@@ -865,8 +865,8 @@ VMMR3_INT_DECL(int) CPUMR3PopulateGuestFeaturesViaCallbacks(PVM pVM, PVMCPU pVCp
         /*
          * Explode the sanitized CPU ID register info.
          */
-        rc = CPUMCpuIdExplodeFeaturesArmV8FromSysRegs(pVM->cpum.s.GuestInfo.paIdRegsR3, pVM->cpum.s.GuestInfo.cIdRegs,
-                                                      &pVM->cpum.s.GuestFeatures);
+        rc = CPUMCpuIdExplodeFeaturesArmV8(pVM->cpum.s.GuestInfo.paIdRegsR3, pVM->cpum.s.GuestInfo.cIdRegs,
+                                           &pVM->cpum.s.GuestFeatures);
         AssertLogRelRCReturn(rc, rc);
     }
 

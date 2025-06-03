@@ -45,8 +45,8 @@
  * @param   cSysRegs    Number of system register values.
  * @param   pFeatures   The structure to explode the features into.
  */
-VMMDECL(int) CPUMCpuIdExplodeFeaturesArmV8FromSysRegs(PCSUPARMSYSREGVAL paSysRegs, uint32_t cSysRegs,
-                                                      CPUMFEATURESARMV8 *pFeatures)
+VMMDECL(int) CPUMCpuIdExplodeFeaturesArmV8(PCSUPARMSYSREGVAL paSysRegs, uint32_t cSysRegs,
+                                           CPUMFEATURESARMV8 *pFeatures)
 {
     RT_ZERO(*pFeatures);
 

@@ -2452,8 +2452,8 @@ DECLINLINE(PCSUPARMSYSREGVAL) cpumCpuIdLookupSysRegPtr(PCSUPARMSYSREGVAL paSysRe
 
 
 /**
- * Helper for CPUMCpuIdExplodeFeaturesArmV8FromSysRegs that does what can't be
- * derived from the specs.
+ * Helper for CPUMCpuIdExplodeFeaturesArmV8() that does what can't be derived
+ * from the specs.
  *
  * We ASSUME this is called after setting all the specification derived feature
  * bits, so we can more easily test for these.

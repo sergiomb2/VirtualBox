@@ -60,7 +60,7 @@ static PFNCPUMCPUIDDETERMINEARMV8MICROARCHEX    g_pfnCPUMCpuIdDetermineArmV8Micr
 static PFNCPUMR3CPUIDINFOX86                    g_pfnCPUMR3CpuIdInfoX86;
 static PFNCPUMR3CPUIDINFOARMV8                  g_pfnCPUMR3CpuIdInfoArmV8;
 static DECLCALLBACKMEMBER(int, g_pfnCPUMCpuIdExplodeFeaturesX86,(PCCPUMCPUIDLEAF paLeaves, uint32_t cLeaves, CPUMFEATURESX86 *pFeatures));
-static DECLCALLBACKMEMBER(int, g_pfnCPUMCpuIdExplodeFeaturesArmV8FromSysRegs,(PCSUPARMSYSREGVAL paSysRegs, uint32_t cSysRegs, CPUMFEATURESARMV8 *pFeatures));
+static DECLCALLBACKMEMBER(int, g_pfnCPUMCpuIdExplodeFeaturesArmV8,(PCSUPARMSYSREGVAL paSysRegs, uint32_t cSysRegs, CPUMFEATURESARMV8 *pFeatures));
 #if defined(RT_ARCH_AMD64)
 static DECLCALLBACKMEMBER(int, g_pfnCPUMCpuIdCollectLeavesFromX86Host,(PCPUMCPUIDLEAF *ppaLeaves, uint32_t *pcLeaves));
 typedef CPUMCPUIDINFOSTATEX86       CPUMCPUIDINFOSTATEHOST;
@@ -91,7 +91,7 @@ static const struct
     { true,  "CPUMR3CpuIdInfoX86",                          (uintptr_t *)&g_pfnCPUMR3CpuIdInfoX86                       },
     { true,  "CPUMR3CpuIdInfoArmV8",                        (uintptr_t *)&g_pfnCPUMR3CpuIdInfoArmV8                     },
     { true,  "CPUMCpuIdExplodeFeaturesX86",                 (uintptr_t *)&g_pfnCPUMCpuIdExplodeFeaturesX86              },
-    { true,  "CPUMCpuIdExplodeFeaturesArmV8FromSysRegs",    (uintptr_t *)&g_pfnCPUMCpuIdExplodeFeaturesArmV8FromSysRegs },
+    { true,  "CPUMCpuIdExplodeFeaturesArmV8",               (uintptr_t *)&g_pfnCPUMCpuIdExplodeFeaturesArmV8            },
 #if defined(RT_ARCH_AMD64)
     { true,  "CPUMCpuIdCollectLeavesFromX86Host",           (uintptr_t *)&g_pfnCPUMCpuIdCollectLeavesFromX86Host        },
 #elif defined(RT_ARCH_ARM64)
@@ -198,7 +198,7 @@ void displayEntry(PCCPUMDBENTRY pEntry, uint32_t uInfo, uint32_t fFlags)
                 RTMsgError("CPUMCpuIdExplodeFeaturesX86 failed: %Rrc", rc);
         }
         else if (   pEntry->enmEntryType == CPUMDBENTRYTYPE_ARM
-                 && g_pfnCPUMCpuIdExplodeFeaturesArmV8FromSysRegs
+                 && g_pfnCPUMCpuIdExplodeFeaturesArmV8
                  && g_pfnCPUMR3CpuIdInfoArmV8)
         {
             PCCPUMDBENTRYARM const pEntryArm   = (PCCPUMDBENTRYARM)pEntry;
@@ -214,7 +214,7 @@ void displayEntry(PCCPUMDBENTRY pEntry, uint32_t uInfo, uint32_t fFlags)
                        pEntryArm->cSysRegCmnVals * sizeof(paSysRegs[0]));
 
                 CPUMFEATURESARMV8  FeaturesArm;
-                int rc = g_pfnCPUMCpuIdExplodeFeaturesArmV8FromSysRegs(paSysRegs, cSysRegs, &FeaturesArm);
+                int rc = g_pfnCPUMCpuIdExplodeFeaturesArmV8(paSysRegs, cSysRegs, &FeaturesArm);
                 if (RT_SUCCESS(rc))
                 {
                     CPUMCPUIDINFOSTATEARMV8 InfoState =
@@ -239,7 +239,7 @@ void displayEntry(PCCPUMDBENTRY pEntry, uint32_t uInfo, uint32_t fFlags)
                     g_pfnCPUMR3CpuIdInfoArmV8(&InfoState);
                 }
                 else
-                    RTMsgError("CPUMCpuIdExplodeFeaturesArmV8FromSysRegs failed: %Rrc", rc);
+                    RTMsgError("CPUMCpuIdExplodeFeaturesArmV8 failed: %Rrc", rc);
                 RTMemFree(paSysRegs);
             }
             else
@@ -280,8 +280,8 @@ static RTEXITCODE cmdHost(const char *pszCmd)
 #elif defined(RT_ARCH_ARM64)
     if (!g_pfnCPUMCpuIdCollectIdSysRegsFromArmV8Host)
         return RTMsgErrorExitFailure("%s: CPUMCpuIdCollectIdSysRegsFromArmV8Host missing from the current VMM", pszCmd);
-    if (!g_pfnCPUMCpuIdExplodeFeaturesArmV8FromSysRegs)
-        return RTMsgErrorExitFailure("%s: CPUMCpuIdExplodeFeaturesArmV8FromSysRegs missing from the current VMM", pszCmd);
+    if (!g_pfnCPUMCpuIdExplodeFeaturesArmV8)
+        return RTMsgErrorExitFailure("%s: CPUMCpuIdExplodeFeaturesArmV8 missing from the current VMM", pszCmd);
     if (!g_pfnCPUMR3CpuIdInfoArmV8)
         return RTMsgErrorExitFailure("%s: CPUMR3CpuIdInfoArmV8 missing from the current VMM", pszCmd);
 
@@ -291,9 +291,9 @@ static RTEXITCODE cmdHost(const char *pszCmd)
         return RTMsgErrorExitFailure("%s: CPUMCpuIdCollectLeavesFromX86Host failed: %Rrc", pszCmd, rc);
 
     CPUMFEATURESARMV8 Features;
-    rc = g_pfnCPUMCpuIdExplodeFeaturesArmV8FromSysRegs(paIdValues, cIdValues, &Features);
+    rc = g_pfnCPUMCpuIdExplodeFeaturesArmV8(paIdValues, cIdValues, &Features);
     if (RT_FAILURE(rc))
-        return RTMsgErrorExitFailure("%s: CPUMCpuIdExplodeFeaturesArmV8FromSysRegs failed: %Rrc", pszCmd, rc);
+        return RTMsgErrorExitFailure("%s: CPUMCpuIdExplodeFeaturesArmV8 failed: %Rrc", pszCmd, rc);
 
 #else
 # error "port me"

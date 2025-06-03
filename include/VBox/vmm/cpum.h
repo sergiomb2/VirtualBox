@@ -2147,8 +2147,8 @@ VMMDECL(int)            CPUMCpuIdExplodeFeaturesX86(PCCPUMCPUIDLEAF paLeaves, ui
 #if defined(RT_ARCH_ARM64)
 VMMDECL(int)            CPUMCpuIdCollectIdSysRegsFromArmV8Host(struct SUPARMSYSREGVAL **ppaSysRegs, uint32_t *pcSysRegs);
 #endif
-VMMDECL(int)            CPUMCpuIdExplodeFeaturesArmV8FromSysRegs(struct SUPARMSYSREGVAL const *paSysRegs, uint32_t cSysRegs,
-                                                                 CPUMFEATURESARMV8 *pFeatures);
+VMMDECL(int)            CPUMCpuIdExplodeFeaturesArmV8(struct SUPARMSYSREGVAL const *paSysRegs, uint32_t cSysRegs,
+                                                      CPUMFEATURESARMV8 *pFeatures);
 
 
 #ifdef IN_RING3
