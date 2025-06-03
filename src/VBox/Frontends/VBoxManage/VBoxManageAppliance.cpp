@@ -2055,7 +2055,8 @@ RTEXITCODE handleExportAppliance(HandlerArg *a)
                                          ComSafeArrayAsOutParam(aVBoxValues),
                                          ComSafeArrayAsOutParam(aExtraConfigValues)));
 
-                Utf8Str flagCloudLaunchInstance(Bstr(aVBoxValues[0]).raw());
+                BSTR const pValue0 = aVBoxValues[0]; /* gcc 13.3.0 gets confused by Bstr(aVBoxValues[0]). */
+                Utf8Str flagCloudLaunchInstance(Bstr(pValue0).raw());
                 retTypes.setNull(); aRefs.setNull(); aOvfValues.setNull(); aVBoxValues.setNull(); aExtraConfigValues.setNull();
 
                 if (flagCloudLaunchInstance.equals("true"))
