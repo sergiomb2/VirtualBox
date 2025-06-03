@@ -40,6 +40,7 @@
 #include <iprt/mem.h>
 #include <iprt/path.h>
 #include <iprt/process.h>
+#include <iprt/sort.h>
 #include <iprt/string.h>
 #include <iprt/stream.h>
 
@@ -138,6 +139,15 @@ static DBGFINFOHLP g_StdOutInfoHlp =
 };
 
 
+/** @callback_method_impl{FNRTSORTCMP} */
+DECLCALLBACK(int) armrmRegValSortCmp(void const *pvElement1, void const *pvElement2, void *pvUser)
+{
+    RT_NOREF(pvUser);
+    PCSUPARMSYSREGVAL const pElm1 = (PCSUPARMSYSREGVAL)pvElement1;
+    PCSUPARMSYSREGVAL const pElm2 = (PCSUPARMSYSREGVAL)pvElement2;
+    return pElm1->idReg < pElm2->idReg ? -1 : pElm1->idReg > pElm2->idReg ? 1 : 0;
+}
+
 
 #define DISPLAY_ENTRY_F_NOTHING     UINT32_C(0x00000000)
 #define DISPLAY_ENTRY_F_INDEX       UINT32_C(0x00000001)
@@ -212,6 +222,7 @@ void displayEntry(PCCPUMDBENTRY pEntry, uint32_t uInfo, uint32_t fFlags)
                 memcpy(&paSysRegs[pEntryArm->aVariants[0].cSysRegVals],
                        pEntryArm->paSysRegCmnVals,
                        pEntryArm->cSysRegCmnVals * sizeof(paSysRegs[0]));
+                RTSortShell(paSysRegs, cSysRegs, sizeof(paSysRegs[0]), armrmRegValSortCmp, NULL);
 
                 CPUMFEATURESARMV8  FeaturesArm;
                 int rc = g_pfnCPUMCpuIdExplodeFeaturesArmV8(paSysRegs, cSysRegs, &FeaturesArm);
