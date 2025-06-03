@@ -654,7 +654,7 @@ class ArmAstBinaryOp(ArmAstBase):
     @staticmethod
     def needParentheses(oNode, sOp = '&&'):
         if isinstance(oNode, ArmAstBinaryOp):
-            if sOp != '&&'  or  oNode.sOp in ('||', '+'):
+            if sOp != oNode.sOp or sOp not in ('||', '&&', '+', '-', '*'):
                 return True;
         return False;
 
@@ -1646,6 +1646,7 @@ class ArmFeature(object):
         # Manual overrides and fixes.
         if sName in g_dArmFeatureSupportExprOverrides:
             self.oSupportExpr = g_dArmFeatureSupportExprOverrides[sName];
+            #print('debug3: sName=%s override: %s' % (sName, self.oSupportExpr.toString()))
 
         # Find the variables in the expression (for optimizing explosion).
         self.asSupportExprVars = sorted(set(ArmFeature.extractVariables(self.oSupportExpr)));
@@ -3749,7 +3750,7 @@ class IEMArmGenerator(object):
                 if sName.startswith('FEAT_'):
                     for i in range(self.idxFeatures):
                         if aoFeatures[i].sName == sName:
-                            return ('pFeatures->%s' % (g_dSpecFeatToCpumFeat.get(oFeature.sName, sName),), 1);
+                            return ('pFeatures->%s' % (g_dSpecFeatToCpumFeat.get(sName, sName),), 1);
                     raise Exception('Internal error: Feature %s has not yet been initialized! (%s)'
                                     % (sName, ', '.join([aoFeatures[i].sName for i in range(self.idxFeatures)]),));
 
@@ -3777,17 +3778,6 @@ class IEMArmGenerator(object):
 
         asLines += [
             '',
-            '/**',
-            ' * Helper that looks up a system register value in an array.',
-            ' */',
-            'DECLINLINE(uint64_t) cpumCpuIdLookupSysReg(PCSUPARMSYSREGVAL paSysRegs, uint32_t cSysRegs, uint32_t idReg)',
-            '{',
-            '    for (uint32_t i = 0 ; i < cSysRegs; i++)',
-            '        if (idReg == paSysRegs[i].idReg)',
-            '            return paSysRegs[i].uValue;',
-            '    return 0;',
-            '}',
-            '',
             '',
             '/**',
             ' * Explodes ARMv8+ features from an array of system register values.',
@@ -3800,7 +3790,8 @@ class IEMArmGenerator(object):
             'VMMDECL(int) CPUMCpuIdExplodeFeaturesArmV8FromSysRegs(PCSUPARMSYSREGVAL paSysRegs, uint32_t cSysRegs,',
             '                                                      CPUMFEATURESARMV8 *pFeatures)',
             '{',
-            '    int rcRet = VINF_SUCCESS;',
+            '    RT_ZERO(*pFeatures);',
+            '',
         ];
         asTodo  = []
         oHelper = CExprHelperFeatures();
@@ -3844,7 +3835,7 @@ class IEMArmGenerator(object):
 
         asLines += [
             '',
-            '    return rcRet;',
+            '    return cpumCpuIdExplodeFeaturesArmV8Handcoded(paSysRegs, cSysRegs, pFeatures);',
             '}'
         ];
 

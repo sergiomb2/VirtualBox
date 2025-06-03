@@ -2426,19 +2426,141 @@ VMMDECL(int) CPUMCpuIdCollectIdSysRegsFromArmV8Host(PSUPARMSYSREGVAL *ppaSysRegs
 #endif /* RT_ARCH_ARM64 && IN_RING3 */
 #if defined(RT_ARCH_ARM64) || defined(VBOX_VMM_TARGET_ARMV8)
 
+/**
+ * Helper that looks up a system register value in an array.
+ */
+DECLINLINE(uint64_t) cpumCpuIdLookupSysReg(PCSUPARMSYSREGVAL paSysRegs, uint32_t cSysRegs, uint32_t idReg)
+{
+    /* Don't assume it's sorted. */
+    for (uint32_t i = 0 ; i < cSysRegs; i++)
+        if (idReg == paSysRegs[i].idReg)
+            return paSysRegs[i].uValue;
+    return 0;
+}
+
+/**
+ * Helper that looks up a system register value in an array.
+ */
+DECLINLINE(PCSUPARMSYSREGVAL) cpumCpuIdLookupSysRegPtr(PCSUPARMSYSREGVAL paSysRegs, uint32_t cSysRegs, uint32_t idReg)
+{
+    /* Don't assume it's sorted. */
+    for (uint32_t i = 0 ; i < cSysRegs; i++)
+        if (idReg == paSysRegs[i].idReg)
+            return &paSysRegs[i];
+    return NULL;
+}
+
+
+/**
+ * Helper for CPUMCpuIdExplodeFeaturesArmV8FromSysRegs that does what can't be
+ * derived from the specs.
+ *
+ * We ASSUME this is called after setting all the specification derived feature
+ * bits, so we can more easily test for these.
+ *
+ * @returns VBox status code
+ * @param   paSysRegs   The system registers and their values.
+ * @param   cSysRegs    Number of system register values.
+ * @param   pFeatures   The structure to explode the features into.
+ */
+static int cpumCpuIdExplodeFeaturesArmV8Handcoded(PCSUPARMSYSREGVAL paSysRegs, uint32_t cSysRegs, CPUMFEATURESARMV8 *pFeatures)
+{
+    /* Get the MIDR_EL1 register, expand it and determine the vendor
+       and microarch (non-fatal). */
+    uint64_t const uMidr = cpumCpuIdLookupSysReg(paSysRegs, cSysRegs, ARMV8_AARCH64_SYSREG_MIDR_EL1);
+    pFeatures->uImplementeter   = (uint8_t )((uMidr >> 24) & 0xff);
+    pFeatures->uPartNum         = (uint16_t)((uMidr >>  4) & 0xfff);
+    pFeatures->uVariant         = (uint8_t )((uMidr >> 20) & 0xf);
+    pFeatures->uRevision        = (uint8_t ) (uMidr        & 0xf);
+
+    CPUMCPUVENDOR enmCpuVendor = CPUMCPUVENDOR_INVALID;
+    int rc = CPUMCpuIdDetermineArmV8MicroarchEx(uMidr, NULL, &pFeatures->enmMicroarch, &enmCpuVendor, NULL, NULL, NULL);
+    if (rc == VERR_UNSUPPORTED_CPU && enmCpuVendor != CPUMCPUVENDOR_INVALID)
+        rc = -rc;
+    pFeatures->enmCpuVendor = (uint8_t)enmCpuVendor;
+
+    /* Get ID_AA64MMFR0_EL1 and determine the max physical address width: */
+    uint64_t const fAa64Mmfr0 = cpumCpuIdLookupSysReg(paSysRegs, cSysRegs, ARMV8_AARCH64_SYSREG_ID_AA64MMFR0_EL1);
+    switch (fAa64Mmfr0 & ARMV8_ID_AA64MMFR0_EL1_PARANGE_MASK)
+    {
+        case ARMV8_ID_AA64MMFR0_EL1_PARANGE_32BITS:     pFeatures->cMaxPhysAddrWidth = 32; break;
+        case ARMV8_ID_AA64MMFR0_EL1_PARANGE_36BITS:     pFeatures->cMaxPhysAddrWidth = 36; break;
+        case ARMV8_ID_AA64MMFR0_EL1_PARANGE_40BITS:     pFeatures->cMaxPhysAddrWidth = 40; break;
+        case ARMV8_ID_AA64MMFR0_EL1_PARANGE_42BITS:     pFeatures->cMaxPhysAddrWidth = 42; break;
+        case ARMV8_ID_AA64MMFR0_EL1_PARANGE_44BITS:     pFeatures->cMaxPhysAddrWidth = 44; break;
+        case ARMV8_ID_AA64MMFR0_EL1_PARANGE_48BITS:     pFeatures->cMaxPhysAddrWidth = 48; break;
+        case ARMV8_ID_AA64MMFR0_EL1_PARANGE_52BITS:     pFeatures->cMaxPhysAddrWidth = 52; break;
+        case ARMV8_ID_AA64MMFR0_EL1_PARANGE_56BITS:     pFeatures->cMaxPhysAddrWidth = 56; break;
+        default:
+            pFeatures->cMaxPhysAddrWidth = 32;
+            LogRel(("CPUM: Do not know how to decode PARange=%#x!\n", (unsigned)(fAa64Mmfr0 & ARMV8_ID_AA64MMFR0_EL1_PARANGE_MASK)));
+            if (RT_SUCCESS(rc))
+                rc = VERR_CPUM_UNSUPPORTED_ID_REG_VALUE;
+            break;
+    }
+
+    /* Get ID_AA64MMFR2_EL1 and determine the max virtual address width: */
+    uint64_t const fAa64Mmfr2 = cpumCpuIdLookupSysReg(paSysRegs, cSysRegs, ARMV8_AARCH64_SYSREG_ID_AA64MMFR2_EL1);
+    switch ((fAa64Mmfr2 >> 16) & 0xf)
+    {
+        case 0: pFeatures->cMaxLinearAddrWidth = 48; break;
+        case 1: pFeatures->cMaxLinearAddrWidth = 52; break;
+        case 2: pFeatures->cMaxLinearAddrWidth = 56; break;
+        default:
+            pFeatures->cMaxPhysAddrWidth = 48;
+            LogRel(("CPUM: Do not know how to decode VARange=%#x!\n", (unsigned)((fAa64Mmfr2 >> 16) & 0xf)));
+            if (RT_SUCCESS(rc))
+                rc = VERR_CPUM_UNSUPPORTED_ID_REG_VALUE;
+            break;
+    }
+
+    /*
+     * Get ID_AA64DFR0_EL1 and set the break & watch point register counts.
+     *
+     * We may need ID_AA64DFR2_EL1 if FEAT_Debugv8p9 is support and 16 registers
+     * or more are implemented.
+     */
+    PCSUPARMSYSREGVAL const pAa64Dfr0 = cpumCpuIdLookupSysRegPtr(paSysRegs, cSysRegs, ARMV8_AARCH64_SYSREG_ID_AA64DFR0_EL1);
+    if (pAa64Dfr0)
+    {
+        uint64_t const fAa64Dfr2 = cpumCpuIdLookupSysReg(paSysRegs, cSysRegs, ARMV8_AARCH64_SYSREG_ID_AA64DFR2_EL1);
+
+        pFeatures->cBreakpoints = RT_BF_GET(pAa64Dfr0->uValue, ARMV8_ID_AA64DFR0_EL1_BRPS) + 1;
+        pFeatures->cWatchpoints = RT_BF_GET(pAa64Dfr0->uValue, ARMV8_ID_AA64DFR0_EL1_WRPS) + 1;
+
+        if (pFeatures->fDebugV8p9 && ((fAa64Dfr2 >> 8) & 0xffff) != 0)
+        {
+            unsigned const cExtBrksMinus1 = (unsigned)((fAa64Dfr2 >>  8) & 0xff);
+            if (pFeatures->cBreakpoints == 16 && cExtBrksMinus1 > 0 && cExtBrksMinus1 <= 0x3f)
+                pFeatures->cBreakpoints = cExtBrksMinus1 + 1;
+            else
+            {
+                Assert(cExtBrksMinus1 == 0);
+                Assert(pFeatures->cBreakpoints < 16);
+            }
+
+            unsigned const cExtWrpsMinus1 = (unsigned)((fAa64Dfr2 >>  8) & 0xff);
+            if (pFeatures->cWatchpoints == 16 && cExtWrpsMinus1 > 0 && cExtWrpsMinus1 <= 0x3f)
+                pFeatures->cWatchpoints = cExtWrpsMinus1 + 1;
+            else
+            {
+                Assert(cExtWrpsMinus1 == 0);
+                Assert(pFeatures->cWatchpoints < 16);
+            }
+        }
+    }
+    else
+    {
+        pFeatures->cBreakpoints = 0;
+        pFeatures->cWatchpoints = 0;
+    }
+
+    return rc;
+}
+
+
 /* Include code generated by bsd-spec-analyze.py --out-features-hdr. */
-# if RT_CLANG_PREREQ(4, 0) || RT_GNUC_PREREQ(8, 0)
-#  pragma GCC diagnostic push
-#  if RT_CLANG_PREREQ(4, 0)
-#   pragma GCC diagnostic ignored "-Wconstant-logical-operand"
-#  else
-#   pragma GCC diagnostic ignored "-Wlogical-op"
-#  endif
-# endif
 # include "CPUMAllCpuIdArmV8.cpp.h"
-# if RT_CLANG_PREREQ(4, 0) || RT_GNUC_PREREQ(8, 0)
-#  pragma GCC diagnostic pop
-# endif
 
 #endif /* RT_ARCH_ARM64 || VBOX_VMM_TARGET_ARMV8*/
 
