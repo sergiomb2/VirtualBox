@@ -75,10 +75,10 @@ void UIVRDEAuthLibraryEditor::setMinimumLayoutIndent(int iIndent)
 void UIVRDEAuthLibraryEditor::sltRetranslateUI()
 {
     if (m_pLabel)
-        m_pLabel->setText(tr("V&RDP Authentication Library:"));
+        m_pLabel->setText(tr("V&RDP Authentication Library"));
     if (m_pSelector)
-        m_pSelector->setToolTip(tr("Holds the path to the library that provides "
-                                   "authentication for Remote Display (VRDP) clients."));
+        m_pSelector->setToolTip(tr("Path to the library that provides "
+                                   "authentication for Remote Display (VRDP) clients"));
 }
 
 void UIVRDEAuthLibraryEditor::prepare()
