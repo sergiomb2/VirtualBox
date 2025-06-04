@@ -364,6 +364,27 @@ int RecordingUtilsCoordsCropCenter(PRECORDINGCODECPARMS pCodecParms,
     return vrc;
 }
 
+/**
+ * Translates a recording frame type to a string.
+ *
+ * @returns Recording frame type as a string.
+ * @param   enmType             The frame type to translate.
+ */
+const char *RecordingUtilsRecordingFrameTypeToStr(RECORDINGFRAME_TYPE enmType)
+{
+    switch (enmType)
+    {
+        RT_CASE_RET_STR(RECORDINGFRAME_TYPE_INVALID);
+        RT_CASE_RET_STR(RECORDINGFRAME_TYPE_AUDIO);
+        RT_CASE_RET_STR(RECORDINGFRAME_TYPE_VIDEO);
+        RT_CASE_RET_STR(RECORDINGFRAME_TYPE_CURSOR_SHAPE);
+        RT_CASE_RET_STR(RECORDINGFRAME_TYPE_CURSOR_POS);
+        RT_CASE_RET_STR(RECORDINGFRAME_TYPE_SCREEN_CHANGE);
+        default: break;
+    }
+    AssertFailedReturn("Unknown");
+}
+
 #ifdef DEBUG
 /**
  * Dumps image data to a bitmap (BMP) file.
@@ -378,7 +399,7 @@ int RecordingUtilsCoordsCropCenter(PRECORDINGCODECPARMS pCodecParms,
  * @param   pszWhat             Hint of what to dump. Optional and can be NULL.
  * @param   uWidth              Width (in pixel) to write.
  * @param   uHeight             Height (in pixel) to write.
- * @param   uBytsPerLine        Bytes per line.
+ * @param   uBytesPerLine       Bytes per line (stride).
  * @param   uBPP                Bits in pixel.
  */
 int RecordingUtilsDbgDumpImageData(const uint8_t *pu8RGBBuf, size_t cbRGBBuf, const char *pszPath, const char *pszWhat,
@@ -446,7 +467,6 @@ int RecordingUtilsDbgDumpImageData(const uint8_t *pu8RGBBuf, size_t cbRGBBuf, co
         /* Do the copy. */
         while (offSrc)
         {
-            LogFunc(("offSrc=%zu\n", offSrc));
             vrc = RTFileWrite(fh, pu8RGBBuf + offSrc, uWidth * uBytesPerPixel, NULL);
             AssertRCBreak(vrc);
             Assert(offSrc >= uBytesPerLine);
@@ -487,6 +507,26 @@ int RecordingUtilsDbgDumpVideoFrameEx(const PRECORDINGVIDEOFRAME pFrame, const c
 int RecordingUtilsDbgDumpVideoFrame(const PRECORDINGVIDEOFRAME pFrame, const char *pszWhat)
 {
     return RecordingUtilsDbgDumpVideoFrameEx(pFrame, NULL /* Use temp directory */, pszWhat);
+}
+
+/**
+ * Logs a recording frame.
+ *
+ * @param   pFrame              Recording frame to log.
+ */
+void RecordingUtilsDbgLogFrame(PRECORDINGFRAME pFrame)
+{
+    Log3(("id=%RU16, type=%s (%#x), ts=%RU64", pFrame->idStream,
+          RecordingUtilsRecordingFrameTypeToStr(pFrame->enmType), pFrame->enmType, pFrame->msTimestamp));
+    switch (pFrame->enmType)
+    {
+        case RECORDINGFRAME_TYPE_VIDEO:
+            Log3((", w=%d, h=%d\n", pFrame->u.Video.Info.uWidth, pFrame->u.Video.Info.uHeight));
+            break;
+        default:
+            Log3(("\n"));
+            break;
+    }
 }
 #endif /* DEBUG */
 

@@ -415,6 +415,9 @@ static DECLCALLBACK(int) recordingCodecVPXEncode(PRECORDINGCODEC pCodec, PRECORD
 
         case RECORDINGFRAME_TYPE_CURSOR_SHAPE:
         {
+            Log3Func(("RECORDINGFRAME_TYPE_CURSOR_SHAPE: w=%d, h=%d\n",
+                      pFrame->u.CursorShape.Info.uWidth, pFrame->u.CursorShape.Info.uHeight));
+
             RecordingVideoFrameFree(pCodec->Video.VPX.pCursorShape);
             pCodec->Video.VPX.pCursorShape = RecordingVideoFrameDup(&pFrame->u.CursorShape);
             AssertPtr(pCodec->Video.VPX.pCursorShape);
@@ -518,8 +521,10 @@ static DECLCALLBACK(int) recordingCodecVPXEncode(PRECORDINGCODEC pCodec, PRECORD
 #endif
 
 #if 0
-        RecordingUtilsDbgDumpImageData(&pFront->pau8Buf[(sy * pFront->Info.uBytesPerLine) + (sx * (pFront->Info.uBPP / 8))], pFront->cbBuf,
-                                       "/tmp/recording", "cropped", sw, sh, pFront->Info.uBytesPerLine, pFront->Info.uBPP);
+        RecordingUtilsDbgDumpImageData(&pFront->pau8Buf[(sy * pFront->Info.uBytesPerLine) + (sx * (pFront->Info.uBPP / 8))],
+                                       sw * sh * (pFront->Info.uBPP / 8),
+                                       NULL /* Use default temp dir */, "cropped", sw, sh,
+                                       pFront->Info.uBytesPerLine, pFront->Info.uBPP);
 #endif
         /* Blit (and convert from BGRA 32) the changed parts of the front buffer to the YUV 420 surface of the codec. */
         RecordingUtilsConvBGRA32ToYUVI420Ex(/* Destination */
@@ -538,6 +543,8 @@ static DECLCALLBACK(int) recordingCodecVPXEncode(PRECORDINGCODEC pCodec, PRECORD
 /** @copydoc RECORDINGCODECOPS::pfnScreenChange */
 static DECLCALLBACK(int) recordingCodecVPXScreenChange(PRECORDINGCODEC pCodec, PRECORDINGSURFACEINFO pInfo)
 {
+    LogFunc(("ENTER: w=%RU32, h=%RU32, bpp=%RU8\n", pInfo->uWidth, pInfo->uHeight, pInfo->uBPP));
+
     /* The VPX encoder only understands even frame sizes. */
     if (   (pInfo->uWidth  % 2) != 0
         || (pInfo->uHeight % 2) != 0)
@@ -577,6 +584,7 @@ static DECLCALLBACK(int) recordingCodecVPXScreenChange(PRECORDINGCODEC pCodec, P
     if (RT_FAILURE(vrc))
         LogRel(("Recording: Codec error handling screen change notification: %Rrc\n", vrc));
 
+    LogFlowFuncLeaveRC(vrc);
     return vrc;
 
 }

@@ -2248,6 +2248,7 @@ int Display::i_recordingScreenChanged(unsigned uScreenId, const DISPLAYFBINFO *p
                                       0, 0, ulWidth, ulHeight, ulBytesPerLine);
     }
 
+    Log2Func(("LEAVE: %Rrc\n", vrc));
     return vrc;
 }
 
@@ -2308,10 +2309,11 @@ int Display::i_recordingScreenUpdate(unsigned uScreenId, uint8_t *pauFramebuffer
                                    "/tmp/recording", "display-screen-update", w, h, uBytesPerLine, 32 /* BPP */);
 #endif
 
-    int vrc = pCtx->SendVideoFrame(uScreenId, &Frame, tsNowMs);
+    int const vrc = pCtx->SendVideoFrame(uScreenId, &Frame, tsNowMs);
 
     STAM_PROFILE_STOP(&Stats.Monitor[uScreenId].Recording.profileRecording, a);
 
+    Log2Func(("LEAVE: %Rrc\n", vrc));
     return vrc;
 }
 
@@ -2361,9 +2363,11 @@ int Display::i_recordingScreenUpdate(unsigned uScreenId, uint32_t x, uint32_t y,
     Log2Func(("uScreenId=%u, pbAddress=%p, ulWidth=%RU32, ulHeight=%RU32, ulBitsPerPixel=%RU32\n",
               uScreenId, pbAddress, ulWidth, ulHeight, ulBitsPerPixel));
 
-    return i_recordingScreenUpdate(uScreenId,
-                                   pbAddress, ulHeight * ulBytesPerLine,
-                                   x, y, w, h, ulBytesPerLine);
+    int const vrc = i_recordingScreenUpdate(uScreenId,
+                                            pbAddress, ulHeight * ulBytesPerLine,
+                                            x, y, w, h, ulBytesPerLine);
+    Log2Func(("LEAVE: %Rrc\n", vrc));
+    return vrc;
 }
 
 /**

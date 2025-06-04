@@ -1488,6 +1488,9 @@ int RecordingContext::SendCursorShapeChange(bool fVisible, bool fAlpha, uint32_t
  */
 int RecordingContext::SendScreenChange(uint32_t uScreen, PRECORDINGSURFACEINFO pInfo, uint64_t msTimestamp)
 {
+    LogFlowFunc(("uScreen=%RU32, w=%RU32, h=%RU32, bpp=%RU8, ts=%RU64\n",
+                 uScreen, pInfo->uWidth, pInfo->uHeight, pInfo->uBPP, msTimestamp));
+
     lock();
 
     RecordingStream *pStream = getStreamInternal(uScreen);
