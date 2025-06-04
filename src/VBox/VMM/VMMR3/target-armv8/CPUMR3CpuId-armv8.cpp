@@ -826,6 +826,7 @@ VMMR3_INT_DECL(int) CPUMR3PopulateGuestFeaturesViaCallbacks(PVM pVM, PVMCPU pVCp
         RTMemFree(pVM->cpum.s.GuestInfo.paIdRegsR3);
         pVM->cpum.s.GuestInfo.paIdRegsR3 = paIdRegs;
         pVM->cpum.s.GuestInfo.cIdRegs    = cIdRegs;
+        LogRel(("CPUM: %u guest ID registers\n", cIdRegs));
 
 #if 0
         /*

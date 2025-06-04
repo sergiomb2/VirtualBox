@@ -675,6 +675,7 @@ VMMR3DECL(int) CPUMCpuIdDetermineArmV8MicroarchEx(uint64_t idMain, const char *p
             break;
 
         default:
+            LogRel(("CPUM: Unknown bImplementer=%#x\n", bImplementer));
             return VERR_UNSUPPORTED_CPU;
     }
     if (penmVendor)
@@ -717,6 +718,8 @@ VMMR3DECL(int) CPUMCpuIdDetermineArmV8MicroarchEx(uint64_t idMain, const char *p
 
             }
 
+    LogRel(("CPUM: Unknown uPartNumSearch=%#x (vendor=%s)%s%s\n", uPartNumSearch, CPUMCpuVendorName(enmVendor),
+            pszCpuName && *pszCpuName ? " pszCpuName=" : "",  pszCpuName && *pszCpuName ? pszCpuName : ""));
     return VERR_UNSUPPORTED_CPU;
 }
 #endif /* if defined(RT_ARCH_ARM64) || defined(RT_ARCH_ARM32) || defined(VBOX_VMM_TARGET_ARMV8) */
@@ -2480,6 +2483,8 @@ static int cpumCpuIdExplodeFeaturesArmV8Handcoded(PCSUPARMSYSREGVAL paSysRegs, u
     int rc = CPUMCpuIdDetermineArmV8MicroarchEx(uMidr, NULL, &pFeatures->enmMicroarch, &enmCpuVendor, NULL, NULL, NULL);
     if (rc == VERR_UNSUPPORTED_CPU && enmCpuVendor != CPUMCPUVENDOR_INVALID)
         rc = -rc;
+    if (RT_FAILURE(rc))
+        LogRel(("CPUM: CPUMCpuIdDetermineArmV8MicroarchEx(%#RX64) failed\n", uMidr));
     pFeatures->enmCpuVendor = (uint8_t)enmCpuVendor;
 
     /* Get ID_AA64MMFR0_EL1 and determine the max physical address width: */
