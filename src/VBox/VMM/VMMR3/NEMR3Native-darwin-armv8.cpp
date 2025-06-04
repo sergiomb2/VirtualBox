@@ -1372,6 +1372,14 @@ DECLHIDDEN(int) nemR3NativeInit(PVM pVM, bool fFallback, bool fForced)
      */
     PCFGMNODE pCfgCpum = CFGMR3GetChild(CFGMR3GetRoot(pVM), "CPUM/");
 
+    /** @cfgm{/CPUM/NestedHWVirt, bool, false}
+     * Whether to expose the hardware virtualization (EL2/VHE) feature to the guest.
+     * The default is false. Only supported on M3 and later and macOS 15.0+ (Sonoma).
+     */
+    bool fNestedHWVirt = false;
+    rc = CFGMR3QueryBoolDef(pCfgCpum, "NestedHWVirt", &fNestedHWVirt, false);
+    AssertLogRelRCReturn(rc, rc);
+
     hv_vm_config_t hVmCfg = NULL;
     if (   hv_vm_config_create
         && hv_vm_config_get_el2_supported)
@@ -1385,13 +1393,6 @@ DECLHIDDEN(int) nemR3NativeInit(PVM pVM, bool fFallback, bool fForced)
         if (   hrc == HV_SUCCESS
             && fHvEl2Supported)
         {
-            /** @cfgm{/CPUM/NestedHWVirt, bool, false}
-             * Whether to expose the hardware virtualization (EL2/VHE) feature to the guest.
-             * The default is false. Only supported on M3 and later and macOS 15.0+ (Sonoma).
-             */
-            bool fNestedHWVirt = false;
-            rc = CFGMR3QueryBoolDef(pCfgCpum, "NestedHWVirt", &fNestedHWVirt, false);
-            AssertLogRelRCReturn(rc, rc);
             if (fNestedHWVirt)
             {
                 hrc = hv_vm_config_set_el2_enabled(hVmCfg, fNestedHWVirt);
@@ -1408,7 +1409,9 @@ DECLHIDDEN(int) nemR3NativeInit(PVM pVM, bool fFallback, bool fForced)
             rc = CFGMR3RemoveValue(pCfgCpum, "NestedHWVirt");
             AssertLogRelRC(rc);
 
-            LogRel(("NEM: The host doesn't supported nested virtualization! (hrc=%#x fHvEl2Supported=%RTbool)\n",
+            LogRel(("NEM: %sThe host doesn't supported nested virtualization, %s (hrc=%#x fHvEl2Supported=%RTbool)\n",
+                    fNestedHWVirt ? "WARNING! " : "",
+                    fNestedHWVirt ? "so had to disable it for the VM!" : ", but is not configured and therefore harmless.",
                     hrc, fHvEl2Supported));
         }
     }
@@ -1418,7 +1421,9 @@ DECLHIDDEN(int) nemR3NativeInit(PVM pVM, bool fFallback, bool fForced)
         rc = CFGMR3RemoveValue(pCfgCpum, "NestedHWVirt");
         AssertLogRelRC(rc);
 
-        LogRel(("NEM: Hypervisor.framework doesn't supported nested virtualization!\n"));
+        LogRel(("NEM: %sHypervisor.framework doesn't supported nested virtualization, %s\n",
+                fNestedHWVirt ? "WARNING! " : "",
+                fNestedHWVirt ? "so had to disable it for the VM!" : ", but is not configured and therefore harmless."));
     }
 
     hv_return_t hrc = hv_vm_create(hVmCfg);
