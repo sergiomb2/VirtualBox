@@ -564,14 +564,6 @@ Function W2K_CallbackInstall
   ;
   ${LogVerbose} "Installing Shared Folders driver ..."
 
-  ; For Win/arm we currently skip installing Shared Folders by default due to stability issues.
-  !if $%KBUILD_TARGET_ARCH% == "arm64"
-    ${If} $g_bForceInstall <> "true"
-      ${LogVerbose} "Shared Folders are not available on this platform architecture (arm64), skipping installation."
-      goto skip_sf
-    ${Endif}
-  !endif
-
   ; The Shared Folder IFS goes to the system directory.
   !if $%KBUILD_TARGET_ARCH% == "x86"
     ; On x86 we have to use a different shared folder driver linked against an older RDBSS for Windows 7 and older.
@@ -611,8 +603,6 @@ Function W2K_CallbackInstall
   ; Add the shared folders network provider
   ${LogVerbose} "Adding network provider (Order = $g_iSfOrder) ..."
   ${CmdExecute} "$\"$INSTDIR\Tools\VBoxGuestInstallHelper.exe$\" netprovider add VBoxSF $g_iSfOrder" 'non-zero-exitcode=abort'
-
-skip_sf:
 
   ;
   ; Set video resolution to be used after next reboot.
