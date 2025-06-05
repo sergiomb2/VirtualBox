@@ -820,6 +820,19 @@ VMMR3_INT_DECL(int) CPUMR3PopulateGuestFeaturesViaCallbacks(PVM pVM, PVMCPU pVCp
         /* Sort the register values to facilitate binary lookup and such. */
         RTSortShell(paIdRegs, cIdRegs, sizeof(paIdRegs[0]), cpumCpuIdSysRegValSortCmp, NULL);
 
+#if defined(RT_ARCH_ARM64)
+        /* If the MIDR_EL1 register is zero, use the host implementor value and
+           indicate that the architectural features are identifies via the ID
+           registers.  This is a HACK to get older macOS hosts working. */
+        PSUPARMSYSREGVAL const pMainIdReg = cpumCpuIdLookupOrInsertIdReg(&paIdRegs, &cIdRegs, ARMV8_AARCH64_SYSREG_MIDR_EL1, 0);
+        AssertLogRelReturn(pMainIdReg, VERR_NO_MEMORY);
+        if (pMainIdReg->uValue == 0)
+        {
+            pMainIdReg->uValue = ((uint32_t)g_CpumHostFeatures.s.uImplementeter << 24) | UINT32_C(0x000f0000);
+            LogRel(("CPUM: Setting MIDR_EL1 to %#RX64 (hack)\n", pMainIdReg->uValue));
+        }
+#endif
+
         /*
          * Install the raw array.
          */
@@ -852,10 +865,9 @@ VMMR3_INT_DECL(int) CPUMR3PopulateGuestFeaturesViaCallbacks(PVM pVM, PVMCPU pVCp
         AssertRCReturn(rc, rc);
 
         /*
-         * Pre-explode the CPU ID register info.
+         * Pre-explode the CPU ID register info (ignore errors).
          */
-        rc = CPUMCpuIdExplodeFeaturesArmV8(paIdRegs, cIdRegs, &pVM->cpum.s.GuestFeatures);
-        AssertLogRelRCReturn(rc, rc);
+        CPUMCpuIdExplodeFeaturesArmV8(paIdRegs, cIdRegs, &pVM->cpum.s.GuestFeatures);
 
         /*
          * Sanitize the cpuid information passed on to the guest.
