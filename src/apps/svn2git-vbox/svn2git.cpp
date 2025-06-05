@@ -142,6 +142,8 @@ typedef struct S2GBRANCH
     const char      *pszGitBranch;
     /** Size of the prefix in characters. */
     size_t          cchSvnPrefix;
+    /** Flag whether the branch was created. */
+    bool            fCreated;
     /** The prefix in svn to match. */
     RT_GCC_EXTENSION
     char            achSvnPrefix[RT_FLEXIBLE_ARRAY];
@@ -179,7 +181,7 @@ typedef struct S2GSVNREV
     const char      *pszGitAuthor;
 
     /* The branch this revision operates on. */
-    PCS2GBRANCH     pBranch;
+    PS2GBRANCH      pBranch;
 
     /** List of changes in that revision, sorted by the path. */
     RTLISTANCHOR    LstChanges;
@@ -1405,10 +1407,20 @@ static RTEXITCODE s2gSvnDumpDirRecursiveWorker(PS2GCTX pThis, PS2GSVNREV pRev, s
             if (g_cVerbosity >= 5)
                 RTMsgInfo("Processing %s/%s\n", pszSvnPath, pIt->pszName);
 
+            /* Paths containing .git are invalid as git thinks these are other repositories. */
+            if (!RTStrCmp(pIt->pszName, ".git"))
+            {
+                RTMsgWarning("Skipping invalid path '%s/%s'\n", pszSvnPath, pIt->pszName);
+                continue;
+            }
+
             char szSvnPath[RTPATH_MAX];
             char szGitPath[RTPATH_MAX];
             RTStrPrintf2(&szSvnPath[0], sizeof(szSvnPath), "%s/%s", pszSvnPath, pIt->pszName);
-            RTStrPrintf2(&szGitPath[0], sizeof(szGitPath), "%s/%s", pszGitPath, pIt->pszName);
+            if (*pszGitPath == '\0')
+                RTStrPrintf2(&szGitPath[0], sizeof(szGitPath), "%s", pIt->pszName);
+            else
+                RTStrPrintf2(&szGitPath[0], sizeof(szGitPath), "%s/%s", pszGitPath, pIt->pszName);
 
             if (pIt->fIsDir)
                 rcExit = s2gSvnDumpDirRecursiveWorker(pThis, pRev, pSvnFsRoot, pPool, szSvnPath, szGitPath);
@@ -1463,6 +1475,18 @@ static RTEXITCODE s2gSvnDumpDirRecursive(PS2GCTX pThis, PS2GSVNREV pRev, uint32_
 }
 
 
+DECLINLINE(PS2GBRANCH) s2gBranchGetFromPath(PS2GCTX pThis, const char *pszPath)
+{
+    PS2GBRANCH pBranch;
+    RTListForEach(&pThis->LstBranches, pBranch, S2GBRANCH, NdBranches)
+    {
+        if (!RTStrNCmp(pszPath, &pBranch->achSvnPrefix[0], pBranch->cchSvnPrefix))
+            return pBranch;
+    }
+
+    return NULL;
+}
+
 static RTEXITCODE s2gSvnExportSinglePath(PS2GCTX pThis, PS2GSVNREV pRev, const char *pszSvnPath, const char *pszGitPath,
                                          bool fIsDir, svn_fs_path_change2_t *pChange)
 {
@@ -1473,28 +1497,51 @@ static RTEXITCODE s2gSvnExportSinglePath(PS2GCTX pThis, PS2GSVNREV pRev, const c
         if (   pChange->change_kind == svn_fs_path_change_add
             || pChange->change_kind == svn_fs_path_change_modify)
         {
+            rcExit = RTEXITCODE_SUCCESS;
+
             /* Dump the directory content if copied from another source. */
             if (pChange->copyfrom_path != NULL)
-                rcExit = s2gSvnDumpDirRecursive(pThis, pRev, pChange->copyfrom_rev, pChange->copyfrom_path, pszGitPath);
-
-            /* Check properties. */
-            if (pChange->prop_mod)
             {
-                rcExit = s2gSvnProcessExternals(pThis, pRev, pszSvnPath);
-                if (rcExit == RTEXITCODE_SUCCESS)
+                PCS2GBRANCH pBranch = s2gBranchGetFromPath(pThis, pChange->copyfrom_path);
+                if (   pBranch != pRev->pBranch
+                    && !pRev->pBranch->fCreated)
                 {
-                    /* Process svn:ignore. */
-                    rcExit = s2gSvnProcessIgnores(pThis, pRev, pszSvnPath, pszGitPath);
+                    RTMsgInfo("Creating branch %s from %s@%u in revision %u\n",
+                              pRev->pBranch->pszGitBranch, pBranch->pszGitBranch, pChange->copyfrom_rev, pRev->idRev);
+                    int rc = s2gGitBranchCreate(pThis->hGitRepo, pRev->pBranch->pszGitBranch, pBranch->pszGitBranch,
+                                                pChange->copyfrom_rev);
+                    if (RT_SUCCESS(rc))
+                        pRev->pBranch->fCreated = true;
+                    else
+                        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to create git branch '%s': %Rrc",
+                                                pBranch->pszGitBranch, rc);
                 }
+
+                if (rcExit == RTEXITCODE_SUCCESS)
+                    rcExit = s2gSvnDumpDirRecursive(pThis, pRev, pChange->copyfrom_rev, pChange->copyfrom_path, pszGitPath);
             }
-            else
+
+            if (rcExit == RTEXITCODE_SUCCESS)
             {
-                /* If the directory is empty we need to add a .gitignore. */
-                bool fIsEmpty = false;
-                rcExit = s2gSvnPathIsEmptyDir(pRev, pszSvnPath, &fIsEmpty);
-                if (   rcExit == RTEXITCODE_SUCCESS
-                    && fIsEmpty)
-                    rcExit = s2gSvnAddGitIgnore(pThis, pszGitPath, NULL /*pvData*/, 0 /*cbData*/);
+                /* Check properties. */
+                if (pChange->prop_mod)
+                {
+                    rcExit = s2gSvnProcessExternals(pThis, pRev, pszSvnPath);
+                    if (rcExit == RTEXITCODE_SUCCESS)
+                    {
+                        /* Process svn:ignore. */
+                        rcExit = s2gSvnProcessIgnores(pThis, pRev, pszSvnPath, pszGitPath);
+                    }
+                }
+                else
+                {
+                    /* If the directory is empty we need to add a .gitignore. */
+                    bool fIsEmpty = false;
+                    rcExit = s2gSvnPathIsEmptyDir(pRev, pszSvnPath, &fIsEmpty);
+                    if (   rcExit == RTEXITCODE_SUCCESS
+                        && fIsEmpty)
+                        rcExit = s2gSvnAddGitIgnore(pThis, pszGitPath, NULL /*pvData*/, 0 /*cbData*/);
+                }
             }
         }
         else if (pChange->change_kind == svn_fs_path_change_replace)
@@ -1572,6 +1619,10 @@ static RTEXITCODE s2gSvnRevisionExportPaths(PS2GCTX pThis, PS2GSVNREV pRev)
             const char *pszPath = (const char *)vkey;
             svn_fs_path_change2_t *pChange = (svn_fs_path_change2_t *)value;
 
+            /* Ignore /branches */
+            if (!RTStrCmp(pszPath, "/branches"))
+                continue;
+
             /* Paths containing .git are invalid as git thinks these are other repositories. */
             const char *psz = RTStrStr(pszPath, "/.git");
             if (   psz
@@ -1612,19 +1663,9 @@ static RTEXITCODE s2gSvnRevisionExportPaths(PS2GCTX pThis, PS2GSVNREV pRev)
         PCS2GSVNREVCHANGE pFirst = RTListGetFirst(&pRev->LstChanges, S2GSVNREVCHANGE, NdChanges);
         if (pFirst)
         {
-            PCS2GBRANCH pBranch;
-            RTListForEach(&pThis->LstBranches, pBranch, S2GBRANCH, NdBranches)
-            {
-                if (!RTStrNCmp(pFirst->pszPath, &pBranch->achSvnPrefix[0], pBranch->cchSvnPrefix))
-                {
-                    pRev->pBranch = pBranch;
-                    break;
-                }
-            }
-
+            pRev->pBranch = s2gBranchGetFromPath(pThis, pFirst->pszPath);
             if (!pRev->pBranch)
-                return RTEXITCODE_SUCCESS;
-                //return RTMsgErrorExit(RTEXITCODE_FAILURE, "No branch mapping for path '%s'", pFirst->pszPath);
+                return RTMsgErrorExit(RTEXITCODE_FAILURE, "No branch mapping for path '%s'", pFirst->pszPath);
 
             /* Work on the changes. */
             PS2GSVNREVCHANGE pIt;
@@ -1663,6 +1704,9 @@ static RTEXITCODE s2gSvnRevisionExportPaths(PS2GCTX pThis, PS2GSVNREV pRev)
                         && RTStrStartsWith(pNext->pszPath, pIt->pszPath))
                         continue;
                 }
+
+                if (!pRev->pBranch)
+                    continue;
 
                 if (!RTStrNCmp(pIt->pszPath, &pRev->pBranch->achSvnPrefix[0], pRev->pBranch->cchSvnPrefix))
                 {
@@ -1750,7 +1794,8 @@ static RTEXITCODE s2gSvnExportRevision(PS2GCTX pThis, uint32_t idRev)
                     if (RT_SUCCESS(rc))
                     {
                         rcExit = s2gSvnRevisionExportPaths(pThis, &Rev);
-                        if (rcExit == RTEXITCODE_SUCCESS)
+                        if (   rcExit == RTEXITCODE_SUCCESS
+                            && Rev.pBranch)
                         {
                             size_t cchRevLog = strlen(Rev.pszSvnLog);
 
@@ -1760,7 +1805,8 @@ static RTEXITCODE s2gSvnExportRevision(PS2GCTX pThis, uint32_t idRev)
                                                      Rev.pszSvnXref);
                             if (RT_SUCCESS(rc))
                                 rc = s2gGitTransactionCommit(pThis->hGitRepo, Rev.pszGitAuthor, Rev.pszGitAuthorEmail,
-                                                             pThis->BufScratch.pbBuf, Rev.cEpochSecs);
+                                                             pThis->BufScratch.pbBuf, Rev.cEpochSecs, Rev.pBranch->pszGitBranch,
+                                                             Rev.idRev);
                             if (RT_FAILURE(rc))
                                 rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to commit git transaction with: %Rrc", rc);
                         }
@@ -1888,7 +1934,7 @@ static RTEXITCODE s2gGitInit(PS2GCTX pThis)
             RTMsgInfo("Matched internal revision r%u to public r%u, continuing at that revision\n",
                       idRevLast + 1, idRevPublic);
 
-            pThis->idRevStart = idRevPublic;
+            pThis->idRevStart = idRevPublic + 1;
         }
         else
             pThis->idRevStart = 1;
@@ -1919,7 +1965,16 @@ int main(int argc, char *argv[])
             {
                 rcExit = s2gGitInit(&This);
                 if (rcExit == RTEXITCODE_SUCCESS)
+                {
+                    /* Check which of the mapped branches exist in the git repository already. */
+                    PS2GBRANCH pIt;
+                    RTListForEach(&This.LstBranches, pIt, S2GBRANCH, NdBranches)
+                    {
+                        pIt->fCreated = s2gGitBranchExists(This.hGitRepo, pIt->pszGitBranch);
+                    }
+
                     rcExit = s2gSvnExport(&This);
+                }
 
                 s2gGitRepositoryClose(This.hGitRepo);
             }

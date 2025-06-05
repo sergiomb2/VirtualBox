@@ -30,9 +30,10 @@
 *   Header Files                                                                                                                 *
 *********************************************************************************************************************************/
 #include <iprt/dir.h>
+#include <iprt/env.h>
 #include <iprt/err.h>
 #include <iprt/file.h>
-#include <iprt/env.h>
+#include <iprt/list.h>
 #include <iprt/path.h>
 #include <iprt/pipe.h>
 #include <iprt/process.h>
@@ -46,6 +47,42 @@
 *********************************************************************************************************************************/
 
 #define GIT_BINARY "git"
+
+/**
+ * A svn revision to fast-import mark mapping.
+ */
+typedef struct S2GSVNREV2MARK
+{
+    /** The SVN revision number. */
+    uint64_t        idSvnRev;
+    /** The commit mark corresponding to the SVN revision number. */
+    uint64_t        idGitMark;
+} S2GSVNREV2MARK;
+typedef S2GSVNREV2MARK *PS2GSVNREV2MARK;
+typedef const S2GSVNREV2MARK *PCS2GSVNREV2MARK;
+
+
+/**
+ * Git branch
+ */
+typedef struct S2GBRANCH
+{
+    /** List node. */
+    RTLISTNODE      NdBranches;
+    /** Pointer to the base of the SVN revision to mark mapping. */
+    PS2GSVNREV2MARK paSvnRev2Mark;
+    /** Number of entries in the mapping array. */
+    uint32_t        cSvnRev2MarkEntries;
+    /** Maximum number of entries the mapping array can hold. */
+    uint32_t        cSvnRev2MarkEntriesMax;
+    /** The git commit mark this branch was created from, UINT64_MAX means not being available. */
+    uint64_t        idGitMarkMerge;
+    /** The name of the branch. */
+    RT_GCC_EXTENSION
+    char            szName[RT_FLEXIBLE_ARRAY];
+} S2GBRANCH;
+typedef S2GBRANCH *PS2GBRANCH;
+typedef const S2GBRANCH *PCS2GBRANCH;
 
 
 /**
@@ -70,6 +107,9 @@ typedef struct S2GREPOSITORYGITINT
     /** The next commit mark. */
     uint64_t        idCommitMark;
 
+    /** List of branches. */
+    RTLISTANCHOR    LstBranches;
+
     /** Buffer holding all deleted files for the current transaction. */
     S2GSCRATCHBUF   BufDeletedFiles;
     /** Buffer for files being added/modified. */
@@ -79,6 +119,80 @@ typedef struct S2GREPOSITORYGITINT
 } S2GREPOSITORYGITINT;
 typedef S2GREPOSITORYGITINT *PS2GREPOSITORYGITINT;
 typedef const S2GREPOSITORYGITINT *PCS2GREPOSITORYGITINT;
+
+
+static PS2GBRANCH s2gGitBranchCreateWorker(const char *pachName, size_t cchName)
+{
+    size_t cbName = (cchName + 1) * sizeof(char);
+    PS2GBRANCH pBranch = (PS2GBRANCH)RTMemAllocZ(RT_UOFFSETOF_DYN(S2GBRANCH, szName[cbName]));
+    if (pBranch)
+    {
+        memcpy(&pBranch->szName[0], pachName, cchName * sizeof(char));
+        pBranch->szName[cchName];
+        pBranch->paSvnRev2Mark          = 0;
+        pBranch->cSvnRev2MarkEntries    = 0;
+        pBranch->cSvnRev2MarkEntriesMax = 0;
+        pBranch->idGitMarkMerge         = UINT64_MAX;
+    }
+
+    return pBranch;
+}
+
+
+DECLINLINE(PS2GBRANCH) s2gGitGetBranch(PS2GREPOSITORYGITINT pThis, const char *pszBranch)
+{
+    PS2GBRANCH pBranch;
+    RTListForEach(&pThis->LstBranches, pBranch, S2GBRANCH, NdBranches)
+    {
+        if (!RTStrCmp(pBranch->szName, pszBranch))
+            return pBranch;
+    }
+
+    return NULL;
+}
+
+
+static int s2gGitBranchAssociateMarkWithSvnRev(PS2GBRANCH pBranch, uint64_t idCommitMark, uint64_t idSvnRev)
+{
+    if (pBranch->cSvnRev2MarkEntries == pBranch->cSvnRev2MarkEntriesMax)
+    {
+        size_t cbNew = (pBranch->cSvnRev2MarkEntriesMax + _4K) * sizeof(*pBranch->paSvnRev2Mark);
+        PS2GSVNREV2MARK paNew = (PS2GSVNREV2MARK)RTMemRealloc(pBranch->paSvnRev2Mark, cbNew);
+        if (!paNew)
+            return VERR_NO_MEMORY;
+
+        pBranch->paSvnRev2Mark           = paNew;
+        pBranch->cSvnRev2MarkEntriesMax += _4K;
+    }
+
+    pBranch->paSvnRev2Mark[pBranch->cSvnRev2MarkEntries].idSvnRev  = idSvnRev;
+    pBranch->paSvnRev2Mark[pBranch->cSvnRev2MarkEntries].idGitMark = idCommitMark;
+    pBranch->cSvnRev2MarkEntries++;
+    return VINF_SUCCESS;
+}
+
+
+static int s2gGitBranchQueryMarkFromSvnRev(PS2GREPOSITORYGITINT pThis, const char *pszBranch,
+                                           uint64_t idSvnRev, uint64_t *pidMark)
+{
+    PS2GBRANCH pBranch = s2gGitGetBranch(pThis, pszBranch);
+    if (!pBranch)
+        return VERR_NOT_FOUND;
+
+    /* Search for the matching mark. */
+    /** @todo Inefficient but the space won't be huge most of the time and we go backwards,
+     *        branching is usually done from direct ancestor commit. */
+    for (uint32_t i = pBranch->cSvnRev2MarkEntries; i > 0; i--)
+    {
+        if (pBranch->paSvnRev2Mark[i - 1].idSvnRev == idSvnRev)
+        {
+            *pidMark = pBranch->paSvnRev2Mark[i - 1].idGitMark;
+            return VINF_SUCCESS;
+        }
+    }
+
+    return VERR_NOT_FOUND;
+}
 
 
 static int s2gGitExecWrapper(const char *pszExec, const char *pszCwd, const char * const *papszArgs)
@@ -183,14 +297,69 @@ DECLINLINE(int) s2gGitWrite(PS2GREPOSITORYGITINT pThis, const void *pvBuf, size_
 }
 
 
+static int s2gGitRepositoryQueryBranches(const char *pszGitRepoPath, PRTLISTANCHOR pLstBranches)
+{
+    S2GSCRATCHBUF StdOut;
+    s2gScratchBufInit(&StdOut);
+
+    const char *apszArgs[] = { GIT_BINARY, "branch", "-a", NULL };
+    int rc = s2gGitExecWrapperStdOut(GIT_BINARY, pszGitRepoPath, &apszArgs[0], &StdOut);
+    if (RT_SUCCESS(rc))
+    {
+        char *pch = (char *)s2gScratchBufEnsureSize(&StdOut, 1);
+        if (pch)
+        {
+            /* Ensure termination. */
+            *pch = '\0';
+
+            pch = StdOut.pbBuf;
+            while (*pch != '\0')
+            {
+                /* We should always start at a new line, which might start with an asterisk to denote the active branch. */
+                if (*pch == '*')
+                    pch++;
+
+                /* Now there are 1-2 spaces. */
+                while (*pch == ' ')
+                    pch++;
+
+                /* Now starts the branch name, followed by a newline. */
+                char *pchName = pch;
+                while (   *pch != '\r'
+                       && *pch != '\n')
+                    pch++;
+
+                size_t cchName = pch - pchName;
+                PS2GBRANCH pBranch = s2gGitBranchCreateWorker(pchName, cchName);
+                if (!pBranch)
+                {
+                    rc = VERR_NO_MEMORY;
+                    break;
+                }
+
+                RTListAppend(pLstBranches, &pBranch->NdBranches);
+
+                /* Get past the new line. */
+                while (*pch == '\r' || *pch == '\n')
+                    pch++;
+            }
+        }
+        else
+            rc = VERR_NO_MEMORY;
+    }
+
+    return rc;
+}
+
+
 DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *pszGitRepoPath, const char *pszDefaultBranch,
                                        const char *pszDumpFilename, uint32_t *pidRevLast)
 {
-    RT_NOREF(pszDefaultBranch);
-
     int rc = VINF_SUCCESS;
-    char szBranchReset[RTSHA1_DIGEST_LEN + 1];
     bool fIncremental = RTPathExists(pszGitRepoPath);
+    RTLISTANCHOR LstBranches;
+
+    RTListInit(&LstBranches);
     if (!fIncremental)
     {
         rc = RTDirCreate(pszGitRepoPath, 0700, RTDIRCREATE_FLAGS_NO_SYMLINKS);
@@ -202,45 +371,63 @@ DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *
             {
                 const char *apszArgsCfg[] = { GIT_BINARY, "config", "core.ignorecase", "false", NULL };
                 rc = s2gGitExecWrapper(GIT_BINARY, pszGitRepoPath, &apszArgsCfg[0]);
+                if (RT_SUCCESS(rc))
+                {
+                    PS2GBRANCH pBranch = s2gGitBranchCreateWorker(pszDefaultBranch, strlen(pszDefaultBranch));
+                    if (pBranch)
+                        RTListAppend(&LstBranches, &pBranch->NdBranches);
+                    else
+                        rc = VERR_NO_MEMORY;
+                }
             }
         }
     }
     else
     {
-        /* Try to gather the svn revision to continue at from the commit log. */
-        S2GSCRATCHBUF StdOut;
-        s2gScratchBufInit(&StdOut);
-
-        *pidRevLast = 0;
-
-        const char *apszArgs[] = { GIT_BINARY, "log", "HEAD", "-1", NULL };
-        rc = s2gGitExecWrapperStdOut(GIT_BINARY, pszGitRepoPath, &apszArgs[0], &StdOut);
+        /*
+         * Query all branches on the existing repository and try to get the latest subversion
+         * revision the repository has across all branches.
+         */
+        rc = s2gGitRepositoryQueryBranches(pszGitRepoPath, &LstBranches);
         if (RT_SUCCESS(rc))
         {
-            char *pb = (char *)s2gScratchBufEnsureSize(&StdOut, 1);
-            if (pb)
+            *pidRevLast = 0;
+
+            PS2GBRANCH pIt;
+            RTListForEach(&LstBranches, pIt, S2GBRANCH, NdBranches)
             {
-                *pb = '\0';
+                /* Try to gather the svn revision to continue at from the commit log. */
+                S2GSCRATCHBUF StdOut;
+                s2gScratchBufInit(&StdOut);
 
-                const char *pszRevision = RTStrStr(StdOut.pbBuf, "svn:sync-xref-src-repo-rev: ");
-                if (pszRevision)
+                const char *apszArgs[] = { GIT_BINARY, "log", pIt->szName, "-1", NULL };
+                rc = s2gGitExecWrapperStdOut(GIT_BINARY, pszGitRepoPath, &apszArgs[0], &StdOut);
+                if (RT_SUCCESS(rc))
                 {
-                    pszRevision += sizeof("svn:sync-xref-src-repo-rev: ") - 1;
-                    if (*pszRevision == 'r')
-                        *pidRevLast = RTStrToUInt32(pszRevision + 1);
-                }
+                    char *pb = (char *)s2gScratchBufEnsureSize(&StdOut, 1);
+                    if (pb)
+                    {
+                        *pb = '\0';
 
-                /* Get the last commit hash for continuing with the incremental import. */
-                if (RTStrStartsWith(StdOut.pbBuf, "commit "))
-                {
-                    memcpy(&szBranchReset[0], StdOut.pbBuf + sizeof("commit ") - 1, RTSHA1_DIGEST_LEN);
-                    szBranchReset[RTSHA1_DIGEST_LEN] = '\0';
+                        const char *pszRevision = RTStrStr(StdOut.pbBuf, "svn:sync-xref-src-repo-rev: ");
+                        if (pszRevision)
+                        {
+                            pszRevision += sizeof("svn:sync-xref-src-repo-rev: ") - 1;
+                            if (*pszRevision == 'r')
+                            {
+                                uint32_t idRev = RTStrToUInt32(pszRevision + 1);
+                                if (idRev > *pidRevLast)
+                                    *pidRevLast = idRev;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        break;
+                        rc = VERR_NO_MEMORY;
+                    }
                 }
-                else
-                    rc = VERR_NOT_FOUND;
             }
-            else
-                rc = VERR_NO_MEMORY;
         }
     }
 
@@ -254,6 +441,7 @@ DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *
             s2gScratchBufInit(&pThis->BufScratch);
             pThis->idCommitMark = 1;
             pThis->hFileDump    = NIL_RTFILE;
+            RTListMove(&pThis->LstBranches, &LstBranches);
 
             if (pszDumpFilename)
                 rc = RTFileOpen(&pThis->hFileDump, pszDumpFilename, RTFILE_O_WRITE | RTFILE_O_CREATE_REPLACE | RTFILE_O_DENY_NONE);
@@ -278,14 +466,20 @@ DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *
                     {
                         if (fIncremental)
                         {
-                            /* Reload the branches. */
-                            s2gScratchBufReset(&pThis->BufScratch);
-                            rc = s2gScratchBufPrintf(&pThis->BufScratch,
-                                                     "reset refs/heads/%s\n"
-                                                     "from %s\n\n",
-                                                     pszDefaultBranch, szBranchReset);
-                            if (RT_SUCCESS(rc))
-                                rc = s2gGitWrite(pThis, pThis->BufScratch.pbBuf, pThis->BufScratch.offBuf);
+                            /* Reload all branches. */
+                            PS2GBRANCH pIt;
+                            RTListForEach(&pThis->LstBranches, pIt, S2GBRANCH, NdBranches)
+                            {
+                                s2gScratchBufReset(&pThis->BufScratch);
+                                rc = s2gScratchBufPrintf(&pThis->BufScratch,
+                                                         "reset refs/heads/%s\n"
+                                                         "from refs/heads/%s^0\n\n",
+                                                         pIt->szName, pIt->szName);
+                                if (RT_SUCCESS(rc))
+                                    rc = s2gGitWrite(pThis, pThis->BufScratch.pbBuf, pThis->BufScratch.offBuf);
+                                if (RT_FAILURE(rc))
+                                    break;
+                            }
                         }
 
                         if (RT_SUCCESS(rc))
@@ -341,6 +535,35 @@ DECLHIDDEN(int) s2gGitRepositoryClose(S2GREPOSITORYGIT hGitRepo)
 }
 
 
+DECLHIDDEN(bool) s2gGitBranchExists(S2GREPOSITORYGIT hGitRepo, const char *pszName)
+{
+    PS2GREPOSITORYGITINT pThis = hGitRepo;
+    return s2gGitGetBranch(pThis, pszName) != NULL;
+}
+
+
+DECLHIDDEN(int) s2gGitBranchCreate(S2GREPOSITORYGIT hGitRepo, const char *pszName, const char *pszBranchAncestor,
+                                   uint32_t idRevAncestor)
+{
+    PS2GREPOSITORYGITINT pThis = hGitRepo;
+
+    uint64_t idMark = 0;
+    int rc = s2gGitBranchQueryMarkFromSvnRev(pThis, pszBranchAncestor, idRevAncestor, &idMark);
+    if (RT_FAILURE(rc))
+        return rc;
+
+    PS2GBRANCH pBranch = s2gGitBranchCreateWorker(pszName, strlen(pszName));
+    if (pBranch)
+    {
+        pBranch->idGitMarkMerge = idMark;
+        RTListAppend(&pThis->LstBranches, &pBranch->NdBranches);
+        return VINF_SUCCESS;
+    }
+
+    return VERR_NO_MEMORY;
+}
+
+
 DECLHIDDEN(int) s2gGitTransactionStart(S2GREPOSITORYGIT hGitRepo)
 {
     PS2GREPOSITORYGITINT pThis = hGitRepo;
@@ -362,22 +585,31 @@ DECLHIDDEN(int) s2gGitTransactionStart(S2GREPOSITORYGIT hGitRepo)
 
 
 DECLHIDDEN(int) s2gGitTransactionCommit(S2GREPOSITORYGIT hGitRepo, const char *pszAuthor, const char *pszAuthorEmail,
-                                       const char *pszLog, int64_t cEpochSecs)
+                                        const char *pszLog, int64_t cEpochSecs, const char *pszBranch, uint32_t idSvnRev)
 {
     PS2GREPOSITORYGITINT pThis = hGitRepo;
 
+    PS2GBRANCH pBranch = s2gGitGetBranch(pThis, pszBranch);
+    if (!pBranch)
+        return VERR_NOT_FOUND;
+
     s2gScratchBufReset(&pThis->BufScratch);
     size_t cchLog = strlen(pszLog);
+    uint64_t const idMark = pThis->idCommitMark++;
     int rc = s2gScratchBufPrintf(&pThis->BufScratch,
                                  "commit refs/heads/%s\n"
                                  "mark :%RU64\n"
                                  "committer %s <%s> %RI64 +0000\n"
                                  "data %zu\n"
                                  "%s\n",
-                                 "main" /** @todo Make branch configurable*/,
-                                 pThis->idCommitMark++,
+                                 pszBranch, idMark,
                                  pszAuthor, pszAuthorEmail, cEpochSecs,
                                  cchLog, pszLog);
+    if (RT_SUCCESS(rc) && pBranch->idGitMarkMerge != UINT64_MAX)
+    {
+        rc = s2gScratchBufPrintf(&pThis->BufScratch, "merge :%RU64\ndeleteall\n", pBranch->idGitMarkMerge);
+        pBranch->idGitMarkMerge = UINT64_MAX;
+    }
     if (RT_SUCCESS(rc))
     {
         rc = s2gGitWrite(pThis, pThis->BufScratch.pbBuf, pThis->BufScratch.offBuf);
@@ -385,6 +617,8 @@ DECLHIDDEN(int) s2gGitTransactionCommit(S2GREPOSITORYGIT hGitRepo, const char *p
             rc = s2gGitWrite(pThis, pThis->BufDeletedFiles.pbBuf, pThis->BufDeletedFiles.offBuf);
         if (RT_SUCCESS(rc) && pThis->BufModifiedFiles.offBuf)
             rc = s2gGitWrite(pThis, pThis->BufModifiedFiles.pbBuf, pThis->BufModifiedFiles.offBuf);
+        if (RT_SUCCESS(rc))
+            rc = s2gGitBranchAssociateMarkWithSvnRev(pBranch, idMark, idSvnRev);
     }
 
     return rc;

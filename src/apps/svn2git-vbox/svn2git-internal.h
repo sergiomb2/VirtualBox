@@ -156,9 +156,13 @@ DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *
                                        const char *pszDumpFilename, uint32_t *pidRevLast);
 DECLHIDDEN(int) s2gGitRepositoryClose(S2GREPOSITORYGIT hGitRepo);
 
+DECLHIDDEN(bool) s2gGitBranchExists(S2GREPOSITORYGIT hGitRepo, const char *pszName);
+DECLHIDDEN(int) s2gGitBranchCreate(S2GREPOSITORYGIT hGitRepo, const char *pszName, const char *pszBranchAncestor,
+                                   uint32_t idRevAncestor);
+
 DECLHIDDEN(int) s2gGitTransactionStart(S2GREPOSITORYGIT hGitRepo);
 DECLHIDDEN(int) s2gGitTransactionCommit(S2GREPOSITORYGIT hGitRepo, const char *pszAuthor, const char *pszAuthorEmail,
-                                       const char *pszLog, int64_t cEpochSecs);
+                                        const char *pszLog, int64_t cEpochSecs, const char *pszBranch, uint32_t idSvnRev);
 DECLHIDDEN(int) s2gGitTransactionFileAdd(S2GREPOSITORYGIT hGitRepo, const char *pszPath, bool fIsExec, uint64_t cbFile);
 DECLHIDDEN(int) s2gGitTransactionFileWriteData(S2GREPOSITORYGIT hGitRepo, const void *pvBuf, size_t cb);
 DECLHIDDEN(int) s2gGitTransactionFileRemove(S2GREPOSITORYGIT hGitRepo, const char *pszPath);
