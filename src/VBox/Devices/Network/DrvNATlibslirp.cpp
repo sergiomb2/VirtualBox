@@ -1624,8 +1624,11 @@ static DECLCALLBACK(int) drvNATConstruct(PPDMDRVINS pDrvIns, PCFGMNODE pCfg, uin
 
     GET_STRING_ALLOC(rc, pDrvIns, pCfg, "TFTPPrefix", pThis->pszTFTPPrefix);
     GET_STRING_ALLOC(rc, pDrvIns, pCfg, "BootFile", pThis->pszBootFile);
-    rc = RTStrATruncate(&pThis->pszBootFile, BOOTP_FILE_MAX_LEN);
-    AssertRCReturn(rc, rc);
+    if (RTStrEnd(pThis->pszBootFile, BOOTP_FILE_MAX_LEN + 1) == NULL)
+    {
+        rc = RTStrATruncate(&pThis->pszBootFile, BOOTP_FILE_MAX_LEN);
+        AssertRCReturn(rc, rc);
+    }
     GET_STRING_ALLOC(rc, pDrvIns, pCfg, "NextServer", pThis->pszNextServer);
 
     int fDNSProxy = 0;
