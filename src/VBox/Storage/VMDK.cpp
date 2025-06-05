@@ -777,6 +777,14 @@ static int vmdkFileClose(PVMDKIMAGE pImage, PVMDKFILE *ppVmdkFile, bool fDelete)
 static DECLCALLBACK(int) vmdkFileInflateHelper(void *pvUser, void *pvBuf, size_t cbBuf, size_t *pcbBuf)
 {
     VMDKCOMPRESSIO *pInflateState = (VMDKCOMPRESSIO *)pvUser;
+    LogRel(("Inflating VMDK %s - Details:\n \
+            pInflateState->iOffset: %d\n    \
+            pInflateState->cbCompGrain: %d\n    \
+            pInflateState->pvCompGrain: %p",    \
+            pInflateState->pImage->pszFilename, \
+            pInflateState->iOffset, \
+            pInflateState->cbCompGrain, \
+            pInflateState->pvCompGrain));
     size_t cbInjected = 0;
 
     Assert(cbBuf);
