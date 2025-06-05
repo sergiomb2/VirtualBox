@@ -7802,7 +7802,7 @@ TEMPLATE_VBoxMainClientSignedExe           = VBox Main Client VM (executable), s
 TEMPLATE_VBoxMainClientSignedExe_EXTENDS   = VBoxMainClientExe
 if "$(KBUILD_TARGET)" == "win" && "$(VBOX_SIGNING_MODE)" == "test"
  TEMPLATE_VBoxMainClientSignedExe_POST_CMDS = $(VBOX_UTF8_MANIFEST_CMDS)$(NLTAB)$(call VBOX_SIGN_IMAGE_FN,$(out),,2)
-else if "$(KBUILD_TARGET)" == "win" && ("$(VBOX_SIGNING_MODE)" == "test" || "$(VBOX_SIGNING_MODE)" == "adhoc")
+else if "$(KBUILD_TARGET)" == "darwin" && ("$(VBOX_SIGNING_MODE)" == "test" || "$(VBOX_SIGNING_MODE)" == "adhoc")
  TEMPLATE_VBoxMainClientSignedExe_POST_CMDS = $(call VBOX_SIGN_IMAGE_FN,$(out),,2)
 endif
 
