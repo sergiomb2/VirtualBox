@@ -1,0 +1,153 @@
+name: Oracle VirtualBox Bug Report
+description: File a bug report for Oracle VirtualBox.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report! If you encounter unexpected behavior, or a regression from a prior version, you can fill this out to generate an issue.
+
+        <details>
+        <summary><h3>Some advice to improve your chances of getting your problem solved</h3></summary>
+
+        - **Fill this issue out entirely!** Especially including any applicable log files. Including log files (e.g. VBox.log) helps us narrow down problems promptly.
+
+        - **Provide a patch!** The VirtualBox core team works first on customer issues and feature requests and is not nearly large enough to investigate all user bug reports, even ones that seem very important to the people affected. Providing a patch, or helping someone else to do so greatly improves your chances of a fix. Technical questions from people working on patches are welcome.
+
+        - **Remember that you can still do a lot of work on a bug even if you can't program by studying and isolating it.** Problems which developers (not just core developers) can reproduce quickly and easily are much more likely to be fixed than problems which only happen on certain systems, or require installing special software in special virtual machines. So look for simpler ways of triggering the problem.
+
+        - **Try out a [test build](https://www.virtualbox.org/wiki/Testbuilds)** to see if the problem has already been fixed.
+
+        - **Do some research** (e.g. using search engines, our [forums](http://forums.virtualbox.org/) and existing issues) before creating a ticket. **Try to solve as much of the problem as you can** yourself or in collaboration with other users.
+        </details>
+
+        ## Important info before opening an issue
+        - Describe as precisely as you can **how to reproduce the problem.**
+
+        - **Attach a (full) log file** ("Machine" menu/"Show Log" in the main VirtualBox Manager window) straight away to save time for you and for us. The log file contains a lot of useful information about both the host and the guest systems as well as information about what happened during a particular machine run. Please do not cut and paste it. Attach it to the issue description by dragging the file on to the description text area or by clicking the "Paste, drop, or click to add files" button to the lower left of the text area.
+
+        - Look for possible duplicate issues and end-user forum topics first.
+
+        - Write your summary carefully. The bug tracker and ticket notifications are mainly seen by (busy) developers, and unless a summary catches their eye and looks related to the things they as an individual work on the ticket may not even be read.
+
+        - Please stay polite, relevant and on-topic. Offensive or unrelated comments and tickets hurt everyone and may be deleted.
+
+        - Do not report compile and development problems here, use the developer mailing list for such problems.
+
+        - If you want to report a crash of VirtualBox on a Linux/Solaris host, please provide a [core dump](https://www.virtualbox.org/wiki/Core_dump) if possible. If you want to report a crash on a Windows host, please attach a [minidump](https://www.virtualbox.org/wiki/User_FAQ#Windowsminidumps) if possible.
+
+        - Utilize proper [Github Markdown](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax) formatting.
+        
+  - type: dropdown
+    id: version
+    attributes:
+      label: Version
+      options:
+        - trunk/main
+        - 7.1.10
+        - 7.1.8
+        - 7.1.6
+        - 7.1.4
+        - 7.1.2
+        - 7.1.0
+        - Other or before v7.1.0
+    validations:
+        required: true
+  - type: dropdown
+    id: host_os
+    attributes:
+      label: Host OS Type
+      options:
+        - macOS
+        - Windows
+        - Solaris
+        - Linux
+        - all
+        - other
+    validations:
+        required: true
+  - type: dropdown
+    id: host_arch
+    attributes:
+      label: Host Architecture
+      options:
+        - ARM
+        - x86
+    validations:
+        required: true
+  - type: dropdown
+    id: guest_os
+    attributes:
+      label: Guest OS Type
+      options:
+        - macOS
+        - Windows
+        - Solaris
+        - Linux
+        - all
+        - other
+    validations:
+        required: true
+  - type: dropdown
+    id: guest_arch
+    attributes:
+      label: Guest Architecture
+      options:
+        - ARM
+        - x86
+    validations:
+        required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - 3D Support
+        - Audio
+        - API
+        - API/REST
+        - Cloud Integration
+        - Documentation
+        - EFI
+        - Guest Additions/Drag and Drop
+        - Guest Additions/Guest Control
+        - Guest Additions/Shared Clipboard
+        - Guest Additions/Shared Folders
+        - Guest Additions/Other
+        - Guest SMP
+        - GUI
+        - Host Support
+        - Installer
+        - Network
+        - RDP
+        - Snapshots
+        - Storage and Virtual Disks
+        - USB and Serial Ports
+        - VBoxManage CLI
+        - VM Import/Export
+        - VMM
+        - Other
+    validations:
+        required: true
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened?
+      description: Describe the bug/unexpected behavior. Also tell us, what did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: How can we reproduce this?
+      description: Please be as detailed as possible.
+    validations:
+      required: true
+  - type: checkboxes
+    id: did_upload_files
+    attributes:
+      label: Did you upload *all* of your necessary log files, screenshots, etc.?
+      options:
+        - label: Yes, I've uploaded all pertinent files to this issue.
+          required: true
