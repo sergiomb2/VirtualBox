@@ -1,5 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: Compile and Development problems
-    url: https://www.virtualbox.org/mailman/listinfo/vbox-dev
-    about: Please ask about developer problems via our mailing list.
