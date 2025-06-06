@@ -2276,7 +2276,187 @@ static RTEXITCODE s2gSvnVerifyBlob(PS2GCTX pThis, PCS2GSVNREV pRev, const char *
 }
 
 
-static RTEXITCODE s2gSvnVerifyRecursiveWorker(PS2GCTX pThis, PS2GSVNREV pRev, const char *pszSvnPath, const char *pszGitPath)
+static RTEXITCODE s2gSvnQueryGitEntriesForPath(const char *pszGitPath, PRTLISTANCHOR pLstGitEntries, uint32_t *pcEntries)
+{
+    RTEXITCODE rcExit = RTEXITCODE_SUCCESS;
+    RTDIR hDir = NIL_RTDIR;
+    int rc = RTDirOpen(&hDir, pszGitPath);
+    if (RT_SUCCESS(rc))
+    {
+        PRTDIRENTRYEX pEntry = NULL;
+        size_t cbDirEntry = 0;
+        uint32_t cEntries = 0;
+
+        for (;;)
+        {
+            rc = RTDirReadExA(hDir, &pEntry, &cbDirEntry, RTFSOBJATTRADD_NOTHING, RTPATH_F_ON_LINK);
+            if (rc == VERR_NO_MORE_FILES)
+                break;
+            else if (RT_FAILURE(rc))
+            {
+                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to read from directory '%s': %Rrc", pszGitPath, rc);
+                break;
+            }
+
+            if (RTDirEntryExIsStdDotLink(pEntry))
+                continue;
+
+            PS2GDIRENTRY pNew = (PS2GDIRENTRY)RTMemAllocZ(sizeof(*pNew));
+            if (!pNew)
+            {
+                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to allocate new directory entry for path: %s/%s",
+                                        pszGitPath, pEntry->szName);
+                break;
+            }
+            pNew->pszName = RTStrDup(pEntry->szName);
+            if (!pNew->pszName)
+            {
+                RTMemFree(pNew);
+                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to allocate new directory entry for path: %s/%s",
+                                        pszGitPath, pEntry->szName);
+                break;
+            }
+
+            pNew->fIsDir  = RT_BOOL(pEntry->Info.Attr.fMode & RTFS_TYPE_DIRECTORY);
+            RTListAppend(pLstGitEntries, &pNew->NdDir);
+            cEntries++;
+        }
+
+        if (pEntry)
+            RTDirReadExAFree(&pEntry, &cbDirEntry);
+
+        if (rcExit != RTEXITCODE_SUCCESS)
+        {
+            /** @todo Free list of entries. */
+        }
+        else
+            *pcEntries = cEntries;
+
+        RTDirClose(hDir);
+    }
+    else
+        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to open directory '%s': %Rrc", pszGitPath, rc);
+
+    return rcExit;
+}
+
+
+static PS2GDIRENTRY s2gFindGitEntry(PRTLISTANCHOR pLstEntries, const char *pszName)
+{
+    PS2GDIRENTRY pIt;
+    RTListForEach(pLstEntries, pIt, S2GDIRENTRY, NdDir)
+    {
+        if (!RTStrCmp(pszName, pIt->pszName))
+        {
+            RTListNodeRemove(&pIt->NdDir);
+            return pIt;
+        }
+    }
+
+    return NULL;
+}
+
+
+static RTEXITCODE s2gSvnVerifyIgnores(PS2GCTX pThis, PS2GSVNREV pRev, const char *pszSvnPath, const char *pszGitPath,
+                                      uint32_t cGitPathEntries, bool fSvnDirEmpty)
+{
+    s2gScratchBufReset(&pThis->BufScratch);
+
+    RTEXITCODE rcExit = RTEXITCODE_SUCCESS;
+    svn_string_t *pProp = NULL;
+    svn_error_t *pSvnErr = svn_fs_node_prop(&pProp, pRev->pSvnFsRoot, pszSvnPath, "svn:ignore", pRev->pPoolRev);
+    if (!pSvnErr)
+    {
+        if (pProp)
+            rcExit = s2gSvnProcessIgnoreContent(&pThis->BufScratch, pProp->data, false /*fGlobal*/);
+
+        /* Process global ignores only in the root path. */
+        if (   rcExit == RTEXITCODE_SUCCESS
+            && *pszGitPath == '\0')
+        {
+            pProp = NULL;
+            pSvnErr = svn_fs_node_prop(&pProp, pRev->pSvnFsRoot, pszSvnPath, "svn:global-ignores", pRev->pPoolRev);
+            if (!pSvnErr)
+            {
+                if (pProp)
+                    rcExit = s2gSvnProcessIgnoreContent(&pThis->BufScratch, pProp->data, true /*fGlobal*/);
+            }
+            else
+            {
+                svn_error_trace(pSvnErr);
+                rcExit = RTEXITCODE_FAILURE;
+            }
+        }
+
+        if (rcExit == RTEXITCODE_SUCCESS
+            && pThis->BufScratch.offBuf)
+        {
+            char szGitPath[RTPATH_MAX];
+            RTStrPrintf2(&szGitPath[0], sizeof(szGitPath), "%s/.gitignore", pszGitPath);
+
+            if (pThis->BufScratch.offBuf)
+            {
+                void *pvFile = NULL;
+                size_t cbGitFile = 0;
+                int rc = RTFileReadAll(szGitPath, &pvFile, &cbGitFile);
+                if (RT_SUCCESS(rc))
+                {
+                    if (cbGitFile == pThis->BufScratch.offBuf)
+                    {
+                        if (memcmp(pThis->BufScratch.pbBuf, pvFile, pThis->BufScratch.offBuf))
+                            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "'%s' and '%s' differ in content",
+                                                    pszSvnPath, pszGitPath);
+                    }
+                    else
+                        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "'%s' and '%s' differ in size (%RU64 vs %zu)",
+                                                pszSvnPath, szGitPath, pThis->BufScratch.offBuf, cbGitFile);
+                    if (rcExit == RTEXITCODE_FAILURE)
+                    {
+                        AssertFailed();
+                        RTFILE hFile;
+                        RTFileOpen(&hFile, "/tmp/out", RTFILE_O_WRITE | RTFILE_O_CREATE_REPLACE | RTFILE_O_DENY_NONE);
+                        RTFileWrite(hFile, pThis->BufScratch.pbBuf, pThis->BufScratch.offBuf, NULL);
+                        RTFileClose(hFile);
+                    }
+                    RTFileReadAllFree(pvFile, cbGitFile);
+                }
+                else
+                    rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to read '%s'", pszGitPath);
+            }
+            else if (cGitPathEntries == 1 && fSvnDirEmpty)
+            {
+                /* Check that the .gitignore file is 0 bytes. */
+                uint64_t cbFile = 0;
+                int rc = RTFileQuerySizeByPath(szGitPath, &cbFile);
+                if (RT_SUCCESS(rc))
+                {
+                    if (cbFile != 0)
+                        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE,
+                                                "Empty git path '%s' without svn:properties has non empty .gitignore",
+                                                pszGitPath);
+                }
+                else
+                    rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE,
+                                            "Failed to query file size of '%s': %Rrc", szGitPath, rc);
+            }
+            else
+                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE,
+                                        "Non empty git path '%s' has .gitignore but no svn:ignore properties set",
+                                        pszGitPath);
+        }
+    }
+    else
+    {
+        svn_error_trace(pSvnErr);
+        rcExit = RTEXITCODE_FAILURE;
+    }
+
+    return rcExit;
+}
+
+
+static RTEXITCODE s2gSvnVerifyRecursiveWorker(PS2GCTX pThis, PS2GSVNREV pRev, const char *pszSvnPath, const char *pszGitPath,
+                                              uint32_t uLvl)
 {
     RTEXITCODE rcExit = RTEXITCODE_SUCCESS;
     apr_hash_t *pEntries;
@@ -2285,6 +2465,13 @@ static RTEXITCODE s2gSvnVerifyRecursiveWorker(PS2GCTX pThis, PS2GSVNREV pRev, co
     {
         RTLISTANCHOR LstEntries;
         RTListInit(&LstEntries);
+
+        RTLISTANCHOR LstGitEntries;
+        uint32_t cGitEntries = 0;
+        RTListInit(&LstGitEntries);
+        rcExit = s2gSvnQueryGitEntriesForPath(pszGitPath, &LstGitEntries, &cGitEntries);
+        if (rcExit != RTEXITCODE_SUCCESS)
+            return rcExit;
 
         for (apr_hash_index_t *pIt = apr_hash_first(pRev->pPoolRev, pEntries); pIt; pIt = apr_hash_next(pIt))
         {
@@ -2317,6 +2504,8 @@ static RTEXITCODE s2gSvnVerifyRecursiveWorker(PS2GCTX pThis, PS2GSVNREV pRev, co
             RTListNodeInsertBefore(&LstEntries, &pNew->NdDir);
         }
 
+        bool fSvnDirEmpty = RTListIsEmpty(&LstEntries);
+
         /* Walk the entries and recurse into directories. */
         PS2GDIRENTRY pIt, pItNext;
         RTListForEachSafe(&LstEntries, pIt, pItNext, S2GDIRENTRY, NdDir)
@@ -2333,16 +2522,31 @@ static RTEXITCODE s2gSvnVerifyRecursiveWorker(PS2GCTX pThis, PS2GSVNREV pRev, co
                 continue;
             }
 
+            /* Try to find the matching entry in the git path. */
+            PS2GDIRENTRY pGit = s2gFindGitEntry(&LstGitEntries, pIt->pszName);
+            if (!pGit)
+            {
+                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "SVN path '%s/%s' not available in git repository",
+                                        pszSvnPath, pIt->pszName);
+                break;
+            }
+
+            if (pGit->fIsDir != pIt->fIsDir)
+            {
+                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "SVN path '%s/%s' and git path disagree about fIsDir",
+                                        pszSvnPath, pIt->pszName);
+                RTStrFree((char *)pGit->pszName);
+                RTMemFree(pGit);
+                break;
+            }
+
             char szSvnPath[RTPATH_MAX];
             char szGitPath[RTPATH_MAX];
             RTStrPrintf2(&szSvnPath[0], sizeof(szSvnPath), "%s/%s", pszSvnPath, pIt->pszName);
-            if (*pszGitPath == '\0')
-                RTStrPrintf2(&szGitPath[0], sizeof(szGitPath), "%s", pIt->pszName);
-            else
-                RTStrPrintf2(&szGitPath[0], sizeof(szGitPath), "%s/%s", pszGitPath, pIt->pszName);
+            RTStrPrintf2(&szGitPath[0], sizeof(szGitPath), "%s/%s", pszGitPath, pIt->pszName);
 
             if (pIt->fIsDir)
-                rcExit = s2gSvnVerifyRecursiveWorker(pThis, pRev, szSvnPath, szGitPath);
+                rcExit = s2gSvnVerifyRecursiveWorker(pThis, pRev, szSvnPath, szGitPath, uLvl + 1);
             else
                 rcExit = s2gSvnVerifyBlob(pThis, pRev, szSvnPath, szGitPath);
             RTMemFree(pIt);
@@ -2351,10 +2555,45 @@ static RTEXITCODE s2gSvnVerifyRecursiveWorker(PS2GCTX pThis, PS2GSVNREV pRev, co
                 break;
         }
 
+        if (rcExit == RTEXITCODE_SUCCESS)
+        {
+            /*
+             * Now there might be some entries left in the git path like .gitignore files.
+             * Verify those.
+             */
+            RTListForEach(&LstGitEntries, pIt, S2GDIRENTRY, NdDir)
+            {
+                if (!RTStrCmp(pIt->pszName, ".gitignore"))
+                {
+                    /*
+                     * .gitignore files appear either when there is a svn:ignore property set on the svn directory
+                     * or when the SVN directory is empty.
+                     */
+                    rcExit = s2gSvnVerifyIgnores(pThis, pRev, pszSvnPath, pszGitPath, cGitEntries, fSvnDirEmpty);
+                }
+                else if (   !RTStrCmp(pIt->pszName, ".git")
+                         && uLvl == 0)
+                { /* .git at top level is okay. */ }
+                else
+                {
+                    rcExit = RTMsgErrorExit(RTEXITCODE_SUCCESS, "File '%s/%s' in git repository is unknown to svn",
+                                            pszGitPath, pIt->pszName);
+                    break;
+                }
+            }
+        }
+
         /* Free any leftover entries. */
         RTListForEachSafe(&LstEntries, pIt, pItNext, S2GDIRENTRY, NdDir)
         {
             RTListNodeRemove(&pIt->NdDir);
+            RTMemFree(pIt);
+        }
+
+        RTListForEachSafe(&LstGitEntries, pIt, pItNext, S2GDIRENTRY, NdDir)
+        {
+            RTListNodeRemove(&pIt->NdDir);
+            RTStrFree((char *)pIt->pszName);
             RTMemFree(pIt);
         }
     }
@@ -2376,7 +2615,7 @@ static RTEXITCODE s2gSvnVerifyRevision(PS2GCTX pThis, uint32_t idSvnRev, const c
     if (rcExit == RTEXITCODE_FAILURE)
         return rcExit;
 
-    rcExit = s2gSvnVerifyRecursiveWorker(pThis, &Rev, "/trunk", pszGitPath);
+    rcExit = s2gSvnVerifyRecursiveWorker(pThis, &Rev, "/trunk", pszGitPath, 0);
     svn_pool_destroy(Rev.pPoolRev);
     return rcExit;
 }
