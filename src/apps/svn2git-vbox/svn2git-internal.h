@@ -34,6 +34,7 @@
 #include <iprt/cdefs.h>
 #include <iprt/errcore.h>
 #include <iprt/mem.h>
+#include <iprt/sha.h>
 #include <iprt/string.h>
 
 RT_C_DECLS_BEGIN
@@ -152,9 +153,22 @@ DECLINLINE(int) s2gScratchBufWrite(PS2GSCRATCHBUF pBuf, const void *pvBuf, size_
 typedef struct S2GREPOSITORYGITINT *S2GREPOSITORYGIT;
 typedef S2GREPOSITORYGIT *PS2GREPOSITORYGIT;
 
+typedef struct S2GGITCOMMIT2SVNREV
+{
+    /** The internal subversion revision number. */
+    uint32_t            idSvnRev;
+    /** The corresponding commit hash. */
+    char                szCommitHash[RTSHA1_DIGEST_LEN + 1];
+} S2GGITCOMMIT2SVNREV;
+typedef S2GGITCOMMIT2SVNREV *PS2GGITCOMMIT2SVNREV;
+typedef const S2GGITCOMMIT2SVNREV *PCS2GGITCOMMIT2SVNREV;
+
 DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *pszGitRepoPath, const char *pszDefaultBranch,
                                        const char *pszDumpFilename, uint32_t *pidRevLast);
 DECLHIDDEN(int) s2gGitRepositoryClose(S2GREPOSITORYGIT hGitRepo);
+DECLHIDDEN(int) s2gGitRepositoryClone(S2GREPOSITORYGIT hGitRepo, const char *pszWorktree);
+DECLHIDDEN(int) s2gGitRepositoryCheckout(const char *pszWorktree, const char *pszCommitHash);
+DECLHIDDEN(int) s2gGitRepositoryQueryCommits(S2GREPOSITORYGIT hGitRepo, PS2GGITCOMMIT2SVNREV *ppaCommits, uint32_t *pcCommits);
 
 DECLHIDDEN(bool) s2gGitBranchExists(S2GREPOSITORYGIT hGitRepo, const char *pszName);
 DECLHIDDEN(int) s2gGitBranchCreate(S2GREPOSITORYGIT hGitRepo, const char *pszName, const char *pszBranchAncestor,

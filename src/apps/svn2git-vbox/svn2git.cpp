@@ -29,7 +29,9 @@
 /*********************************************************************************************************************************
 *   Header Files                                                                                                                 *
 *********************************************************************************************************************************/
+#include <iprt/dir.h>
 #include <iprt/err.h>
+#include <iprt/file.h>
 #include <iprt/getopt.h>
 #include <iprt/initterm.h>
 #include <iprt/json.h>
@@ -214,6 +216,9 @@ typedef struct S2GCTX
     /** The default git branch. */
     const char      *pszGitDefBranch;
 
+    /** Path to the temporary directory in verification mode. */
+    const char      *pszVerifyTmpPath;
+
     /** @name Subversion related members.
      * @{ */
     /** The default pool. */
@@ -270,6 +275,8 @@ static RTEXITCODE s2gUsage(const char *argv0)
               "  --rev-start <revision>                   The revision to start conversion at\n"
               "  --rev-end   <revision>                   The last revision to convert (default is last repository revision)\n"
               "  --dump-file <file path>                  File to dump the fast-import stream to\n"
+              "  --verify-result <tmp path>               Verify SVN and git repository for the given revisions,\n"
+              "                                           takes a path to temporarily create a worktree for the git repository\n"
               , argv0);
     return RTEXITCODE_SUCCESS;
 }
@@ -280,20 +287,21 @@ static RTEXITCODE s2gUsage(const char *argv0)
  */
 static void s2gCtxInit(PS2GCTX pThis)
 {
-    pThis->idRevStart      = UINT32_MAX;
-    pThis->idRevEnd        = UINT32_MAX;
-    pThis->pszCfgFilename  = NULL;
-    pThis->pszSvnRepo      = NULL;
-    pThis->pszGitRepoPath  = NULL;
-    pThis->pszGitDefBranch = "main";
-    pThis->pszDumpFilename = NULL;
+    pThis->idRevStart       = UINT32_MAX;
+    pThis->idRevEnd         = UINT32_MAX;
+    pThis->pszCfgFilename   = NULL;
+    pThis->pszSvnRepo       = NULL;
+    pThis->pszGitRepoPath   = NULL;
+    pThis->pszGitDefBranch  = "main";
+    pThis->pszDumpFilename  = NULL;
+    pThis->pszVerifyTmpPath = NULL;
 
-    pThis->pPoolDefault    = NULL;
-    pThis->pPoolScratch    = NULL;
-    pThis->pSvnRepos       = NULL;
-    pThis->pSvnFs          = NULL;
+    pThis->pPoolDefault     = NULL;
+    pThis->pPoolScratch     = NULL;
+    pThis->pSvnRepos        = NULL;
+    pThis->pSvnFs           = NULL;
 
-    pThis->StrSpaceAuthors = NULL;
+    pThis->StrSpaceAuthors  = NULL;
     s2gScratchBufInit(&pThis->BufScratch);
     RTListInit(&pThis->LstExternals);
     RTListInit(&pThis->LstBranches);
@@ -333,6 +341,7 @@ static RTEXITCODE s2gParseArguments(PS2GCTX pThis, int argc, char **argv)
         { "--rev-start",                        's', RTGETOPT_REQ_UINT32  },
         { "--rev-end",                          'e', RTGETOPT_REQ_UINT32  },
         { "--dump-file",                        'd', RTGETOPT_REQ_STRING  },
+        { "--verify-result",                    'y', RTGETOPT_REQ_STRING  },
     };
 
     RTGETOPTUNION   ValueUnion;
@@ -370,6 +379,10 @@ static RTEXITCODE s2gParseArguments(PS2GCTX pThis, int argc, char **argv)
 
             case 'd':
                 pThis->pszDumpFilename = ValueUnion.psz;
+                break;
+
+            case 'y':
+                pThis->pszVerifyTmpPath = ValueUnion.psz;
                 break;
 
             case 'V':
@@ -1738,6 +1751,81 @@ static RTEXITCODE s2gSvnRevisionExportPaths(PS2GCTX pThis, PS2GSVNREV pRev)
 }
 
 
+static RTEXITCODE s2gSvnInitRevision(PS2GCTX pThis, uint32_t idRev, PS2GSVNREV pRev)
+{
+    RTListInit(&pRev->LstChanges);
+    pRev->pPoolRev = svn_pool_create(pThis->pPoolDefault);
+    if (!pRev->pPoolRev)
+        return RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to create APR pool for revision r%u", idRev);
+
+    /* Open revision and fetch properties. */
+    RTEXITCODE rcExit = RTEXITCODE_SUCCESS;
+    pRev->idRev             = idRev;
+    pRev->pszGitAuthor      = NULL;
+    pRev->pszGitAuthorEmail = NULL;
+    pRev->pBranch           = NULL;
+    svn_error_t *pSvnErr = svn_fs_revision_root(&pRev->pSvnFsRoot, pThis->pSvnFs, idRev, pRev->pPoolRev);
+    if (!pSvnErr)
+    {
+        apr_hash_t *pRevPros = NULL;
+
+        RT_GCC_NO_WARN_DEPRECATED_BEGIN
+        pSvnErr = svn_fs_revision_proplist(&pRevPros, pThis->pSvnFs, idRev, pRev->pPoolRev);
+        RT_GCC_NO_WARN_DEPRECATED_END
+        if (!pSvnErr)
+        {
+            svn_string_t *pSvnAuthor = (svn_string_t *)apr_hash_get(pRevPros, "svn:author",                 APR_HASH_KEY_STRING);
+            svn_string_t *pSvnDate   = (svn_string_t *)apr_hash_get(pRevPros, "svn:date",                   APR_HASH_KEY_STRING);
+            svn_string_t *pSvnLog    = (svn_string_t *)apr_hash_get(pRevPros, "svn:log",                    APR_HASH_KEY_STRING);
+            svn_string_t *pSvnXRef   = (svn_string_t *)apr_hash_get(pRevPros, "svn:sync-xref-src-repo-rev", APR_HASH_KEY_STRING);
+
+            AssertRelease(pSvnAuthor && pSvnDate && pSvnLog);
+            pSvnErr = svn_time_from_cstring(&pRev->AprTime, pSvnDate->data, pRev->pPoolRev);
+            if (!pSvnErr)
+            {
+                pRev->pszSvnAuthor = pSvnAuthor->data;
+                pRev->pszSvnLog    = pSvnLog->data;
+                pRev->pszSvnXref   = pSvnXRef ? pSvnXRef->data : NULL;
+
+                PCS2GAUTHOR pAuthor = (PCS2GAUTHOR)RTStrSpaceGet(&pThis->StrSpaceAuthors, pRev->pszSvnAuthor);
+                if (pAuthor)
+                {
+                    pRev->pszGitAuthor      = pAuthor->pszGitAuthor;
+                    pRev->pszGitAuthorEmail = pAuthor->pszGitEmail;
+
+                    RTTIMESPEC Tm;
+                    RTTimeSpecFromString(&Tm, pSvnDate->data);
+                    pRev->cEpochSecs = RTTimeSpecGetSeconds(&Tm);
+                    if (g_cVerbosity)
+                        RTMsgInfo("    %s %s %s\n", pRev->pszSvnAuthor, pSvnDate->data, pRev->pszSvnXref ? pRev->pszSvnXref : "");
+
+                    return RTEXITCODE_SUCCESS;
+                }
+                else
+                    rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Author '%s' is not known", pRev->pszSvnAuthor);
+            }
+            else
+            {
+                svn_error_trace(pSvnErr);
+                rcExit = RTEXITCODE_FAILURE;
+            }
+        }
+        else
+        {
+            svn_error_trace(pSvnErr);
+            rcExit = RTEXITCODE_FAILURE;
+        }
+    }
+    else
+    {
+        svn_error_trace(pSvnErr);
+        rcExit = RTEXITCODE_FAILURE;
+    }
+
+    svn_pool_destroy(pRev->pPoolRev);
+    return rcExit;
+}
+
 static RTEXITCODE s2gSvnExportRevision(PS2GCTX pThis, uint32_t idRev)
 {
     S2GSVNREV Rev;
@@ -1919,30 +2007,439 @@ static RTEXITCODE s2gGitInit(PS2GCTX pThis)
                                     pThis->pszDumpFilename, &idRevLast);
     if (RT_SUCCESS(rc))
     {
-        if (   pThis->idRevStart == UINT32_MAX
-            && idRevLast != 0)
+        if (pThis->idRevStart == UINT32_MAX)
         {
-            /*
-             * We need to match the revision to the one of the repository as svn:sync-xref-src-repo-rev
-             * is a property.
-             */
-            uint32_t idRevPublic = 0;
-            RTEXITCODE rcExit = s2gSvnFindMatchingRevision(pThis, idRevLast + 1, &idRevPublic);
-            if (rcExit != RTEXITCODE_SUCCESS)
-                return rcExit;
+            if (idRevLast != 0)
+            {
+                /*
+                 * We need to match the revision to the one of the repository as svn:sync-xref-src-repo-rev
+                 * is a property.
+                 */
+                uint32_t idRevPublic = 0;
+                RTEXITCODE rcExit = s2gSvnFindMatchingRevision(pThis, idRevLast + 1, &idRevPublic);
+                if (rcExit != RTEXITCODE_SUCCESS)
+                    return rcExit;
 
-            RTMsgInfo("Matched internal revision r%u to public r%u, continuing at that revision\n",
-                      idRevLast + 1, idRevPublic);
+                RTMsgInfo("Matched internal revision r%u to public r%u, continuing at that revision\n",
+                          idRevLast + 1, idRevPublic);
 
-            pThis->idRevStart = idRevPublic + 1;
+                pThis->idRevStart = idRevPublic + 1;
+            }
+            else
+                pThis->idRevStart = 1;
         }
-        else
-            pThis->idRevStart = 1;
         return RTEXITCODE_SUCCESS;
     }
 
     return RTMsgErrorExit(RTEXITCODE_FAILURE, "Creating the git repository under '%s' failed with: %Rrc",
                           pThis->pszGitRepoPath, rc);
+}
+
+
+static RTEXITCODE s2gSvnGetInternalRevisionFromPublic(PS2GCTX pThis, uint32_t idRev, uint32_t *pidRevInternal)
+{
+    apr_pool_t *pPool = svn_pool_create(NULL);
+    if (!pPool)
+        return RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to create APR pool");
+
+    svn_string_t *pSvnXRef = NULL;
+    RT_GCC_NO_WARN_DEPRECATED_BEGIN
+    svn_error_t *pSvnErr = svn_fs_revision_prop(&pSvnXRef, pThis->pSvnFs, idRev, "svn:sync-xref-src-repo-rev", pPool);
+    RT_GCC_NO_WARN_DEPRECATED_END
+    if (!pSvnErr)
+    {
+        if (g_cVerbosity >= 4)
+            RTMsgInfo("Searching r%u: %s\n", idRev, pSvnXRef ? pSvnXRef->data : "");
+
+        uint32_t idRevRef = pSvnXRef ? RTStrToUInt32(pSvnXRef->data) : 17427;
+        if (idRevRef)
+        {
+            *pidRevInternal = idRevRef;
+            svn_pool_destroy(pPool);
+            return RTEXITCODE_SUCCESS;
+        }
+        else
+            RTMsgErrorExit(RTEXITCODE_FAILURE, "r%u's svn:sync-xref-src-repo-rev property contains invalid data: %s",
+                           idRev, pSvnXRef->data);
+    }
+    else
+        svn_error_trace(pSvnErr);
+
+    svn_pool_destroy(pPool);
+    return RTEXITCODE_FAILURE;
+}
+
+
+static RTEXITCODE s2gSvnVerifyBlob(PS2GCTX pThis, PCS2GSVNREV pRev, const char *pszSvnPath, const char *pszGitPath)
+{
+    /* Create a new temporary pool. */
+    apr_pool_t *pPool = svn_pool_create(pRev->pPoolRev);
+    if (!pPool)
+        return RTMsgErrorExit(RTEXITCODE_FAILURE, "Allocating pool trying to dump '%s' failed", pszSvnPath);
+
+    //bool fIsExec = s2gPathIsExec(pSvnFsRoot, pszSvnPath, pPool);
+    RTEXITCODE rcExit = RTEXITCODE_SUCCESS;
+
+    /** @todo Symlinks. */
+    if (!s2gPathIsSymlink(pRev->pSvnFsRoot, pszSvnPath, pPool))
+    {
+        svn_stream_t *pSvnStrmIn = NULL;
+        svn_error_t *pSvnErr = svn_fs_file_contents(&pSvnStrmIn, pRev->pSvnFsRoot, pszSvnPath, pPool);
+        if (!pSvnErr)
+        {
+            /* Do EOL style conversions and keyword substitutions. */
+            apr_hash_t *pProps = NULL;
+            pSvnErr = svn_fs_node_proplist(&pProps, pRev->pSvnFsRoot, pszSvnPath, pPool);
+            if (!pSvnErr)
+            {
+                svn_string_t *pSvnStrEolStyle = (svn_string_t *)apr_hash_get(pProps, SVN_PROP_EOL_STYLE, APR_HASH_KEY_STRING);
+                svn_string_t *pSvnStrKeywords = (svn_string_t *)apr_hash_get(pProps, SVN_PROP_KEYWORDS,  APR_HASH_KEY_STRING);
+                if (pSvnStrEolStyle || pSvnStrKeywords)
+                {
+                    apr_hash_t *pHashKeywords = NULL;
+                    const char *pszEolStr = NULL;
+                    svn_subst_eol_style_t SvnEolStyle = svn_subst_eol_style_none;
+
+                    if (pSvnStrEolStyle)
+                        svn_subst_eol_style_from_value(&SvnEolStyle, &pszEolStr, pSvnStrEolStyle->data);
+
+                    if (pSvnStrKeywords)
+                    {
+                        /*
+                         * Need to find the revision where the file was changed last and extract
+                         * the necessary information required for substitution.
+                         */
+                        svn_fs_history_t *pSvnHistory = NULL;
+
+                        RT_GCC_NO_WARN_DEPRECATED_BEGIN
+                        svn_fs_node_history(&pSvnHistory, pRev->pSvnFsRoot, pszSvnPath, pPool);
+                        svn_fs_history_prev(&pSvnHistory, pSvnHistory, true, pPool);
+                        RT_GCC_NO_WARN_DEPRECATED_END
+                        svn_revnum_t revnum = 0;
+                        const char *psz = NULL;
+                        svn_fs_history_location(&psz, &revnum, pSvnHistory, pPool);
+
+                        apr_hash_t *pRevPros = NULL;
+
+                        RT_GCC_NO_WARN_DEPRECATED_BEGIN
+                        pSvnErr = svn_fs_revision_proplist(&pRevPros, pThis->pSvnFs, revnum, pPool);
+                        RT_GCC_NO_WARN_DEPRECATED_END
+                        svn_string_t *pSvnAuthor = (svn_string_t *)apr_hash_get(pRevPros, "svn:author",                 APR_HASH_KEY_STRING);
+                        svn_string_t *pSvnDate   = (svn_string_t *)apr_hash_get(pRevPros, "svn:date",                   APR_HASH_KEY_STRING);
+
+                        char aszRev[32];
+                        snprintf(aszRev, sizeof(aszRev), "%ld", revnum);
+
+                        apr_time_t AprTimeLast = 0;
+                        if (pSvnDate)
+                            svn_time_from_cstring(&AprTimeLast, pSvnDate->data, pPool);
+
+                        PCS2GAUTHOR pAuthor = (PCS2GAUTHOR)RTStrSpaceGet(&pThis->StrSpaceAuthors, pSvnAuthor->data);
+                        if (pAuthor)
+                        {
+                            char aszUrl[4096];
+                            snprintf(aszUrl, sizeof(aszUrl), "https://localhost/vbox/svn");
+                            char *pb = &aszUrl[sizeof("https://localhost/vbox/svn") - 1];
+                            const char *pszTmp = pszSvnPath;
+                            while (*pszTmp)
+                            {
+                                if (*pszTmp == ' ')
+                                {
+                                    *pb++ = '%';
+                                    *pb++ = '2';
+                                    *pb++ = '0';
+                                }
+                                else
+                                    *pb++ = *pszTmp;
+                                pszTmp++;
+                            }
+                            *pb = '\0';
+
+                            pSvnErr = svn_subst_build_keywords3(&pHashKeywords, pSvnStrKeywords->data,
+                                                                aszRev, aszUrl,
+                                                                "https://localhost/vbox/svn", AprTimeLast,
+                                                                pAuthor->pszGitEmail, pPool);
+                        }
+                    }
+
+                    if (!pSvnErr)
+                    {
+                        pSvnStrmIn = svn_subst_stream_translated(svn_stream_disown(pSvnStrmIn, pPool),
+                                                                 pszEolStr, FALSE, pHashKeywords, TRUE,
+                                                                 pPool);
+                        if (!pSvnStrmIn)
+                            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to inject translated stream for '%s'", pszSvnPath);
+                    }
+                }
+
+                if (!pSvnErr && rcExit == RTEXITCODE_SUCCESS)
+                {
+                    /* Read the content. */
+                    s2gScratchBufReset(&pThis->BufScratch);
+                    uint64_t cbFile = 0;
+                    for (;;)
+                    {
+                        void *pv = s2gScratchBufEnsureSize(&pThis->BufScratch, _4K);
+                        apr_size_t cbThisRead = _4K;
+                        pSvnErr = svn_stream_read_full(pSvnStrmIn, (char *)pv, &cbThisRead);
+                        if (pSvnErr)
+                            break;
+                        s2gScratchBufAdvance(&pThis->BufScratch, cbThisRead);
+
+                        cbFile += cbThisRead;
+                        if (cbThisRead < _4K)
+                            break;
+                    }
+
+                    void *pvFile = NULL;
+                    size_t cbGitFile = 0;
+                    int rc = RTFileReadAll(pszGitPath, &pvFile, &cbGitFile);
+                    if (RT_SUCCESS(rc))
+                    {
+                        if (cbGitFile == cbFile)
+                        {
+                            if (memcmp(pThis->BufScratch.pbBuf, pvFile, cbFile))
+                                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "'%s' and '%s' differ in content",
+                                                        pszSvnPath, pszGitPath);
+                        }
+                        else
+                            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "'%s' and '%s' differ in size (%RU64 vs %zu)",
+                                                    pszSvnPath, pszGitPath, cbFile, cbGitFile);
+                        if (rcExit == RTEXITCODE_FAILURE)
+                        {
+                            RTFILE hFile;
+                            RTFileOpen(&hFile, "/tmp/out", RTFILE_O_WRITE | RTFILE_O_CREATE_REPLACE | RTFILE_O_DENY_NONE);
+                            RTFileWrite(hFile, pThis->BufScratch.pbBuf, cbFile, NULL);
+                            RTFileClose(hFile);
+                        }
+                        RTFileReadAllFree(pvFile, cbGitFile);
+                    }
+                    else
+                        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to read '%s'", pszGitPath);
+                }
+            }
+        }
+
+        if (pSvnErr)
+        {
+            AssertFailed();
+            svn_error_trace(pSvnErr);
+            rcExit = RTEXITCODE_FAILURE;
+        }
+    }
+    else
+    {
+        svn_stream_t *pSvnStrmIn = NULL;
+        svn_error_t *pSvnErr = svn_fs_file_contents(&pSvnStrmIn, pRev->pSvnFsRoot, pszSvnPath, pPool);
+        if (!pSvnErr)
+        {
+            /* Determine stream length, due to substitutions this is  almost always different compared to what svn reports. */
+            s2gScratchBufReset(&pThis->BufScratch);
+            uint64_t cbFile = 0;
+            for (;;)
+            {
+                void *pv = s2gScratchBufEnsureSize(&pThis->BufScratch, _4K);
+                apr_size_t cbThisRead = _4K;
+                pSvnErr = svn_stream_read_full(pSvnStrmIn, (char *)pv, &cbThisRead);
+                if (pSvnErr)
+                    break;
+                s2gScratchBufAdvance(&pThis->BufScratch, cbThisRead);
+
+                cbFile += cbThisRead;
+                if (cbThisRead < _4K)
+                    break;
+            }
+
+            if (!pSvnErr)
+            {
+                size_t const cchLink = sizeof("link ") - 1;
+                if (!strncmp(pThis->BufScratch.pbBuf, "link ", cchLink))
+                {
+                    /** @todo */
+                }
+                else
+                    rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "'%s' is a special file but not a symlink, NOT IMPLEMENTED", pszSvnPath);
+            }
+        }
+
+        if (pSvnErr)
+        {
+            AssertFailed();
+            svn_error_trace(pSvnErr);
+            rcExit = RTEXITCODE_FAILURE;
+        }
+    }
+
+    svn_pool_destroy(pPool);
+    return rcExit;
+}
+
+
+static RTEXITCODE s2gSvnVerifyRecursiveWorker(PS2GCTX pThis, PS2GSVNREV pRev, const char *pszSvnPath, const char *pszGitPath)
+{
+    RTEXITCODE rcExit = RTEXITCODE_SUCCESS;
+    apr_hash_t *pEntries;
+    svn_error_t *pSvnErr = svn_fs_dir_entries(&pEntries, pRev->pSvnFsRoot, pszSvnPath, pRev->pPoolRev);
+    if (!pSvnErr)
+    {
+        RTLISTANCHOR LstEntries;
+        RTListInit(&LstEntries);
+
+        for (apr_hash_index_t *pIt = apr_hash_first(pRev->pPoolRev, pEntries); pIt; pIt = apr_hash_next(pIt))
+        {
+            const void *vkey;
+            void *value;
+            apr_hash_this(pIt, &vkey, NULL, &value);
+            const char *pszEntry = (const char *)vkey;
+            svn_fs_dirent_t *pEntry = (svn_fs_dirent_t *)value;
+
+            /* Insert the change into the list sorted by path. */
+            /** @todo Speedup. */
+            PS2GDIRENTRY pItEntries;
+            RTListForEach(&LstEntries, pItEntries, S2GDIRENTRY, NdDir)
+            {
+                int iCmp = strcmp(pItEntries->pszName, pszEntry);
+                if (!iCmp)
+                    return RTMsgErrorExit(RTEXITCODE_FAILURE, "Duplicate directory entry found in rev %d: %s",
+                                          pRev->idRev, pszEntry);
+                else if (iCmp > 0)
+                    break;
+            }
+            PS2GDIRENTRY pNew = (PS2GDIRENTRY)RTMemAllocZ(sizeof(*pNew));
+            if (!pNew)
+                return RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to allocate new directory entry for path: %s/%s",
+                                      pszSvnPath, pszEntry);
+            pNew->pszName = pszEntry;
+
+            AssertRelease(pEntry->kind == svn_node_dir || pEntry->kind == svn_node_file);
+            pNew->fIsDir  = pEntry->kind == svn_node_dir;
+            RTListNodeInsertBefore(&LstEntries, &pNew->NdDir);
+        }
+
+        /* Walk the entries and recurse into directories. */
+        PS2GDIRENTRY pIt, pItNext;
+        RTListForEachSafe(&LstEntries, pIt, pItNext, S2GDIRENTRY, NdDir)
+        {
+            RTListNodeRemove(&pIt->NdDir);
+
+            if (g_cVerbosity >= 5)
+                RTMsgInfo("Processing %s/%s\n", pszSvnPath, pIt->pszName);
+
+            /* Paths containing .git are invalid as git thinks these are other repositories. */
+            if (!RTStrCmp(pIt->pszName, ".git"))
+            {
+                RTMsgWarning("Skipping invalid path '%s/%s'\n", pszSvnPath, pIt->pszName);
+                continue;
+            }
+
+            char szSvnPath[RTPATH_MAX];
+            char szGitPath[RTPATH_MAX];
+            RTStrPrintf2(&szSvnPath[0], sizeof(szSvnPath), "%s/%s", pszSvnPath, pIt->pszName);
+            if (*pszGitPath == '\0')
+                RTStrPrintf2(&szGitPath[0], sizeof(szGitPath), "%s", pIt->pszName);
+            else
+                RTStrPrintf2(&szGitPath[0], sizeof(szGitPath), "%s/%s", pszGitPath, pIt->pszName);
+
+            if (pIt->fIsDir)
+                rcExit = s2gSvnVerifyRecursiveWorker(pThis, pRev, szSvnPath, szGitPath);
+            else
+                rcExit = s2gSvnVerifyBlob(pThis, pRev, szSvnPath, szGitPath);
+            RTMemFree(pIt);
+
+            if (rcExit != RTEXITCODE_SUCCESS)
+                break;
+        }
+
+        /* Free any leftover entries. */
+        RTListForEachSafe(&LstEntries, pIt, pItNext, S2GDIRENTRY, NdDir)
+        {
+            RTListNodeRemove(&pIt->NdDir);
+            RTMemFree(pIt);
+        }
+    }
+    else
+    {
+        AssertFailed();
+        svn_error_trace(pSvnErr);
+        rcExit = RTEXITCODE_FAILURE;
+    }
+
+    return rcExit;
+}
+
+
+static RTEXITCODE s2gSvnVerifyRevision(PS2GCTX pThis, uint32_t idSvnRev, const char *pszGitPath)
+{
+    S2GSVNREV Rev;
+    RTEXITCODE rcExit = s2gSvnInitRevision(pThis, idSvnRev, &Rev);
+    if (rcExit == RTEXITCODE_FAILURE)
+        return rcExit;
+
+    rcExit = s2gSvnVerifyRecursiveWorker(pThis, &Rev, "/trunk", pszGitPath);
+    svn_pool_destroy(Rev.pPoolRev);
+    return rcExit;
+}
+
+
+static RTEXITCODE s2gSvnVerify(PS2GCTX pThis)
+{
+    /* Create a worktree first. */
+    int rc = s2gGitRepositoryClone(pThis->hGitRepo, pThis->pszVerifyTmpPath);
+    if (RT_FAILURE(rc))
+        return RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to create worktree '%s': %Rrc",
+                              pThis->pszVerifyTmpPath, rc);
+
+    PS2GGITCOMMIT2SVNREV paCommits = NULL;
+    uint32_t cCommits = 0;
+    rc = s2gGitRepositoryQueryCommits(pThis->hGitRepo, &paCommits, &cCommits);
+    if (RT_FAILURE(rc))
+        return RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query commit list from git repository '%s': %Rrc",
+                              pThis->pszVerifyTmpPath, rc);
+
+    RTEXITCODE rcExit = RTEXITCODE_SUCCESS;
+    for (uint32_t idRev = pThis->idRevStart; idRev <= pThis->idRevEnd; idRev++)
+    {
+        /* Get the internal revision number and try to match it to a git commit. */
+        uint32_t idRevInternal = 0;
+        rcExit = s2gSvnGetInternalRevisionFromPublic(pThis, idRev, &idRevInternal);
+        if (rcExit != RTEXITCODE_SUCCESS)
+            break;
+
+        uint32_t idx = 0;
+        while (   idx < cCommits
+               && paCommits[idx].idSvnRev != idRevInternal)
+            idx++;
+
+        if (idx == cCommits)
+        {
+            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to find commit hash for revision r%u\n", idRev);
+            break;
+        }
+
+        rc = s2gGitRepositoryCheckout(pThis->pszVerifyTmpPath, paCommits[idx].szCommitHash);
+        if (RT_FAILURE(rc))
+        {
+            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to checkout commit '%s' in worktree '%s': %Rrc",
+                                    paCommits[idx].szCommitHash, pThis->pszVerifyTmpPath, rc);
+            break;
+        }
+
+        RTMsgInfo("Verifying r%u -> %s\n", idRev, paCommits[idx].szCommitHash);
+
+        rcExit = s2gSvnVerifyRevision(pThis, idRev, pThis->pszVerifyTmpPath);
+        if (rcExit != RTEXITCODE_SUCCESS)
+            break;
+    }
+
+#if 0
+    rc = RTDirRemoveRecursive(pThis->pszVerifyTmpPath, RTDIRRMREC_F_CONTENT_AND_DIR);
+    if (RT_FAILURE(rc))
+        return RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to completely remove worktree '%s': %Rrc",
+                              pThis->pszVerifyTmpPath, rc);
+#endif
+
+    RTMemFree(paCommits);
+    return rcExit;
 }
 
 
@@ -1973,7 +2470,10 @@ int main(int argc, char *argv[])
                         pIt->fCreated = s2gGitBranchExists(This.hGitRepo, pIt->pszGitBranch);
                     }
 
-                    rcExit = s2gSvnExport(&This);
+                    if (!This.pszVerifyTmpPath)
+                        rcExit = s2gSvnExport(&This);
+                    else
+                        rcExit = s2gSvnVerify(&This);
                 }
 
                 s2gGitRepositoryClose(This.hGitRepo);

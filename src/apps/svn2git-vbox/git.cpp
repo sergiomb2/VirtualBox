@@ -37,7 +37,6 @@
 #include <iprt/path.h>
 #include <iprt/pipe.h>
 #include <iprt/process.h>
-#include <iprt/sha.h>
 
 #include "svn2git-internal.h"
 
@@ -98,6 +97,9 @@ typedef struct S2GREPOSITORYGITINT
     RTPIPE          hPipeStderr;
     /** stdout of git fast-import. */
     RTPIPE          hPipeStdout;
+
+    /** The git repository path. */
+    char            *pszGitRepoPath;
 
     /* The dump file handle. */
     RTFILE          hFileDump;
@@ -275,6 +277,18 @@ static int s2gGitExecWrapperStdOut(const char *pszExec, const char *pszCwd, cons
         RTPipeClose(hPipeStdOutR);
     }
 
+    if (RT_SUCCESS(rc))
+    {
+        /* Ensure proper termination. */
+        char *pb = (char *)s2gScratchBufEnsureSize(pStdOut, 1);
+        if (pb)
+        {
+            *pb = '\0';
+        }
+        else
+            rc = VERR_NO_MEMORY;
+    }
+
     return rc;
 }
 
@@ -306,51 +320,66 @@ static int s2gGitRepositoryQueryBranches(const char *pszGitRepoPath, PRTLISTANCH
     int rc = s2gGitExecWrapperStdOut(GIT_BINARY, pszGitRepoPath, &apszArgs[0], &StdOut);
     if (RT_SUCCESS(rc))
     {
-        char *pch = (char *)s2gScratchBufEnsureSize(&StdOut, 1);
-        if (pch)
+        char *pch = StdOut.pbBuf;
+        while (*pch != '\0')
         {
-            /* Ensure termination. */
-            *pch = '\0';
+            /* We should always start at a new line, which might start with an asterisk to denote the active branch. */
+            if (*pch == '*')
+                pch++;
 
-            pch = StdOut.pbBuf;
-            while (*pch != '\0')
+            /* Now there are 1-2 spaces. */
+            while (*pch == ' ')
+                pch++;
+
+            /* Now starts the branch name, followed by a newline. */
+            char *pchName = pch;
+            while (   *pch != '\r'
+                   && *pch != '\n')
+                pch++;
+
+            size_t cchName = pch - pchName;
+            PS2GBRANCH pBranch = s2gGitBranchCreateWorker(pchName, cchName);
+            if (!pBranch)
             {
-                /* We should always start at a new line, which might start with an asterisk to denote the active branch. */
-                if (*pch == '*')
-                    pch++;
-
-                /* Now there are 1-2 spaces. */
-                while (*pch == ' ')
-                    pch++;
-
-                /* Now starts the branch name, followed by a newline. */
-                char *pchName = pch;
-                while (   *pch != '\r'
-                       && *pch != '\n')
-                    pch++;
-
-                size_t cchName = pch - pchName;
-                PS2GBRANCH pBranch = s2gGitBranchCreateWorker(pchName, cchName);
-                if (!pBranch)
-                {
-                    rc = VERR_NO_MEMORY;
-                    break;
-                }
-
-                RTListAppend(pLstBranches, &pBranch->NdBranches);
-
-                /* Get past the new line. */
-                while (*pch == '\r' || *pch == '\n')
-                    pch++;
+                rc = VERR_NO_MEMORY;
+                break;
             }
+
+            RTListAppend(pLstBranches, &pBranch->NdBranches);
+
+            /* Get past the new line. */
+            while (*pch == '\r' || *pch == '\n')
+                pch++;
         }
-        else
-            rc = VERR_NO_MEMORY;
     }
 
     return rc;
 }
 
+
+static int s2gGitRepositoryMapCommitToSvnRev(const char *pszGitRepoPath, const char *pszCommitHashOrBranch, uint32_t *pidSvnRev)
+{
+    S2GSCRATCHBUF StdOut;
+    s2gScratchBufInit(&StdOut);
+
+    const char *apszArgs[] = { GIT_BINARY, "log", pszCommitHashOrBranch, "-1", NULL };
+    int rc = s2gGitExecWrapperStdOut(GIT_BINARY, pszGitRepoPath, &apszArgs[0], &StdOut);
+    if (RT_SUCCESS(rc))
+    {
+        const char *pszRevision = RTStrStr(StdOut.pbBuf, "svn:sync-xref-src-repo-rev: ");
+        if (pszRevision)
+        {
+            pszRevision += sizeof("svn:sync-xref-src-repo-rev: ") - 1;
+            if (*pszRevision == 'r')
+            {
+                uint32_t idRev = RTStrToUInt32(pszRevision + 1);
+                *pidSvnRev = idRev;
+            }
+        }
+    }
+
+    return rc;
+}
 
 DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *pszGitRepoPath, const char *pszDefaultBranch,
                                        const char *pszDumpFilename, uint32_t *pidRevLast)
@@ -397,36 +426,13 @@ DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *
             RTListForEach(&LstBranches, pIt, S2GBRANCH, NdBranches)
             {
                 /* Try to gather the svn revision to continue at from the commit log. */
-                S2GSCRATCHBUF StdOut;
-                s2gScratchBufInit(&StdOut);
+                uint32_t idRev = 0;
+                rc = s2gGitRepositoryMapCommitToSvnRev(pszGitRepoPath, pIt->szName, &idRev);
+                if (RT_FAILURE(rc))
+                    break;
 
-                const char *apszArgs[] = { GIT_BINARY, "log", pIt->szName, "-1", NULL };
-                rc = s2gGitExecWrapperStdOut(GIT_BINARY, pszGitRepoPath, &apszArgs[0], &StdOut);
-                if (RT_SUCCESS(rc))
-                {
-                    char *pb = (char *)s2gScratchBufEnsureSize(&StdOut, 1);
-                    if (pb)
-                    {
-                        *pb = '\0';
-
-                        const char *pszRevision = RTStrStr(StdOut.pbBuf, "svn:sync-xref-src-repo-rev: ");
-                        if (pszRevision)
-                        {
-                            pszRevision += sizeof("svn:sync-xref-src-repo-rev: ") - 1;
-                            if (*pszRevision == 'r')
-                            {
-                                uint32_t idRev = RTStrToUInt32(pszRevision + 1);
-                                if (idRev > *pidRevLast)
-                                    *pidRevLast = idRev;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        break;
-                        rc = VERR_NO_MEMORY;
-                    }
-                }
+                if (idRev > *pidRevLast)
+                    *pidRevLast = idRev;
             }
         }
     }
@@ -436,68 +442,76 @@ DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *
         PS2GREPOSITORYGITINT pThis = (PS2GREPOSITORYGITINT)RTMemAllocZ(sizeof(*pThis));
         if (pThis)
         {
-            s2gScratchBufInit(&pThis->BufDeletedFiles);
-            s2gScratchBufInit(&pThis->BufModifiedFiles);
-            s2gScratchBufInit(&pThis->BufScratch);
-            pThis->idCommitMark = 1;
-            pThis->hFileDump    = NIL_RTFILE;
-            RTListMove(&pThis->LstBranches, &LstBranches);
-
-            if (pszDumpFilename)
-                rc = RTFileOpen(&pThis->hFileDump, pszDumpFilename, RTFILE_O_WRITE | RTFILE_O_CREATE_REPLACE | RTFILE_O_DENY_NONE);
-
-            if (RT_SUCCESS(rc))
+            pThis->pszGitRepoPath = RTStrDup(pszGitRepoPath);
+            if (pThis->pszGitRepoPath)
             {
-                RTPIPE hPipeFiR = NIL_RTPIPE;
-                rc = RTPipeCreate(&hPipeFiR, &pThis->hPipeWrite, RTPIPE_C_INHERIT_READ);
+                s2gScratchBufInit(&pThis->BufDeletedFiles);
+                s2gScratchBufInit(&pThis->BufModifiedFiles);
+                s2gScratchBufInit(&pThis->BufScratch);
+                pThis->idCommitMark = 1;
+                pThis->hFileDump    = NIL_RTFILE;
+                RTListMove(&pThis->LstBranches, &LstBranches);
+
+                if (pszDumpFilename)
+                    rc = RTFileOpen(&pThis->hFileDump, pszDumpFilename, RTFILE_O_WRITE | RTFILE_O_CREATE_REPLACE | RTFILE_O_DENY_NONE);
+
                 if (RT_SUCCESS(rc))
                 {
-                    RTHANDLE HndIn;
-                    HndIn.enmType = RTHANDLETYPE_PIPE;
-                    HndIn.u.hPipe = hPipeFiR;
-
-                    const char *apszArgs[] = { GIT_BINARY, "fast-import", NULL };
-                    rc = RTProcCreateEx(GIT_BINARY, &apszArgs[0], RTENV_DEFAULT, RTPROC_FLAGS_SEARCH_PATH | RTPROC_FLAGS_CWD,
-                                        &HndIn, NULL, NULL,
-                                        NULL, NULL, (void *)pszGitRepoPath,
-                                        &pThis->hProcFastImport);
-                    RTPipeClose(hPipeFiR);
+                    RTPIPE hPipeFiR = NIL_RTPIPE;
+                    rc = RTPipeCreate(&hPipeFiR, &pThis->hPipeWrite, RTPIPE_C_INHERIT_READ);
                     if (RT_SUCCESS(rc))
                     {
-                        if (fIncremental)
-                        {
-                            /* Reload all branches. */
-                            PS2GBRANCH pIt;
-                            RTListForEach(&pThis->LstBranches, pIt, S2GBRANCH, NdBranches)
-                            {
-                                s2gScratchBufReset(&pThis->BufScratch);
-                                rc = s2gScratchBufPrintf(&pThis->BufScratch,
-                                                         "reset refs/heads/%s\n"
-                                                         "from refs/heads/%s^0\n\n",
-                                                         pIt->szName, pIt->szName);
-                                if (RT_SUCCESS(rc))
-                                    rc = s2gGitWrite(pThis, pThis->BufScratch.pbBuf, pThis->BufScratch.offBuf);
-                                if (RT_FAILURE(rc))
-                                    break;
-                            }
-                        }
+                        RTHANDLE HndIn;
+                        HndIn.enmType = RTHANDLETYPE_PIPE;
+                        HndIn.u.hPipe = hPipeFiR;
 
+                        const char *apszArgs[] = { GIT_BINARY, "fast-import", NULL };
+                        rc = RTProcCreateEx(GIT_BINARY, &apszArgs[0], RTENV_DEFAULT, RTPROC_FLAGS_SEARCH_PATH | RTPROC_FLAGS_CWD,
+                                            &HndIn, NULL, NULL,
+                                            NULL, NULL, (void *)pszGitRepoPath,
+                                            &pThis->hProcFastImport);
+                        RTPipeClose(hPipeFiR);
                         if (RT_SUCCESS(rc))
                         {
-                            *phGitRepo = pThis;
-                            return VINF_SUCCESS;
-                        }
-                    }
-                    else
-                        RTPipeClose(pThis->hPipeWrite);
-                }
-            }
+                            if (fIncremental)
+                            {
+                                /* Reload all branches. */
+                                PS2GBRANCH pIt;
+                                RTListForEach(&pThis->LstBranches, pIt, S2GBRANCH, NdBranches)
+                                {
+                                    s2gScratchBufReset(&pThis->BufScratch);
+                                    rc = s2gScratchBufPrintf(&pThis->BufScratch,
+                                                             "reset refs/heads/%s\n"
+                                                             "from refs/heads/%s^0\n\n",
+                                                             pIt->szName, pIt->szName);
+                                    if (RT_SUCCESS(rc))
+                                        rc = s2gGitWrite(pThis, pThis->BufScratch.pbBuf, pThis->BufScratch.offBuf);
+                                    if (RT_FAILURE(rc))
+                                        break;
+                                }
+                            }
 
-            if (pThis->hFileDump != NIL_RTFILE)
-            {
-                RTFileClose(pThis->hFileDump);
-                RTFileDelete(pszDumpFilename);
+                            if (RT_SUCCESS(rc))
+                            {
+                                *phGitRepo = pThis;
+                                return VINF_SUCCESS;
+                            }
+                        }
+                        else
+                            RTPipeClose(pThis->hPipeWrite);
+                    }
+                }
+
+                if (pThis->hFileDump != NIL_RTFILE)
+                {
+                    RTFileClose(pThis->hFileDump);
+                    RTFileDelete(pszDumpFilename);
+                }
+
+                RTStrFree(pThis->pszGitRepoPath);
             }
+            else
+                rc = VERR_NO_MEMORY;
 
             RTMemFree(pThis);
         }
@@ -530,7 +544,121 @@ DECLHIDDEN(int) s2gGitRepositoryClose(S2GREPOSITORYGIT hGitRepo)
     s2gScratchBufFree(&pThis->BufDeletedFiles);
     s2gScratchBufFree(&pThis->BufModifiedFiles);
     s2gScratchBufFree(&pThis->BufScratch);
+    RTStrFree(pThis->pszGitRepoPath);
     RTMemFree(pThis);
+    return rc;
+}
+
+
+DECLHIDDEN(int) s2gGitRepositoryClone(S2GREPOSITORYGIT hGitRepo, const char *pszWorktree)
+{
+    PS2GREPOSITORYGITINT pThis = hGitRepo;
+
+    const char *apszArgs[] = { GIT_BINARY, "clone", pThis->pszGitRepoPath, pszWorktree, NULL };
+    return s2gGitExecWrapper(GIT_BINARY, pThis->pszGitRepoPath, &apszArgs[0]);
+}
+
+
+DECLHIDDEN(int) s2gGitRepositoryCheckout(const char *pszWorktree, const char *pszCommitHash)
+{
+    const char *apszArgs[] = { GIT_BINARY, "checkout", "--quiet", pszCommitHash, NULL };
+    return s2gGitExecWrapper(GIT_BINARY, pszWorktree, &apszArgs[0]);
+}
+
+
+DECLHIDDEN(int) s2gGitRepositoryQueryCommits(S2GREPOSITORYGIT hGitRepo, PS2GGITCOMMIT2SVNREV *ppaCommits, uint32_t *pcCommits)
+{
+    PS2GREPOSITORYGITINT pThis = hGitRepo;
+
+    S2GSCRATCHBUF StdOut;
+    s2gScratchBufInit(&StdOut);
+
+    const char *apszArgsCount[] = { GIT_BINARY, "rev-list", "--count", "--all", NULL };
+    int rc = s2gGitExecWrapperStdOut(GIT_BINARY, pThis->pszGitRepoPath, &apszArgsCount[0], &StdOut);
+    if (RT_SUCCESS(rc))
+    {
+        uint32_t cCommits = 0;
+        rc = RTStrToUInt32Ex(StdOut.pbBuf, NULL, 10, &cCommits);
+        if (RT_SUCCESS(rc))
+        {
+            s2gScratchBufReset(&StdOut);
+            const char *apszArgs[] = { GIT_BINARY, "log", "--no-abbrev", "--oneline", "--format=%H %b", NULL };
+            rc = s2gGitExecWrapperStdOut(GIT_BINARY, pThis->pszGitRepoPath, &apszArgs[0], &StdOut);
+            if (RT_SUCCESS(rc))
+            {
+                PS2GGITCOMMIT2SVNREV paCommits = (PS2GGITCOMMIT2SVNREV)RTMemAllocZ(cCommits * sizeof(*paCommits));
+                if (paCommits)
+                {
+                    char *pch = StdOut.pbBuf;
+                    uint32_t idCommit = 0;
+                    while (*pch != '\0')
+                    {
+                        if (pch[RTSHA1_DIGEST_LEN] != ' ')
+                        {
+                            AssertFailed();
+                            rc = VERR_INVALID_STATE;
+                            break;
+                        }
+
+                        memcpy(&paCommits[idCommit].szCommitHash[0], pch, RTSHA1_DIGEST_LEN);
+                        paCommits[idCommit].szCommitHash[RTSHA1_DIGEST_LEN] = '\0';
+
+                        pch += RTSHA1_DIGEST_LEN;
+                        const char *pchRevision = RTStrStr(pch, "svn:sync-xref-src-repo-rev: ");
+                        if (pchRevision)
+                        {
+                            pchRevision += sizeof("svn:sync-xref-src-repo-rev: ") - 1;
+                            if (*pchRevision == 'r')
+                            {
+                                char *pszNext = NULL;
+                                rc = RTStrToUInt32Ex(pchRevision + 1, &pszNext, 10, &paCommits[idCommit].idSvnRev);
+                                if (RT_SUCCESS(rc))
+                                    pch = pszNext;
+                                else if (!strncmp(pchRevision + 1, "<NULL>", sizeof("<NULL>") - 1))
+                                {
+                                    paCommits[idCommit].idSvnRev = 17427;
+                                    rc = VINF_SUCCESS;
+                                    pch = (char *)pchRevision + 1 + sizeof("<NULL>") - 1;
+                                }
+                                else
+                                    AssertFailed();
+                            }
+                            else
+                            {
+                                AssertFailed();
+                                rc = VERR_INVALID_STATE;
+                            }
+                        }
+                        else
+                        {
+                            AssertFailed();
+                            rc = VERR_INVALID_STATE;
+                        }
+
+                        if (RT_FAILURE(rc))
+                            break;
+
+                        while (*pch == '\n')
+                            pch++;
+
+                        idCommit++;
+                    }
+
+                    if (RT_SUCCESS(rc))
+                    {
+                        *ppaCommits = paCommits;
+                        *pcCommits  = cCommits;
+                    }
+                    else
+                        RTMemFree(paCommits);
+                }
+                else
+                    rc = VERR_NO_MEMORY;
+            }
+        }
+    }
+
+    s2gScratchBufFree(&StdOut);
     return rc;
 }
 
