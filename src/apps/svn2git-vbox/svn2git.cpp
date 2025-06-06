@@ -2388,8 +2388,7 @@ static RTEXITCODE s2gSvnVerifyIgnores(PS2GCTX pThis, PS2GSVNREV pRev, const char
             }
         }
 
-        if (rcExit == RTEXITCODE_SUCCESS
-            && pThis->BufScratch.offBuf)
+        if (rcExit == RTEXITCODE_SUCCESS)
         {
             char szGitPath[RTPATH_MAX];
             RTStrPrintf2(&szGitPath[0], sizeof(szGitPath), "%s/.gitignore", pszGitPath);
@@ -2576,6 +2575,7 @@ static RTEXITCODE s2gSvnVerifyRecursiveWorker(PS2GCTX pThis, PS2GSVNREV pRev, co
                 { /* .git at top level is okay. */ }
                 else
                 {
+                    /** @todo Externals */
                     rcExit = RTMsgErrorExit(RTEXITCODE_SUCCESS, "File '%s/%s' in git repository is unknown to svn",
                                             pszGitPath, pIt->pszName);
                     break;
@@ -2623,18 +2623,21 @@ static RTEXITCODE s2gSvnVerifyRevision(PS2GCTX pThis, uint32_t idSvnRev, const c
 
 static RTEXITCODE s2gSvnVerify(PS2GCTX pThis)
 {
-    /* Create a worktree first. */
-    int rc = s2gGitRepositoryClone(pThis->hGitRepo, pThis->pszVerifyTmpPath);
-    if (RT_FAILURE(rc))
-        return RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to create worktree '%s': %Rrc",
-                              pThis->pszVerifyTmpPath, rc);
-
     PS2GGITCOMMIT2SVNREV paCommits = NULL;
     uint32_t cCommits = 0;
-    rc = s2gGitRepositoryQueryCommits(pThis->hGitRepo, &paCommits, &cCommits);
+    int rc = s2gGitRepositoryQueryCommits(pThis->hGitRepo, &paCommits, &cCommits);
     if (RT_FAILURE(rc))
         return RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query commit list from git repository '%s': %Rrc",
                               pThis->pszVerifyTmpPath, rc);
+
+    /* Create a worktree if it doesn't exist. */
+    if (!RTPathExists(pThis->pszVerifyTmpPath))
+    {
+        rc = s2gGitRepositoryClone(pThis->hGitRepo, pThis->pszVerifyTmpPath);
+        if (RT_FAILURE(rc))
+            return RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to create worktree '%s': %Rrc",
+                                  pThis->pszVerifyTmpPath, rc);
+    }
 
     RTEXITCODE rcExit = RTEXITCODE_SUCCESS;
     for (uint32_t idRev = pThis->idRevStart; idRev <= pThis->idRevEnd; idRev++)
