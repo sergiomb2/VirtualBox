@@ -2124,8 +2124,8 @@ static RTEXITCODE s2gSvnVerifyBlob(PS2GCTX pThis, PCS2GSVNREV pRev, const char *
                         RT_GCC_NO_WARN_DEPRECATED_BEGIN
                         pSvnErr = svn_fs_revision_proplist(&pRevPros, pThis->pSvnFs, revnum, pPool);
                         RT_GCC_NO_WARN_DEPRECATED_END
-                        svn_string_t *pSvnAuthor = (svn_string_t *)apr_hash_get(pRevPros, "svn:author",                 APR_HASH_KEY_STRING);
-                        svn_string_t *pSvnDate   = (svn_string_t *)apr_hash_get(pRevPros, "svn:date",                   APR_HASH_KEY_STRING);
+                        svn_string_t *pSvnAuthor = (svn_string_t *)apr_hash_get(pRevPros, "svn:author", APR_HASH_KEY_STRING);
+                        svn_string_t *pSvnDate   = (svn_string_t *)apr_hash_get(pRevPros, "svn:date",   APR_HASH_KEY_STRING);
 
                         char aszRev[32];
                         snprintf(aszRev, sizeof(aszRev), "%ld", revnum);
@@ -2207,6 +2207,7 @@ static RTEXITCODE s2gSvnVerifyBlob(PS2GCTX pThis, PCS2GSVNREV pRev, const char *
                                                     pszSvnPath, pszGitPath, cbFile, cbGitFile);
                         if (rcExit == RTEXITCODE_FAILURE)
                         {
+                            AssertFailed();
                             RTFILE hFile;
                             RTFileOpen(&hFile, "/tmp/out", RTFILE_O_WRITE | RTFILE_O_CREATE_REPLACE | RTFILE_O_DENY_NONE);
                             RTFileWrite(hFile, pThis->BufScratch.pbBuf, cbFile, NULL);
@@ -2412,8 +2413,10 @@ static RTEXITCODE s2gSvnVerify(PS2GCTX pThis)
 
         if (idx == cCommits)
         {
-            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to find commit hash for revision r%u\n", idRev);
-            break;
+            /* Assume an empty svn commit. */
+            /** @todo Verify */
+            RTMsgWarning("Failed to find commit hash for revision r%u\n", idRev);
+            continue;
         }
 
         rc = s2gGitRepositoryCheckout(pThis->pszVerifyTmpPath, paCommits[idx].szCommitHash);
