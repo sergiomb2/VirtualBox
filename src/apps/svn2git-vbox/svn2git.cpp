@@ -1662,7 +1662,7 @@ static RTEXITCODE s2gSvnExportSinglePath(PS2GCTX pThis, PS2GSVNREV pRev, const c
                     strncpy(szGitPath, pszGitPath, sizeof(szGitPath));
                     RTPathStripFilename(szGitPath);
 
-                    rcExit = s2gSvnAddGitIgnore(pThis, pszGitPath, NULL /*pvData*/, 0 /*cbData*/);
+                    rcExit = s2gSvnAddGitIgnore(pThis, szGitPath, NULL /*pvData*/, 0 /*cbData*/);
                 }
             }
             else
@@ -2638,7 +2638,9 @@ static RTEXITCODE s2gSvnVerifyRecursiveWorker(PS2GCTX pThis, PS2GSVNREV pRev, co
                 else
                 {
                     /** @todo Externals */
-                    rcExit = RTMsgErrorExit(RTEXITCODE_SUCCESS, "File '%s/%s' in git repository is unknown to svn",
+                    if (!strcmp(pIt->pszName, "kBuild"))
+                        continue;
+                    rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "File '%s/%s' in git repository is unknown to svn",
                                             pszGitPath, pIt->pszName);
                     break;
                 }
