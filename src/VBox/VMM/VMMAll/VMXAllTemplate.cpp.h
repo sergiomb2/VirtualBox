@@ -1397,6 +1397,19 @@ static int vmxHCCheckCachedVmcsCtls(PVMCPUCC pVCpu, PCVMXVMCSINFO pVmcsInfo, boo
 {
     const char * const pcszVmcs = fIsNstGstVmcs ? "Nested-guest VMCS" : "VMCS";
 
+#ifdef HMVMX_VERIFY_VMCS_MAGIC
+    {
+        uint64_t       uVmcsMagic = 0;
+        uint64_t const uExpectedMagic = fIsNstGstVmcs ? HMVMX_NST_GST_VMCS_MAGIC : HMVMX_GST_VMCS_MAGIC;
+        int const rcMagic = VMX_VMCS_READ_64(pVCpu, VMX_VMCS64_CTRL_EXEC_VMCS_PTR_FULL, &uVmcsMagic);
+        AssertRC(rcMagic);
+        AssertMsgReturnStmt(uVmcsMagic == uExpectedMagic,
+                            ("%s VMCS magic mismatch: Expected=%#RX32 VMCS=%#RX32\n", pcszVmcs, uExpectedMagic, uVmcsMagic),
+                            pVCpu->hm.s.u32HMError = VMX_VCI_VMCS_MAGIC_MISMATCH,
+                            VERR_VMX_VMCS_FIELD_CACHE_INVALID);
+    }
+#endif
+
     uint32_t u32Val;
     int rc = VMX_VMCS_READ_32(pVCpu, VMX_VMCS32_CTRL_ENTRY, &u32Val);
     AssertRC(rc);
@@ -1419,18 +1432,12 @@ static int vmxHCCheckCachedVmcsCtls(PVMCPUCC pVCpu, PCVMXVMCSINFO pVmcsInfo, boo
                         VCPU_2_VMXSTATE(pVCpu).u32HMError = VMX_VCI_CTRL_PIN_EXEC,
                         VERR_VMX_VMCS_FIELD_CACHE_INVALID);
 
-    /** @todo Currently disabled for nested-guests because we run into bit differences
-     *        with for INT_WINDOW, RDTSC/P, see @bugref{10318}. Later try figure out
-     *        why and re-enable. */
-    if (!fIsNstGstVmcs)
-    {
-        rc = VMX_VMCS_READ_32(pVCpu, VMX_VMCS32_CTRL_PROC_EXEC, &u32Val);
-        AssertRC(rc);
-        AssertMsgReturnStmt(pVmcsInfo->u32ProcCtls == u32Val,
-                            ("%s proc controls mismatch: Cache=%#RX32 VMCS=%#RX32\n", pcszVmcs, pVmcsInfo->u32ProcCtls, u32Val),
-                            VCPU_2_VMXSTATE(pVCpu).u32HMError = VMX_VCI_CTRL_PROC_EXEC,
-                            VERR_VMX_VMCS_FIELD_CACHE_INVALID);
-    }
+    rc = VMX_VMCS_READ_32(pVCpu, VMX_VMCS32_CTRL_PROC_EXEC, &u32Val);
+    AssertRC(rc);
+    AssertMsgReturnStmt(pVmcsInfo->u32ProcCtls == u32Val,
+                        ("%s proc controls mismatch: Cache=%#RX32 VMCS=%#RX32\n", pcszVmcs, pVmcsInfo->u32ProcCtls, u32Val),
+                        VCPU_2_VMXSTATE(pVCpu).u32HMError = VMX_VCI_CTRL_PROC_EXEC,
+                        VERR_VMX_VMCS_FIELD_CACHE_INVALID);
 
     if (pVmcsInfo->u32ProcCtls & VMX_PROC_CTLS_USE_SECONDARY_CTLS)
     {
@@ -2022,6 +2029,9 @@ static void vmxHCEnableVmcsShadowing(PCVMCPUCC pVCpu, PVMXVMCSINFO pVmcsInfo)
         pVmcsInfo->u32ProcCtls2   = uProcCtls2;
         pVmcsInfo->u64VmcsLinkPtr = pVmcsInfo->HCPhysShadowVmcs;
         Log4Func(("Enabled\n"));
+#ifdef HMVMX_VERIFY_VMCS_MAGIC
+        AssertRC(hmR0VmxCheckVmcsMagic(false));
+#endif
     }
 }
 
@@ -2054,6 +2064,9 @@ static void vmxHCDisableVmcsShadowing(PCVMCPUCC pVCpu, PVMXVMCSINFO pVmcsInfo)
         pVmcsInfo->u32ProcCtls2   = uProcCtls2;
         pVmcsInfo->u64VmcsLinkPtr = NIL_RTHCPHYS;
         Log4Func(("Disabled\n"));
+#ifdef HMVMX_VERIFY_VMCS_MAGIC
+        AssertRC(hmR0VmxCheckVmcsMagic(false));
+#endif
     }
 }
 #endif

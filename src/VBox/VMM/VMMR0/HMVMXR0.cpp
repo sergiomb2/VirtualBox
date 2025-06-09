@@ -68,6 +68,9 @@
 # define HMVMX_ALWAYS_TRAP_PF
 # define HMVMX_ALWAYS_FLUSH_TLB
 # define HMVMX_ALWAYS_SWAP_EFER
+# define HMVMX_VERIFY_VMCS_MAGIC
+# define HMVMX_GST_VMCS_MAGIC                    0xacce55edc01df00d
+# define HMVMX_NST_GST_VMCS_MAGIC                0xde7ec7edbaddecaf
 #endif
 
 /** Enables the fAlwaysInterceptMovDRx related code. */
@@ -189,6 +192,30 @@ DECLINLINE(PVMXVMCSINFO) hmGetVmxActiveVmcsInfo(PVMCPUCC pVCpu)
         return &pVCpu->hmr0.s.vmx.VmcsInfo;
     return &pVCpu->hmr0.s.vmx.VmcsInfoNstGst;
 }
+
+
+#ifdef HMVMX_VERIFY_VMCS_MAGIC
+/**
+ * Returns whether the VMCS magic field matches its expected value.
+ *
+ * @returns VBox status code.
+ * @param   fIsNstGstVmcs   Whether this is a nested-guest VMCS.
+ */
+static int hmR0VmxCheckVmcsMagic(bool fIsNstGstVmcs)
+{
+    uint64_t       uVmcsMagic     = 0;
+    uint64_t const uExpectedMagic = fIsNstGstVmcs ? HMVMX_NST_GST_VMCS_MAGIC : HMVMX_GST_VMCS_MAGIC;
+    uint32_t const uVmcsField     = VMX_VMCS64_CTRL_EXEC_VMCS_PTR_FULL;
+    int const rc = VMXReadVmcs64(uVmcsField, &uVmcsMagic);
+    if (RT_SUCCESS(rc))
+    {
+        if (uVmcsMagic == uExpectedMagic)
+            return VINF_SUCCESS;
+        return VERR_INVALID_MAGIC;
+    }
+    return rc;
+}
+#endif
 
 
 /**
@@ -3022,6 +3049,11 @@ static int hmR0VmxSetupVmcs(PVMCPUCC pVCpu, PVMXVMCSINFO pVmcsInfo, bool fIsNstG
     }
     else
         LogRelFunc(("Failed to clear the %s. rc=%Rrc\n", rc, pszVmcs));
+
+#ifdef HMVMX_VERIFY_VMCS_MAGIC
+    rc = VMXWriteVmcs64(VMX_VMCS64_CTRL_EXEC_VMCS_PTR_FULL, fIsNstGstVmcs ? HMVMX_NST_GST_VMCS_MAGIC : HMVMX_GST_VMCS_MAGIC);
+    AssertRC(rc);
+#endif
 
     /* Sync any CPU internal VMCS data back into our VMCS in memory. */
     if (RT_SUCCESS(rc))
