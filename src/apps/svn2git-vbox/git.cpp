@@ -112,9 +112,7 @@ typedef struct S2GREPOSITORYGITINT
     /** List of branches. */
     RTLISTANCHOR    LstBranches;
 
-    /** Buffer holding all deleted files for the current transaction. */
-    S2GSCRATCHBUF   BufDeletedFiles;
-    /** Buffer for files being added/modified. */
+    /** Buffer for files being added/modified/deleted. */
     S2GSCRATCHBUF   BufModifiedFiles;
     /** Scratch buffer. */
     S2GSCRATCHBUF   BufScratch;
@@ -445,7 +443,6 @@ DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *
             pThis->pszGitRepoPath = RTStrDup(pszGitRepoPath);
             if (pThis->pszGitRepoPath)
             {
-                s2gScratchBufInit(&pThis->BufDeletedFiles);
                 s2gScratchBufInit(&pThis->BufModifiedFiles);
                 s2gScratchBufInit(&pThis->BufScratch);
                 pThis->idCommitMark = 1;
@@ -541,7 +538,6 @@ DECLHIDDEN(int) s2gGitRepositoryClose(S2GREPOSITORYGIT hGitRepo)
     if (pThis->hFileDump != NIL_RTFILE)
         RTFileClose(pThis->hFileDump);
 
-    s2gScratchBufFree(&pThis->BufDeletedFiles);
     s2gScratchBufFree(&pThis->BufModifiedFiles);
     s2gScratchBufFree(&pThis->BufScratch);
     RTStrFree(pThis->pszGitRepoPath);
@@ -706,7 +702,6 @@ DECLHIDDEN(int) s2gGitTransactionStart(S2GREPOSITORYGIT hGitRepo)
     }
 
     pThis->idFileMark = UINT64_MAX - 1;
-    s2gScratchBufReset(&pThis->BufDeletedFiles);
     s2gScratchBufReset(&pThis->BufModifiedFiles);
     return VINF_SUCCESS;
 }
@@ -741,8 +736,6 @@ DECLHIDDEN(int) s2gGitTransactionCommit(S2GREPOSITORYGIT hGitRepo, const char *p
     if (RT_SUCCESS(rc))
     {
         rc = s2gGitWrite(pThis, pThis->BufScratch.pbBuf, pThis->BufScratch.offBuf);
-        if (RT_SUCCESS(rc) && pThis->BufDeletedFiles.offBuf)
-            rc = s2gGitWrite(pThis, pThis->BufDeletedFiles.pbBuf, pThis->BufDeletedFiles.offBuf);
         if (RT_SUCCESS(rc) && pThis->BufModifiedFiles.offBuf)
             rc = s2gGitWrite(pThis, pThis->BufModifiedFiles.pbBuf, pThis->BufModifiedFiles.offBuf);
         if (RT_SUCCESS(rc))
@@ -799,7 +792,7 @@ DECLHIDDEN(int) s2gGitTransactionFileWriteData(S2GREPOSITORYGIT hGitRepo, const 
 DECLHIDDEN(int) s2gGitTransactionFileRemove(S2GREPOSITORYGIT hGitRepo, const char *pszPath)
 {
     PS2GREPOSITORYGITINT pThis = hGitRepo;
-    return s2gScratchBufPrintf(&pThis->BufDeletedFiles, "D %s\n", pszPath);
+    return s2gScratchBufPrintf(&pThis->BufModifiedFiles, "D %s\n", pszPath);
 }
 
 

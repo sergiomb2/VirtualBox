@@ -1371,10 +1371,10 @@ static RTEXITCODE s2gSvnHasIgnores(PS2GSVNREV pRev, const char *pszSvnPath, bool
 }
 
 
-static RTEXITCODE s2gSvnPathIsEmptyDir(PCS2GSVNREV pRev, const char *pszSvnPath, bool *pfIsEmpty)
+static RTEXITCODE s2gSvnPathIsEmptyDirEx(svn_fs_root_t *pSvnFsRoot, apr_pool_t *pPool, const char *pszSvnPath, bool *pfIsEmpty)
 {
     apr_hash_t *pEntries = NULL;
-    svn_error_t *pSvnErr = svn_fs_dir_entries(&pEntries, pRev->pSvnFsRoot, pszSvnPath, pRev->pPoolRev);
+    svn_error_t *pSvnErr = svn_fs_dir_entries(&pEntries, pSvnFsRoot, pszSvnPath, pPool);
     if (pSvnErr)
     {
         svn_error_trace(pSvnErr);
@@ -1383,6 +1383,12 @@ static RTEXITCODE s2gSvnPathIsEmptyDir(PCS2GSVNREV pRev, const char *pszSvnPath,
 
     *pfIsEmpty = apr_hash_count(pEntries) == 0;
     return RTEXITCODE_SUCCESS;
+}
+
+
+DECLINLINE(RTEXITCODE) s2gSvnPathIsEmptyDir(PCS2GSVNREV pRev, const char *pszSvnPath, bool *pfIsEmpty)
+{
+    return s2gSvnPathIsEmptyDirEx(pRev->pSvnFsRoot, pRev->pPoolRev, pszSvnPath, pfIsEmpty);
 }
 
 
@@ -1453,7 +1459,18 @@ static RTEXITCODE s2gSvnDumpDirRecursiveWorker(PS2GCTX pThis, PS2GSVNREV pRev, s
                 RTStrPrintf2(&szGitPath[0], sizeof(szGitPath), "%s/%s", pszGitPath, pIt->pszName);
 
             if (pIt->fIsDir)
-                rcExit = s2gSvnDumpDirRecursiveWorker(pThis, pRev, pSvnFsRoot, pPool, szSvnPath, szGitPath);
+            {
+                /* If the directory is empty we need to add a .gitignore. */
+                bool fIsEmpty = false;
+                rcExit = s2gSvnPathIsEmptyDirEx(pSvnFsRoot, pPool, szSvnPath, &fIsEmpty);
+                if (rcExit == RTEXITCODE_SUCCESS)
+                {
+                    if (fIsEmpty)
+                        rcExit = s2gSvnAddGitIgnore(pThis, szGitPath, NULL /*pvData*/, 0 /*cbData*/);
+                    else
+                        rcExit = s2gSvnDumpDirRecursiveWorker(pThis, pRev, pSvnFsRoot, pPool, szSvnPath, szGitPath);
+                }
+            }
             else
                 rcExit = s2gSvnDumpBlob(pThis, pRev, pSvnFsRoot, szSvnPath, szGitPath);
             RTMemFree(pIt);
@@ -1596,28 +1613,42 @@ static RTEXITCODE s2gSvnExportSinglePath(PS2GCTX pThis, PS2GSVNREV pRev, const c
         }
         else if (pChange->change_kind == svn_fs_path_change_replace)
         {
-            if (pChange->copyfrom_known != 0)
+            /* Replaced with an empty path -> delete. */
+            int rc = s2gGitTransactionFileRemove(pThis->hGitRepo, pszGitPath);
+            if (RT_SUCCESS(rc))
             {
-                /* A replaced path needs dumping entirely recursively from the source. */
-                if (pChange->copyfrom_path)
-                    rcExit = s2gSvnDumpDirRecursive(pThis, pRev, pChange->copyfrom_rev, pChange->copyfrom_path, pszGitPath);
-                else
+                if (pChange->copyfrom_known != 0)
                 {
-                    /* Replaced with an empty path -> delete. */
-                    int rc = s2gGitTransactionFileRemove(pThis->hGitRepo, pszGitPath);
-                    if (RT_SUCCESS(rc))
+                    /* A replaced path needs dumping entirely recursively from the source. */
+                    if (pChange->copyfrom_path)
+                        rcExit = s2gSvnDumpDirRecursive(pThis, pRev, pChange->copyfrom_rev, pChange->copyfrom_path, pszGitPath);
+                    else
                     {
                         /** @todo Check whether the directory is empty now and add a .gitignore file if it has not already due to
                          * svn:ignore properties.
                          */
-                        rcExit = RTEXITCODE_SUCCESS;
+                        char szSvnPath[RTPATH_MAX];
+                        strncpy(szSvnPath, pszSvnPath, sizeof(szSvnPath));
+                        RTPathStripFilename(szSvnPath);
+
+                        bool fIsEmpty = false;
+                        rcExit = s2gSvnPathIsEmptyDir(pRev, szSvnPath, &fIsEmpty);
+                        if (   rcExit == RTEXITCODE_SUCCESS
+                            && fIsEmpty)
+                        {
+                            char szGitPath[RTPATH_MAX];
+                            strncpy(szGitPath, pszGitPath, sizeof(szGitPath));
+                            RTPathStripFilename(szGitPath);
+
+                            rcExit = s2gSvnAddGitIgnore(pThis, szGitPath, NULL /*pvData*/, 0 /*cbData*/);
+                        }
                     }
-                    else
-                        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to remove '%s' from git repository", pszGitPath);
                 }
+                else
+                    rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Replacing %s without known source", pszSvnPath);
             }
             else
-                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Replacing %s without known source", pszSvnPath);
+                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to remove '%s' from git repository", pszGitPath);
         }
         else
             AssertReleaseFailed();
