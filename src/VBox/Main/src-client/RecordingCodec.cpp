@@ -502,9 +502,9 @@ static DECLCALLBACK(int) recordingCodecVPXEncode(PRECORDINGCODEC pCodec, PRECORD
         return VINF_SUCCESS;
     }
 
-    Log3Func(("Encoding video parameters: %RU16x%RU16 (%RU8 FPS), originX=%RI32, originY=%RI32\n",
-              pCodec->Parms.u.Video.uWidth, pCodec->Parms.u.Video.uHeight, pCodec->Parms.u.Video.uFPS,
-              pCodec->Parms.u.Video.Scaling.u.Crop.m_iOriginX, pCodec->Parms.u.Video.Scaling.u.Crop.m_iOriginY));
+    Log3Func(("Source: %RU32x%RU32 (Pos %RU32x%RU32)\n", sw, sh, sx, sy));
+    Log3Func(("Front : %RU32x%RU32\n", pFront->Info.uWidth, pFront->Info.uHeight));
+    Log3Func(("Codec : %RU32x%RU32\n", pCodec->Parms.u.Video.uWidth, pCodec->Parms.u.Video.uHeight));
 
     vrc = RecordingUtilsCoordsCropCenter(&pCodec->Parms, &sx, &sy, &sw, &sh, &dx, &dy);
     if (vrc == VINF_SUCCESS) /* vrc might be VWRN_RECORDING_ENCODING_SKIPPED to skip encoding. */
@@ -513,17 +513,13 @@ static DECLCALLBACK(int) recordingCodecVPXEncode(PRECORDINGCODEC pCodec, PRECORD
                   sx, sy, sw, sh,
                   dx, dy, pCodec->Parms.u.Video.uWidth, pCodec->Parms.u.Video.uHeight,
                   (size_t)(sw * sh * (pFront->Info.uBPP / 8))));
-#ifdef DEBUG
-        AssertReturn(sw      <= (int32_t)pFront->Info.uWidth,  VERR_INVALID_PARAMETER);
-        AssertReturn(sh      <= (int32_t)pFront->Info.uHeight, VERR_INVALID_PARAMETER);
-        AssertReturn(sx + sw <= (int32_t)pFront->Info.uWidth , VERR_INVALID_PARAMETER);
-        AssertReturn(sy + sh <= (int32_t)pFront->Info.uHeight, VERR_INVALID_PARAMETER);
-#endif
-
 #if 0
-        RecordingUtilsDbgDumpImageData(&pFront->pau8Buf[(sy * pFront->Info.uBytesPerLine) + (sx * (pFront->Info.uBPP / 8))],
-                                       sw * sh * (pFront->Info.uBPP / 8),
-                                       NULL /* Use default temp dir */, "cropped", sw, sh,
+        AssertReturn(sw + dx <= (int32_t)pCodec->Parms.u.Video.uWidth,  VERR_INVALID_PARAMETER);
+        AssertReturn(sy + sh <= (int32_t)pCodec->Parms.u.Video.uHeight, VERR_INVALID_PARAMETER);
+#endif
+#if 0
+        RecordingUtilsDbgDumpImageData(pFront->pau8Buf, pFront->cbBuf,
+                                       NULL /* Use default temp dir */, "cropped", sx, sy, sw, sh,
                                        pFront->Info.uBytesPerLine, pFront->Info.uBPP);
 #endif
         /* Blit (and convert from BGRA 32) the changed parts of the front buffer to the YUV 420 surface of the codec. */
