@@ -1378,9 +1378,7 @@ static RTEXITCODE s2gSvnProcessIgnores(PS2GCTX pThis, PS2GSVNREV pRev, const cha
             rcExit = s2gSvnPathIsEmptyDir(pRev, pszSvnPath, &fIsEmpty);
             if (   rcExit == RTEXITCODE_SUCCESS
                 && fIsEmpty)
-            {
-                
-            }
+                rcExit = s2gSvnDeleteGitIgnore(pThis, pszGitPath);
         }
 
         /* Process global ignores only in the root path. */
