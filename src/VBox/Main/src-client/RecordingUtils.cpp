@@ -387,7 +387,7 @@ const char *RecordingUtilsRecordingFrameTypeToStr(RECORDINGFRAME_TYPE enmType)
 
 #ifdef DEBUG
 /**
- * Dumps image data to a bitmap (BMP) file.
+ * Dumps image data to a bitmap (BMP) file, inline version.
  *
  * @returns VBox status code.
  * @param   pu8RGBBuf           Pointer to actual RGB image data.
@@ -397,42 +397,50 @@ const char *RecordingUtilsRecordingFrameTypeToStr(RECORDINGFRAME_TYPE enmType)
  *                              Specify NULL to use the system's temp directory as output directory.
  *                              Existing files will be overwritten.
  * @param   pszWhat             Hint of what to dump. Optional and can be NULL.
+ * @param   uX                  Column to start X reading within \a pu8RGBBuf.
+ * @param   uY                  Row to start reading within \a pu8RGBBuf.
  * @param   uWidth              Width (in pixel) to write.
  * @param   uHeight             Height (in pixel) to write.
  * @param   uBytesPerLine       Bytes per line (stride).
  * @param   uBPP                Bits in pixel.
  */
-int RecordingUtilsDbgDumpImageData(const uint8_t *pu8RGBBuf, size_t cbRGBBuf, const char *pszPath, const char *pszWhat,
-                                   uint32_t uWidth, uint32_t uHeight, uint32_t uBytesPerLine, uint8_t uBPP)
+DECLINLINE(int) recordingUtilsDbgDumpImageData(const uint8_t *pu8RGBBuf, size_t cbRGBBuf, const char *pszPath, const char *pszWhat,
+                                               uint32_t uX, uint32_t uY, uint32_t uWidth, uint32_t uHeight, uint32_t uBytesPerLine, uint8_t uBPP)
 {
-    const uint8_t  uBytesPerPixel = uBPP / 8 /* Bits */;
-    const size_t   cbData         = uWidth * uHeight * uBytesPerPixel;
+    const uint8_t uBytesPerPixel = uBPP / 8 /* Bits */;
+    const size_t  cbData         = uWidth * uHeight * uBytesPerPixel;
+
+    Log3Func(("pu8RGBBuf=%p, cbRGBBuf=%zu, uX=%RU32, uY=%RU32, uWidth=%RU32, uHeight=%RU32, uBytesPerLine=%RU32, uBPP=%RU8\n",
+              pu8RGBBuf, cbRGBBuf, uX, uY, uWidth, uHeight, uBytesPerLine, uBPP));
 
     if (!cbData) /* No data to write? Bail out early. */
         return VINF_SUCCESS;
 
     AssertReturn(cbData <= cbRGBBuf, VERR_INVALID_PARAMETER);
 
-    Log3Func(("pu8RGBBuf=%p, cbRGBBuf=%zu, uWidth=%RU32, uHeight=%RU32, uBytesPerLine=%RU32, uBPP=%RU8\n",
-              pu8RGBBuf, cbRGBBuf, uWidth, uHeight, uBytesPerLine, uBPP));
-
     BMPFILEHDR fileHdr;
     RT_ZERO(fileHdr);
 
-    BMPWIN3XINFOHDR coreHdr;
-    RT_ZERO(coreHdr);
+    BMPWINV4INFOHDR infoHdr;
+    RT_ZERO(infoHdr);
 
     fileHdr.uType      = BMP_HDR_MAGIC;
-    fileHdr.cbFileSize = (uint32_t)(sizeof(BMPFILEHDR) + sizeof(BMPWIN3XINFOHDR) + cbData);
-    fileHdr.offBits    = (uint32_t)(sizeof(BMPFILEHDR) + sizeof(BMPWIN3XINFOHDR));
+    fileHdr.cbFileSize = (uint32_t)(sizeof(BMPFILEHDR) + sizeof(BMPWINV4INFOHDR) + cbData);
+    fileHdr.offBits    = (uint32_t)(sizeof(BMPFILEHDR) + sizeof(BMPWINV4INFOHDR));
 
-    coreHdr.cbSize         = sizeof(BMPWIN3XINFOHDR);
-    coreHdr.uWidth         = uWidth;
-    coreHdr.uHeight        = uHeight;
-    coreHdr.cPlanes        = 1;
-    coreHdr.cBits          = uBPP;
-    coreHdr.uXPelsPerMeter = 5000;
-    coreHdr.uYPelsPerMeter = 5000;
+    infoHdr.cbSize         = sizeof(BMPWINV4INFOHDR);
+    infoHdr.cx             = uWidth;
+    infoHdr.cy             = -(int32_t)uHeight;
+    infoHdr.cBits          = uBPP;
+    infoHdr.cPlanes        = 1;
+    infoHdr.cbImage        = (uint32_t)cbData;
+    infoHdr.cXPelsPerMeter = 2835;
+    infoHdr.cYPelsPerMeter = 2835;
+    infoHdr.fRedMask       = 0x00ff0000;
+    infoHdr.fGreenMask     = 0x0000ff00;
+    infoHdr.fBlueMask      = 0x000000ff;
+    infoHdr.fAlphaMask     = 0xff000000;
+    infoHdr.enmCSType      = LCS_WINDOWS_COLOR_SPACE;
 
     static uint64_t s_cRecordingUtilsBmpsDumped = 0;
 
@@ -458,21 +466,24 @@ int RecordingUtilsDbgDumpImageData(const uint8_t *pu8RGBBuf, size_t cbRGBBuf, co
     if (RT_SUCCESS(vrc))
     {
         RTFileWrite(fh, &fileHdr, sizeof(fileHdr), NULL);
-        RTFileWrite(fh, &coreHdr, sizeof(coreHdr), NULL);
+        RTFileWrite(fh, &infoHdr, sizeof(infoHdr), NULL);
 
-        /* Bitmaps (DIBs) are stored upside-down (thanks, OS/2), so work from the bottom up. */
-        size_t offSrc = uBytesPerLine * (uHeight - 1);
-        Assert(offSrc <= cbRGBBuf);
+        size_t offSrc = (uY * uBytesPerLine) + (uX * uBytesPerPixel);
+        size_t offDst = 0;
+        size_t const cbSrcStride = uBytesPerLine;
+        size_t const cbDstStride = uWidth * uBytesPerPixel;
 
         /* Do the copy. */
-        while (offSrc)
+        while (offDst < cbData)
         {
-            vrc = RTFileWrite(fh, pu8RGBBuf + offSrc, uWidth * uBytesPerPixel, NULL);
+            vrc = RTFileWrite(fh, pu8RGBBuf + offSrc, cbDstStride, NULL);
             AssertRCBreak(vrc);
-            Assert(offSrc >= uBytesPerLine);
-            offSrc -= uBytesPerLine;
-
+            offSrc += cbSrcStride;
+            AssertBreak(offSrc <= cbRGBBuf);
+            offDst += cbDstStride;
+            AssertBreak(offDst <= cbData);
         }
+        Assert(offDst == cbData);
 
         int vrc2 = RTFileClose(fh);
         if (RT_SUCCESS(vrc))
@@ -480,6 +491,30 @@ int RecordingUtilsDbgDumpImageData(const uint8_t *pu8RGBBuf, size_t cbRGBBuf, co
     }
 
     return vrc;
+}
+
+/**
+ * Dumps image data to a bitmap (BMP) file.
+ *
+ * @returns VBox status code.
+ * @param   pu8RGBBuf           Pointer to actual RGB image data.
+ *                              Must point right to the beginning of the pixel data (offset, if any).
+ * @param   cbRGBBuf            Size (in bytes) of \a pu8RGBBuf.
+ * @param   pszPath             Absolute path to dump file to. Must exist.
+ *                              Specify NULL to use the system's temp directory as output directory.
+ *                              Existing files will be overwritten.
+ * @param   pszWhat             Hint of what to dump. Optional and can be NULL.
+ * @param   uX                  Column to start X reading within \a pu8RGBBuf.
+ * @param   uY                  Row to start reading within \a pu8RGBBuf.
+ * @param   uWidth              Width (in pixel) to write.
+ * @param   uHeight             Height (in pixel) to write.
+ * @param   uBytesPerLine       Bytes per line (stride).
+ * @param   uBPP                Bits in pixel.
+ */
+int RecordingUtilsDbgDumpImageData(const uint8_t *pu8RGBBuf, size_t cbRGBBuf, const char *pszPath, const char *pszWhat,
+                                   uint32_t uX, uint32_t uY, uint32_t uWidth, uint32_t uHeight, uint32_t uBytesPerLine, uint8_t uBPP)
+{
+    return recordingUtilsDbgDumpImageData(pu8RGBBuf, cbRGBBuf, pszPath, pszWhat, uX, uY, uWidth, uHeight, uBytesPerLine, uBPP);
 }
 
 /**
@@ -492,9 +527,9 @@ int RecordingUtilsDbgDumpImageData(const uint8_t *pu8RGBBuf, size_t cbRGBBuf, co
  */
 int RecordingUtilsDbgDumpVideoFrameEx(const PRECORDINGVIDEOFRAME pFrame, const char *pszPath, const char *pszWhat)
 {
-    return RecordingUtilsDbgDumpImageData(pFrame->pau8Buf, pFrame->cbBuf,
+    return recordingUtilsDbgDumpImageData(pFrame->pau8Buf, pFrame->cbBuf,
                                           pszPath, pszWhat,
-                                          pFrame->Info.uWidth, pFrame->Info.uHeight, pFrame->Info.uBytesPerLine, pFrame->Info.uBPP);
+                                          0, 0, pFrame->Info.uWidth, pFrame->Info.uHeight, pFrame->Info.uBytesPerLine, pFrame->Info.uBPP);
 }
 
 /**
@@ -506,7 +541,9 @@ int RecordingUtilsDbgDumpVideoFrameEx(const PRECORDINGVIDEOFRAME pFrame, const c
  */
 int RecordingUtilsDbgDumpVideoFrame(const PRECORDINGVIDEOFRAME pFrame, const char *pszWhat)
 {
-    return RecordingUtilsDbgDumpVideoFrameEx(pFrame, NULL /* Use temp directory */, pszWhat);
+    return recordingUtilsDbgDumpImageData(pFrame->pau8Buf, pFrame->cbBuf,
+                                          NULL /* Use temp directory */, pszWhat,
+                                          0, 0, pFrame->Info.uWidth, pFrame->Info.uHeight, pFrame->Info.uBytesPerLine, pFrame->Info.uBPP);
 }
 
 /**

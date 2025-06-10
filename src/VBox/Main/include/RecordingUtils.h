@@ -42,7 +42,7 @@ int RecordingUtilsCoordsCropCenter(PRECORDINGCODECPARMS pCodecParms, int32_t *sx
 const char *RecordingUtilsRecordingFrameTypeToStr(RECORDINGFRAME_TYPE enmType);
 
 #ifdef DEBUG
-int RecordingUtilsDbgDumpImageData(const uint8_t *pu8RGBBuf, size_t cbRGBBuf, const char *pszPath, const char *pszWhat, uint32_t uWidth, uint32_t uHeight, uint32_t uBytesPerLine, uint8_t uBPP);
+int RecordingUtilsDbgDumpImageData(const uint8_t *pu8RGBBuf, size_t cbRGBBuf, const char *pszPath, const char *pszWhat, uint32_t uX, uint32_t uY, uint32_t uWidth, uint32_t uHeight, uint32_t uBytesPerLine, uint8_t uBPP);
 int RecordingUtilsDbgDumpVideoFrameEx(const PRECORDINGVIDEOFRAME pFrame, const char *pszPath, const char *pszWhat);
 int RecordingUtilsDbgDumpVideoFrame(const PRECORDINGVIDEOFRAME pFrame, const char *pszWhat);
 void RecordingUtilsDbgLogFrame(PRECORDINGFRAME pFrame);
