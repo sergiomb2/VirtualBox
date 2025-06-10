@@ -560,7 +560,16 @@ void RecordingUtilsDbgLogFrame(PRECORDINGFRAME pFrame)
     switch (pFrame->enmType)
     {
         case RECORDINGFRAME_TYPE_VIDEO:
-            Log3((", w=%d, h=%d\n", pFrame->u.Video.Info.uWidth, pFrame->u.Video.Info.uHeight));
+            Log3((", w=%RU32, h=%RU32\n", pFrame->u.Video.Info.uWidth, pFrame->u.Video.Info.uHeight));
+            break;
+        case RECORDINGFRAME_TYPE_CURSOR_SHAPE:
+            Log3((", w=%RU32, h=%RU32\n", pFrame->u.CursorShape.Info.uWidth, pFrame->u.CursorShape.Info.uHeight));
+            break;
+        case RECORDINGFRAME_TYPE_CURSOR_POS:
+            Log3((", x=%RU32, y=%RU32\n", pFrame->u.Cursor.Pos.x, pFrame->u.Cursor.Pos.y));
+            break;
+        case RECORDINGFRAME_TYPE_SCREEN_CHANGE:
+            Log3((", w=%RU32, h=%RU32\n", pFrame->u.ScreenInfo.uWidth, pFrame->u.ScreenInfo.uHeight));
             break;
         default:
             Log3(("\n"));
