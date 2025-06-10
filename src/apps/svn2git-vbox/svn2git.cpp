@@ -1377,7 +1377,7 @@ static RTEXITCODE s2gSvnProcessIgnores(PS2GCTX pThis, PS2GSVNREV pRev, const cha
             bool fIsEmpty = false;
             rcExit = s2gSvnPathIsEmptyDir(pRev, pszSvnPath, &fIsEmpty);
             if (   rcExit == RTEXITCODE_SUCCESS
-                && fIsEmpty)
+                && !fIsEmpty)
                 rcExit = s2gSvnDeleteGitIgnore(pThis, pszGitPath);
         }
 
