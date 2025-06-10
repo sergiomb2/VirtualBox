@@ -979,6 +979,27 @@ static bool s2gPathIsSymlink(svn_fs_root_t *pSvnFsRoot, const char *pszSvnPath, 
 }
 
 
+static RTEXITCODE s2gSvnPathIsEmptyDirEx(svn_fs_root_t *pSvnFsRoot, apr_pool_t *pPool, const char *pszSvnPath, bool *pfIsEmpty)
+{
+    apr_hash_t *pEntries = NULL;
+    svn_error_t *pSvnErr = svn_fs_dir_entries(&pEntries, pSvnFsRoot, pszSvnPath, pPool);
+    if (pSvnErr)
+    {
+        svn_error_trace(pSvnErr);
+        return RTEXITCODE_FAILURE;
+    }
+
+    *pfIsEmpty = apr_hash_count(pEntries) == 0;
+    return RTEXITCODE_SUCCESS;
+}
+
+
+DECLINLINE(RTEXITCODE) s2gSvnPathIsEmptyDir(PCS2GSVNREV pRev, const char *pszSvnPath, bool *pfIsEmpty)
+{
+    return s2gSvnPathIsEmptyDirEx(pRev->pSvnFsRoot, pRev->pPoolRev, pszSvnPath, pfIsEmpty);
+}
+
+
 static RTEXITCODE s2gSvnDumpBlob(PS2GCTX pThis, PS2GSVNREV pRev, svn_fs_root_t *pSvnFsRoot, const char *pszSvnPath, const char *pszGitPath)
 {
     /* Create a new temporary pool. */
@@ -1247,6 +1268,32 @@ static RTEXITCODE s2gSvnAddGitIgnore(PS2GCTX pThis, const char *pszGitPath, cons
 }
 
 
+static RTEXITCODE s2gSvnDeleteGitIgnore(PS2GCTX pThis, const char *pszGitPath)
+{
+    RTEXITCODE rcExit = RTEXITCODE_SUCCESS;
+    char szPath[RTPATH_MAX];
+    int rc;
+    if (*pszGitPath == '\0')
+    {
+        strcpy(&szPath[0], ".gitignore");
+        rc = 1;
+    }
+    else
+        rc = RTStrPrintf2(&szPath[0], sizeof(szPath), "%s/%s", pszGitPath, ".gitignore");
+    if (rc > 0)
+    {
+        rc = s2gGitTransactionFileRemove(pThis->hGitRepo, szPath);
+        if (RT_FAILURE(rc))
+            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to remove .gitignore '%s': %Rrc", szPath, rc);
+    }
+    else
+        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to prepare .gitginore path for '%s'", pszGitPath);
+
+    return rcExit;
+}
+
+
+
 static RTEXITCODE s2gSvnProcessIgnoreContent(PS2GSCRATCHBUF pBuf, const char *pszSvnIgnore, bool fGlobal)
 {
     RTEXITCODE rcExit = RTEXITCODE_SUCCESS;
@@ -1321,6 +1368,20 @@ static RTEXITCODE s2gSvnProcessIgnores(PS2GCTX pThis, PS2GSVNREV pRev, const cha
     {
         if (pProp)
             rcExit = s2gSvnProcessIgnoreContent(&pThis->BufScratch, pProp->data, false /*fGlobal*/);
+        else
+        {
+            /*
+             * The property got delete, so if the directory containing the .gitignore is not empty
+             * and there is a .gitignore we have to delete it because.
+             */
+            bool fIsEmpty = false;
+            rcExit = s2gSvnPathIsEmptyDir(pRev, pszSvnPath, &fIsEmpty);
+            if (   rcExit == RTEXITCODE_SUCCESS
+                && fIsEmpty)
+            {
+                
+            }
+        }
 
         /* Process global ignores only in the root path. */
         if (   rcExit == RTEXITCODE_SUCCESS
@@ -1368,27 +1429,6 @@ static RTEXITCODE s2gSvnHasIgnores(PS2GSVNREV pRev, const char *pszSvnPath, bool
     }
 
     return rcExit;
-}
-
-
-static RTEXITCODE s2gSvnPathIsEmptyDirEx(svn_fs_root_t *pSvnFsRoot, apr_pool_t *pPool, const char *pszSvnPath, bool *pfIsEmpty)
-{
-    apr_hash_t *pEntries = NULL;
-    svn_error_t *pSvnErr = svn_fs_dir_entries(&pEntries, pSvnFsRoot, pszSvnPath, pPool);
-    if (pSvnErr)
-    {
-        svn_error_trace(pSvnErr);
-        return RTEXITCODE_FAILURE;
-    }
-
-    *pfIsEmpty = apr_hash_count(pEntries) == 0;
-    return RTEXITCODE_SUCCESS;
-}
-
-
-DECLINLINE(RTEXITCODE) s2gSvnPathIsEmptyDir(PCS2GSVNREV pRev, const char *pszSvnPath, bool *pfIsEmpty)
-{
-    return s2gSvnPathIsEmptyDirEx(pRev->pSvnFsRoot, pRev->pPoolRev, pszSvnPath, pfIsEmpty);
 }
 
 
