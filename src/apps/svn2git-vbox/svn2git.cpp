@@ -2771,12 +2771,13 @@ static RTEXITCODE s2gSvnVerify(PS2GCTX pThis)
             break;
     }
 
-#if 0
-    rc = RTDirRemoveRecursive(pThis->pszVerifyTmpPath, RTDIRRMREC_F_CONTENT_AND_DIR);
-    if (RT_FAILURE(rc))
-        return RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to completely remove worktree '%s': %Rrc",
-                              pThis->pszVerifyTmpPath, rc);
-#endif
+    if (rcExit == RTEXITCODE_SUCCESS) /* Leave the worktree for manual inspection in case of an error. */
+    {
+        rc = RTDirRemoveRecursive(pThis->pszVerifyTmpPath, RTDIRRMREC_F_CONTENT_AND_DIR);
+        if (RT_FAILURE(rc))
+            return RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to completely remove worktree '%s': %Rrc",
+                                  pThis->pszVerifyTmpPath, rc);
+    }
 
     RTMemFree(paCommits);
     return rcExit;
