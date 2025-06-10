@@ -53,6 +53,9 @@
 
 #include <VBox/err.h>
 #include <VBox/com/VirtualBox.h>
+#ifdef VBOX_WITH_STATISTICS
+#include <VBox/vmm/vmmr3vtable.h>
+#endif
 
 #include "ConsoleImpl.h"
 #include "ProgressImpl.h"
@@ -439,8 +442,14 @@ DECLCALLBACK(int) RecordingContext::threadMain(RTTHREAD hThreadSelf, void *pvUse
         int vrc = pThis->progressSet(msTimestamp);
         AssertRC(vrc);
 
+        STAM_PROFILE_START(&pThis->m_STAT.profileDataCommon, common);
+
         /* Process common raw blocks (data which not has been encoded yet). */
         vrc = pThis->processCommonData(pThis->m_mapBlocksRaw, 100 /* ms timeout */);
+
+        STAM_PROFILE_STOP(&pThis->m_STAM.profileDataCommon, common);
+
+        STAM_PROFILE_START(&pThis->m_STAM.profileDataStreams, streams);
 
         /** @todo r=andy This is inefficient -- as we already wake up this thread
          *               for every screen from Main, we here go again (on every wake up) through
@@ -460,6 +469,8 @@ DECLCALLBACK(int) RecordingContext::threadMain(RTTHREAD hThreadSelf, void *pvUse
 
             ++itStream;
         }
+
+        STAM_PROFILE_STOP(&pThis->m_STAM.profileDataStreams, streams);
 
         if (RT_FAILURE(vrc))
             LogRel(("Recording: Encoding thread failed (%Rrc)\n", vrc));
@@ -517,13 +528,14 @@ int RecordingContext::processCommonData(RecordingBlockMap &mapCommon, RTMSINTERV
                     break;
                 }
 #endif /* VBOX_WITH_AUDIO_RECORDING */
-
-            default:
-                /* Skip unknown stuff. */
-                break;
+                default:
+                    AssertFailedBreakStmt(vrc = VERR_NOT_IMPLEMENTED);
+                    break;
             }
 
             itCommonBlocks->second->List.erase(itBlock);
+            if (pBlockCommon->Release() == 0)
+                pBlockCommon->Destroy();
             delete pBlockCommon;
             itBlock = itCommonBlocks->second->List.begin();
 
@@ -617,6 +629,7 @@ int RecordingContext::writeCommonData(RecordingBlockMap &mapCommon, PRECORDINGCO
         pBlock->pvData      = pFrame;
         pBlock->cbData      = sizeof(RECORDINGFRAME);
         pBlock->cRefs       = m_cStreamsEnabled;
+        Assert(pBlock->cRefs); /* Paranoia. */
         pBlock->msTimestamp = msTimestamp;
         pBlock->uFlags      = uFlags;
 
@@ -755,14 +768,17 @@ DECLCALLBACK(void) RecordingContext::s_recordingStateChangedCallback(RecordingCo
  * Creates a recording context.
  *
  * @returns VBox status code.
- * @param   ptrConsole          Pointer to console object this context is bound to (weak pointer).
+ * @param   pConsole             Pointer to console object this context is bound to (weak pointer).
  * @param   Settings            Reference to recording settings to use for creation.
  * @param   pProgress           Progress object returned on success.
  */
-int RecordingContext::createInternal(Console *ptrConsole, const settings::Recording &Settings,
+int RecordingContext::createInternal(Console *pConsole, const settings::Recording &Settings,
                                      ComPtr<IProgress> &pProgress)
 {
     int vrc = VINF_SUCCESS;
+
+    /* Reset context. */
+    reset();
 
     /* Copy the settings to our context. */
     m_Settings = Settings;
@@ -779,7 +795,7 @@ int RecordingContext::createInternal(Console *ptrConsole, const settings::Record
         return vrc;
 #endif
 
-    m_pConsole = ptrConsole;
+    m_pConsole = pConsole;
     RT_ZERO(m_Callbacks);
 
     settings::RecordingScreenSettingsMap::const_iterator itScreen = m_Settings.mapScreens.begin();
@@ -790,7 +806,7 @@ int RecordingContext::createInternal(Console *ptrConsole, const settings::Record
         {
             if (itScreen->second.fEnabled)
             {
-                pStream = new RecordingStream(this, itScreen->first /* Screen ID */, itScreen->second);
+                pStream = new RecordingStream(pConsole, this, itScreen->first /* Screen ID */, itScreen->second);
                 m_vecStreams.push_back(pStream);
                 m_cStreamsEnabled++;
                 LogFlowFunc(("pStream=%p\n", pStream));
@@ -823,10 +839,21 @@ int RecordingContext::createInternal(Console *ptrConsole, const settings::Record
 
         SetCallbacks(&Callbacks, this /* pvUser */);
 
-        reset();
-
         unconst(m_pProgress) = pThisProgress;
         pThisProgress.queryInterfaceTo(pProgress.asOutParam());
+
+#ifdef VBOX_WITH_STATISTICS
+        Console::SafeVMPtrQuiet ptrVM(m_pConsole);
+        if (ptrVM.isOk())
+        {
+            ptrVM.vtable()->pfnSTAMR3RegisterFU(ptrVM.rawUVM(), &m_STAM.profileDataCommon,
+                                                STAMTYPE_PROFILE, STAMVISIBILITY_ALWAYS, STAMUNIT_NS_PER_CALL,
+                                                "Profiling processing common data (e.g. audio).", "/Main/Recording/ProfileDataCommon");
+            ptrVM.vtable()->pfnSTAMR3RegisterFU(ptrVM.rawUVM(), &m_STAM.profileDataStreams,
+                                                STAMTYPE_PROFILE, STAMVISIBILITY_ALWAYS, STAMUNIT_NS_PER_CALL,
+                                                "Profiling processing per-stream data.", "/Main/Recording/ProfileDataStreams");
+        }
+#endif
     }
 
     if (RT_FAILURE(vrc))
@@ -979,6 +1006,15 @@ void RecordingContext::destroyInternal(void)
         m_vecStreams.erase(it);
         it = m_vecStreams.begin();
     }
+
+#ifdef VBOX_WITH_STATISTICS
+    Console::SafeVMPtrQuiet ptrVM(m_pConsole);
+    if (ptrVM.isOk())
+    {
+        ptrVM.vtable()->pfnSTAMR3DeregisterF(ptrVM.rawUVM(), "/Main/Recording/ProfileDataCommon");
+        ptrVM.vtable()->pfnSTAMR3DeregisterF(ptrVM.rawUVM(), "/Main/Recording/ProfileDataStreams");
+    }
+#endif
 
     /* Sanity. */
     Assert(m_vecStreams.empty());
@@ -1353,7 +1389,7 @@ int RecordingContext::SendVideoFrame(uint32_t uScreen, PRECORDINGVIDEOFRAME pFra
 {
     AssertPtrReturn(pFrame, VERR_INVALID_POINTER);
 
-    LogFlowFunc(("uScreen=%RU32, offX=%RU32, offY=%RU32, w=%RU32, h=%RU32 (%zu bytes), msTimestamp=%RU64\n",
+    LogFlowFunc(("uScreen=%RU32, offX=%RU32, offY=%RU32, w=%RU32, h=%RU32 (%zu bytes), ts=%RU64\n",
                  uScreen, pFrame->Pos.x, pFrame->Pos.y, pFrame->Info.uWidth, pFrame->Info.uHeight,
                  size_t(pFrame->Info.uHeight * pFrame->Info.uWidth * (pFrame->Info.uBPP / 8)), msTimestamp));
 
@@ -1394,7 +1430,7 @@ int RecordingContext::SendVideoFrame(uint32_t uScreen, PRECORDINGVIDEOFRAME pFra
  */
 int RecordingContext::SendCursorPositionChange(uint32_t uScreen, int32_t x, int32_t y, uint64_t msTimestamp)
 {
-    LogFlowFunc(("uScreen=%RU32, x=%RU32, y=%RU32\n", uScreen, x, y));
+    LogFlowFunc(("uScreen=%RU32, x=%RU32, y=%RU32, ts=%RU64\n", uScreen, x, y, msTimestamp));
 
     /* If no cursor shape is set yet, skip any cursor position changes. */
     if (!m_Cursor.m_Shape.pau8Buf)
@@ -1442,7 +1478,8 @@ int RecordingContext::SendCursorShapeChange(bool fVisible, bool fAlpha, uint32_t
 {
     RT_NOREF(fAlpha, xHot, yHot);
 
-    LogFlowFunc(("fVisible=%RTbool, fAlpha=%RTbool, uWidth=%RU32, uHeight=%RU32\n", fVisible, fAlpha, uWidth, uHeight));
+    LogFlowFunc(("fVisible=%RTbool, fAlpha=%RTbool, uWidth=%RU32, uHeight=%RU32, ts=%RU64\n",
+                 fVisible, fAlpha, uWidth, uHeight, msTimestamp));
 
     if (   !pu8Shape /* Might be NULL on saved state load. */
         || !fVisible)
@@ -1503,6 +1540,8 @@ int RecordingContext::SendScreenChange(uint32_t uScreen, PRECORDINGSURFACEINFO p
     unlock();
 
     int const vrc = pStream->SendScreenChange(pInfo, msTimestamp);
+    if (vrc == VINF_SUCCESS) /* Might be VINF_RECORDING_THROTTLED or VINF_RECORDING_LIMIT_REACHED. */
+        threadNotify();
 
     return vrc;
 }

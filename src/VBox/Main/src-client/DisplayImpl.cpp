@@ -2172,21 +2172,19 @@ int Display::i_recordingInvalidate(void)
  */
 int Display::i_recordingScreenChanged(unsigned uScreenId, const DISPLAYFBINFO *pFBInfo)
 {
-    if (!RT_VALID_PTR(pFBInfo->pu8FramebufferVRAM))
-        return VINF_SUCCESS;
-
     RecordingContext *pCtx = Recording.pCtx;
 
-    Log2Func(("uScreenId=%u\n", uScreenId));
+    Log2Func(("uScreenId=%u, w=%u, h=%u, bpp=%u\n", uScreenId, pFBInfo->w, pFBInfo->h, pFBInfo->u16BitsPerPixel));
 
-    if (uScreenId == 0xFFFFFFFF /* SVGA_ID_INVALID -- The old register interface is single screen only */)
-        uScreenId = VBOX_VIDEO_PRIMARY_SCREEN;
-
-    if (!pCtx->IsFeatureEnabled(uScreenId, RecordingFeature_Video))
+    if (   !pCtx->IsFeatureEnabled(uScreenId, RecordingFeature_Video)
+        || !pFBInfo->pu8FramebufferVRAM)
     {
         /* Skip recording this screen. */
         return VINF_SUCCESS;
     }
+
+    if (uScreenId == 0xFFFFFFFF /* SVGA_ID_INVALID -- The old register interface is single screen only */)
+        uScreenId = VBOX_VIDEO_PRIMARY_SCREEN;
 
     AssertReturn(uScreenId < mcMonitors, VERR_INVALID_PARAMETER);
     AssertReturn(pFBInfo->w, VERR_INVALID_PARAMETER);
