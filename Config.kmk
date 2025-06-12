@@ -3456,6 +3456,7 @@ ifndef VBOX_NOINC_DYNAMIC_CONFIG_KMK
 	$(QUIET)$(APPEND) '$@' 'VBOX_GCC_mavx2                           ?= $(call VBOX_GCC_CHECK_CC,-mavx2,)'
 	$(QUIET)$(APPEND) '$@' 'VBOX_GCC_no-pie                          ?= $(call VBOX_GCC_CHECK_CC,-no-pie,)'
 	$(QUIET)$(APPEND) '$@' 'VBOX_GCC_fdiagnostics-show-option        ?= $(call VBOX_GCC_CHECK_CC,-fdiagnostics-show-option,)'
+	$(QUIET)$(APPEND) '$@' 'VBOX_GCC_fdiagnostics-color              ?= $(call VBOX_GCC_CHECK_CC,-fdiagnostics-color,)'
 	$(QUIET)$(APPEND) '$@' 'VBOX_GCC_fno-printf-return-value         ?= $(call VBOX_GCC_CHECK_CC,-fno-printf-return-value,)'
 	$(QUIET)$(APPEND) '$@' 'VBOX_GCC_Wa_cma_nocompress_debug_sections ?= $(call VBOX_GCC_CHECK_CC,-Wa$(COMMA)--nocompress-debug-sections,)'
   # Produce code optimized for the most common IA32/AMD64/EM64T processors. Introduced with gcc version 4.2.
@@ -3656,7 +3657,7 @@ endif
 # Compiler warning control.
 #
 VBOX_GCC_WARN     ?= -Wall $(VBOX_GCC_Wextra) $(VBOX_GCC_Wno-missing-field-initializers) -Wno-unused -Wno-trigraphs \
-	$(VBOX_GCC_fdiagnostics-show-option) $(VBOX_GCC_Wno-unused-parameter) $(VBOX_GCC_Wno-language-extension-token) \
+	$(VBOX_GCC_fdiagnostics-show-option) $(VBOX_GCC_fdiagnostics-color) $(VBOX_GCC_Wno-unused-parameter) $(VBOX_GCC_Wno-language-extension-token) \
 	$(VBOX_GCC_Wno-extended-offsetof) $(VBOX_GCC_Wno-gnu-folding-constant) $(VBOX_GCC_Wno-gnu-anonymous-struct) \
 	$(VBOX_GCC_Wlogical-op) $(VBOX_GCC_Wno-string-plus-int) $(VBOX_GCC_Wno-nested-anon-types) $(VBOX_GCC_Wno-variadic-macros) \
 	$(VBOX_GCC_Wno-c++17-compat-mangling)
