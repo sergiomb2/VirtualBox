@@ -2274,13 +2274,6 @@ int Console::i_configNetwork(const char *pszDevice,
                 InsertConfigString(pLunL0, "Driver", "NAT");
                 InsertConfigNode(pLunL0, "Config", &pCfg);
 
-                /* Configure TFTP prefix and boot filename. */
-                hrc = virtualBox->COMGETTER(HomeFolder)(bstr.asOutParam());                 H();
-                if (!bstr.isEmpty())
-                    InsertConfigStringF(pCfg, "TFTPPrefix", "%ls%c%s", bstr.raw(), RTPATH_DELIMITER, "TFTP");
-                hrc = pMachine->COMGETTER(Name)(bstr.asOutParam());                         H();
-                InsertConfigStringF(pCfg, "BootFile", "%ls.pxe", bstr.raw());
-
                 hrc = natEngine->COMGETTER(Network)(bstr.asOutParam());                     H();
                 if (!bstr.isEmpty())
                     InsertConfigString(pCfg, "Network", bstr);
@@ -2311,15 +2304,27 @@ int Console::i_configNetwork(const char *pszDevice,
                     InsertConfigInteger(pCfg, "TcpSnd", tcpSnd);
                 hrc = natEngine->COMGETTER(TFTPPrefix)(bstr.asOutParam());                  H();
                 if (!bstr.isEmpty())
-                {
-                    RemoveConfigValue(pCfg, "TFTPPrefix");
                     InsertConfigString(pCfg, "TFTPPrefix", bstr);
-                }
+
+                BOOL fEnableTFTP = FALSE;
+                hrc = natEngine->COMGETTER(EnableTFTP)(&fEnableTFTP);                       H();
+                InsertConfigInteger(pCfg, "EnableTFTP", fEnableTFTP);
+
                 hrc = natEngine->COMGETTER(TFTPBootFile)(bstr.asOutParam());                H();
-                if (!bstr.isEmpty())
+                if (!bstr.isEmpty() && fEnableTFTP)
                 {
-                    RemoveConfigValue(pCfg, "BootFile");
-                    InsertConfigString(pCfg, "BootFile", bstr);
+                    // Check for 127 char max (+ 1 for null term character)
+                    if (bstr.length() > 127)
+                    {
+                        i_atVMRuntimeErrorCallbackF(0, "TFTPBootFileTooLong",
+                                     N_("TFTP Boot file name \"%s\" is over the maximum of 127 characters. \
+                                        Ignoring input. Certain functionality will not work as intended"),
+                                     Utf8Str(bstr).c_str());
+
+                        InsertConfigString(pCfg, "BootFile", "");
+                    }
+                    else
+                        InsertConfigString(pCfg, "BootFile", bstr);
                 }
                 hrc = natEngine->COMGETTER(TFTPNextServer)(bstr.asOutParam());              H();
                 if (!bstr.isEmpty())

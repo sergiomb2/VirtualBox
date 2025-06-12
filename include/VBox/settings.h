@@ -904,6 +904,7 @@ struct NAT
     bool                    fAliasUseSamePorts;
     bool                    fLocalhostReachable;
     bool                    fForwardBroadcast;
+    bool                    fEnableTFTP;
     NATRulesMap             mapRules;
 };
 

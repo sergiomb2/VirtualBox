@@ -26440,10 +26440,10 @@ Snapshot 1 (B.vdi)            Snapshot 1 (B.vdi)
 
   <interface
     name="INATEngine" extends="$unknown"
-    uuid="a06253a7-dcd2-44e3-8689-9c9c4b6b6234"
+    uuid="00aaaf38-5571-4d85-b338-bde82612d973"
     wsmap="managed"
     rest="managed"
-    reservedMethods="4" reservedAttributes="7"
+    reservedMethods="4" reservedAttributes="6"
     >
     <desc>Interface for managing a NAT engine which is used with a virtual machine. This
       allows for changing NAT behavior such as port-forwarding rules. This interface is
@@ -26496,6 +26496,9 @@ Snapshot 1 (B.vdi)            Snapshot 1 (B.vdi)
     <attribute name="forwardBroadcast" type="boolean">
       <desc>Forwards broadcast packets sent by the guest to the host machine as
         such. IP address will show to host as 255.255.255.255.</desc>
+    </attribute>
+    <attribute name="enableTFTP" type="boolean">
+      <desc>Enables TFTP functionality, and related configuration options.</desc>
     </attribute>
     <method name="setNetworkSettings">
       <desc>Sets network configuration of the NAT engine.</desc>

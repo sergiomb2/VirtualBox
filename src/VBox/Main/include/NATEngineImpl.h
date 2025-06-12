@@ -76,6 +76,8 @@ private:
     HRESULT getLocalhostReachable(BOOL *pfLocalhostReachable);
     HRESULT setForwardBroadcast(BOOL fForwardBroadcast);
     HRESULT getForwardBroadcast(BOOL *pfForwardBroadcast);
+    HRESULT setEnableTFTP(BOOL fEnableTFTP);
+    HRESULT getEnableTFTP(BOOL *pfEnableTFTP);
     /* TFTP properties */
     HRESULT setTFTPPrefix(const com::Utf8Str &aTFTPPrefix);
     HRESULT getTFTPPrefix(com::Utf8Str &aTFTPPrefix);

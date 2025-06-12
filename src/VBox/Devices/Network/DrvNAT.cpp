@@ -1608,6 +1608,7 @@ static DECLCALLBACK(int) drvNATConstruct(PPDMDRVINS pDrvIns, PCFGMNODE pCfg, uin
                                   "|HostResolverMappings"
 //#endif
                                   "|ForwardBroadcast" /* Not used, for the libslirp variant. */
+                                  "|EnableTFTP"        /* Not used, for the libslirp variant */
                                   , "PortForwarding");
 
     /*

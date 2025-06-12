@@ -199,6 +199,7 @@ void NATEngine::i_applyDefaults()
 
     mData->m->fLocalhostReachable = false; /* Applies to new VMs only, see @bugref{9896} */
     mData->m->fForwardBroadcast = false;   /* Applies to new VMs only. see @bugref{10268} */
+    mData->m->fEnableTFTP = false;
 }
 
 bool NATEngine::i_hasDefaults()
@@ -481,6 +482,26 @@ HRESULT NATEngine::getForwardBroadcast(BOOL *pfForwardBroadcast)
 {
     AutoReadLock alock(this COMMA_LOCKVAL_SRC_POS);
     *pfForwardBroadcast = mData->m->fForwardBroadcast;
+    return S_OK;
+}
+
+HRESULT NATEngine::setEnableTFTP(BOOL fEnableTFTP)
+{
+    AutoWriteLock alock(this COMMA_LOCKVAL_SRC_POS);
+
+    if (mData->m->fEnableTFTP != RT_BOOL(fEnableTFTP))
+    {
+        mData->m.backup();
+        mData->m->fEnableTFTP = RT_BOOL(fEnableTFTP);
+        mParent->i_setModified(Machine::IsModified_NetworkAdapters);
+    }
+    return S_OK;
+}
+
+HRESULT NATEngine::getEnableTFTP(BOOL *pfEnableTFTP)
+{
+    AutoReadLock alock(this COMMA_LOCKVAL_SRC_POS);
+    *pfEnableTFTP = mData->m->fEnableTFTP;
     return S_OK;
 }
 

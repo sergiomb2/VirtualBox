@@ -144,6 +144,7 @@ enum
     MODIFYVM_NATDNSHOSTRESOLVER,
     MODIFYVM_NATLOCALHOSTREACHABLE,
     MODIFYVM_NATFORWARD_BROADCAST,
+    MODIFYVM_NATENABLETFTP,
     MODIFYVM_MACADDRESS,
     MODIFYVM_HIDPTR,
     MODIFYVM_HIDKBD,
@@ -385,6 +386,7 @@ static const RTGETOPTDEF g_aModifyVMOptions[] =
     OPT2("--nat-dns-host-resolver",         "--natdnshostresolver",     MODIFYVM_NATDNSHOSTRESOLVER,        RTGETOPT_REQ_BOOL_ONOFF | RTGETOPT_FLAG_INDEX),
     OPT2("--nat-localhostreachable",        "--natlocalhostreachable",  MODIFYVM_NATLOCALHOSTREACHABLE,     RTGETOPT_REQ_BOOL_ONOFF | RTGETOPT_FLAG_INDEX),
     OPT1("--nat-forward-broadcast",                                     MODIFYVM_NATFORWARD_BROADCAST,      RTGETOPT_REQ_BOOL_ONOFF | RTGETOPT_FLAG_INDEX),
+    OPT1("--nat-enable-tftp",                                           MODIFYVM_NATENABLETFTP,             RTGETOPT_REQ_BOOL_ONOFF | RTGETOPT_FLAG_INDEX),
     OPT2("--mac-address",                   "--macaddress",             MODIFYVM_MACADDRESS,                RTGETOPT_REQ_STRING | RTGETOPT_FLAG_INDEX),
     OPT1("--mouse",                                                     MODIFYVM_HIDPTR,                    RTGETOPT_REQ_STRING),
     OPT1("--keyboard",                                                  MODIFYVM_HIDKBD,                    RTGETOPT_REQ_STRING),
@@ -2417,6 +2419,22 @@ RTEXITCODE handleModifyVM(HandlerArg *a)
                 CHECK_ERROR(nic, COMGETTER(NATEngine)(engine.asOutParam()));
 
                 CHECK_ERROR(engine, COMSETTER(ForwardBroadcast)(ValueUnion.f));
+                break;
+            }
+
+            case MODIFYVM_NATENABLETFTP:
+            {
+                if (!parseNum(GetOptState.uIndex, NetworkAdapterCount, "NIC"))
+                    break;
+
+                ComPtr<INetworkAdapter> nic;
+                CHECK_ERROR_BREAK(sessionMachine, GetNetworkAdapter(GetOptState.uIndex - 1, nic.asOutParam()));
+                ASSERT(nic);
+
+                ComPtr<INATEngine> engine;
+                CHECK_ERROR(nic, COMGETTER(NATEngine)(engine.asOutParam()));
+
+                CHECK_ERROR(engine, COMSETTER(EnableTFTP)(ValueUnion.f));
                 break;
             }
 

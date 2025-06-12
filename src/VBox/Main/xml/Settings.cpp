@@ -3596,7 +3596,8 @@ NAT::NAT() :
     fAliasProxyOnly(false),
     fAliasUseSamePorts(false),
     fLocalhostReachable(true), /* Historically this value is true. */
-    fForwardBroadcast(false)
+    fForwardBroadcast(false),
+    fEnableTFTP(false)
 {
 }
 
