@@ -777,12 +777,11 @@ static int vmdkFileClose(PVMDKIMAGE pImage, PVMDKFILE *ppVmdkFile, bool fDelete)
 static DECLCALLBACK(int) vmdkFileInflateHelper(void *pvUser, void *pvBuf, size_t cbBuf, size_t *pcbBuf)
 {
     VMDKCOMPRESSIO *pInflateState = (VMDKCOMPRESSIO *)pvUser;
-    LogRel(("Inflating VMDK %s (total image size: %d) - Details:\n \
+    LogRel(("Inflating VMDK %s - Details:\n \
             pInflateState->iOffset: %d\n    \
             pInflateState->cbCompGrain: %d\n    \
             pInflateState->pvCompGrain: %p",    \
             pInflateState->pImage->pszFilename, \
-            pInflateState->pImage->cbSize,  \
             pInflateState->iOffset, \
             pInflateState->cbCompGrain, \
             pInflateState->pvCompGrain));
@@ -860,8 +859,8 @@ DECLINLINE(int) vmdkFileInflateSync(PVMDKIMAGE pImage, PVMDKEXTENT pExtent,
     /* Compressed grain marker. Data follows immediately. */
     rc = vdIfIoIntFileReadSync(pImage->pIfIo, pExtent->pFile->pStorage,
                                uOffset + RT_UOFFSETOF(VMDKMARKER, uType),
-                                 (uint8_t *)pExtent->pvCompGrain
-                               + RT_UOFFSETOF(VMDKMARKER, uType),
+                                (uint8_t *)pExtent->pvCompGrain
+                              + RT_UOFFSETOF(VMDKMARKER, uType),
                                RT_ALIGN_Z(  cbCompSize
                                           + RT_UOFFSETOF(VMDKMARKER, uType),
                                           512)
@@ -878,7 +877,7 @@ DECLINLINE(int) vmdkFileInflateSync(PVMDKIMAGE pImage, PVMDKEXTENT pExtent,
 
 #ifdef VMDK_USE_BLOCK_DECOMP_API
     rc = RTZipBlockDecompress(RTZIPTYPE_ZLIB, 0 /*fFlags*/,
-                              (uint8_t *)pExtent->pvCompGrain + RT_UOFFSETOF(VMDKMARKER, uType), cbCompSize, NULL,
+                              pExtent->pvCompGrain, cbCompSize + RT_UOFFSETOF(VMDKMARKER, uType), NULL,
                               pvBuf, cbToRead, &cbActuallyRead);
 #else
     VMDKCOMPRESSIO InflateState;
@@ -895,9 +894,6 @@ DECLINLINE(int) vmdkFileInflateSync(PVMDKIMAGE pImage, PVMDKEXTENT pExtent,
 #endif /* !VMDK_USE_BLOCK_DECOMP_API */
     if (RT_FAILURE(rc))
     {
-        LogRel(("vmdkFileInflateSync: cbToRead=%#zx cbCompSize=%#x+%#x\n%.*Rhxd\n", cbToRead,
-                cbCompSize, (unsigned)RT_UOFFSETOF(VMDKMARKER, uType),
-                cbCompSize + (unsigned)RT_UOFFSETOF(VMDKMARKER, uType), pExtent->pvCompGrain));
         if (rc == VERR_ZIP_CORRUPTED)
             rc = vdIfError(pImage->pIfError, rc, RT_SRC_POS, N_("VMDK: Compressed image is corrupted '%s'"), pExtent->pszFullname);
         return rc;
