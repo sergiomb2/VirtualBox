@@ -45,7 +45,7 @@ TEMPLATE_XPComDll_CXXFLAGS            = -g -pipe -ansi -Wall -Wno-unused -Wno-no
 	$(VBOX_GCC_Wno-invalid-offsetof) -Wno-sign-compare -Wno-unused -Wno-ctor-dtor-privacy \
 	$(VBOX_GCC_fvisibility-inlines-hidden) $(VBOX_GCC_fvisibility-hidden) \
 	$(VBOX_GCC_Wno-delete-non-virtual-dtor) $(VBOX_GCC_Wno-multistatement-macros) $(VBOX_GCC_fdiagnostics-show-option) \
-	$(VBOX_GCC_SANITIZER_FLAGS) $(VBOX_GCC_OPT) $(VBOX_GCC_FP)
+	$(VBOX_GCC_fdiagnostics-color) $(VBOX_GCC_SANITIZER_FLAGS) $(VBOX_GCC_OPT) $(VBOX_GCC_FP)
 #if !defined(VBOX_GCC_Wno-delete-non-virtual-dtor) && defined(VBOX_GCC_Wno-non-virtual-dtor)
 ifndef VBOX_GCC_Wno-delete-non-virtual-dtor
  ifdef VBOX_GCC_Wno-non-virtual-dtor

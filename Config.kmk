@@ -3656,11 +3656,14 @@ endif
 #
 # Compiler warning control.
 #
+if !defined(MAKE_TERMOUT) && !defined(MAKE_TERMERR) && !defined(VBOX_WITH_COLOR_DIAGNOSTICS)
+ VBOX_GCC_fdiagnostics-color :=
+endif
 VBOX_GCC_WARN     ?= -Wall $(VBOX_GCC_Wextra) $(VBOX_GCC_Wno-missing-field-initializers) -Wno-unused -Wno-trigraphs \
-	$(VBOX_GCC_fdiagnostics-show-option) $(VBOX_GCC_fdiagnostics-color) $(VBOX_GCC_Wno-unused-parameter) $(VBOX_GCC_Wno-language-extension-token) \
-	$(VBOX_GCC_Wno-extended-offsetof) $(VBOX_GCC_Wno-gnu-folding-constant) $(VBOX_GCC_Wno-gnu-anonymous-struct) \
-	$(VBOX_GCC_Wlogical-op) $(VBOX_GCC_Wno-string-plus-int) $(VBOX_GCC_Wno-nested-anon-types) $(VBOX_GCC_Wno-variadic-macros) \
-	$(VBOX_GCC_Wno-c++17-compat-mangling)
+	$(VBOX_GCC_fdiagnostics-show-option) $(VBOX_GCC_fdiagnostics-color) $(VBOX_GCC_Wno-unused-parameter) \
+	$(VBOX_GCC_Wno-language-extension-token) $(VBOX_GCC_Wno-extended-offsetof) $(VBOX_GCC_Wno-gnu-folding-constant) \
+	$(VBOX_GCC_Wno-gnu-anonymous-struct) $(VBOX_GCC_Wlogical-op) $(VBOX_GCC_Wno-string-plus-int) \
+	$(VBOX_GCC_Wno-nested-anon-types) $(VBOX_GCC_Wno-variadic-macros) $(VBOX_GCC_Wno-c++17-compat-mangling)
 VBOX_GCC_WARN_PEDANTIC = -Wshadow $(VBOX_GCC_WARN) -Wno-long-long
 if $(VBOX_GCC_VERSION_CXX) >= 40200 || defined(VBOX_WITH_MASOCHISTIC_WARNINGS) # gcc 4.2.x+ (4.1.2 is causing trouble with the extpack & add builds)
  VBOX_GCC_WARN_MASOCHISTIC ?= -Wunused-variable -Wunused-function -Wunused-label -Wunused-parameter
@@ -5959,7 +5962,7 @@ ifeq ($(KBUILD_TARGET),darwin)
   	$(VBOX_PATH_MACOSX_SDK)/System/Library/Frameworks/Kernel.framework/Headers
   ## @todo try use VBOX_GCC_PEDANTIC_CXX
   TEMPLATE_VBoxR0Drv_CXXFLAGS          = $(VBOX_DARWIN_DEF_SDK_CXXFLAGS) \
-  	-g $(VBOX_GCC_pipe) $(VBOX_GCC_WARN) -Wno-long-long $(VBOX_GCC_fdiagnostics-show-option) \
+  	-g $(VBOX_GCC_pipe) $(VBOX_GCC_WARN) -Wno-long-long $(VBOX_GCC_fdiagnostics-show-option) $(VBOX_GCC_fdiagnostics-color) \
   	-fno-common -nostdinc -fno-builtin -finline $(VBOX_GCC_fvisibility-inlines-hidden) $(VBOX_GCC_fvisibility-hidden) \
   	-fno-keep-inline-functions -fno-exceptions -msoft-float \
   	-fapple-kext -fno-rtti -fcheck-new -force_cpusubtype_ALL \
@@ -5988,7 +5991,7 @@ ifeq ($(KBUILD_TARGET),darwin)
   # -Wno-c++11-extensions -Wno-c99-extensions -Wno-extra-semi -Wno-zero-length-array
   TEMPLATE_VBoxR0Drv_CXXFLAGS          = $(VBOX_DARWIN_DEF_SDK_CXXFLAGS) -mkernel \
   	-g $(VBOX_GCC_pipe) $(VBOX_GCC_PEDANTIC_CXX) -Wno-long-long $(VBOX_GCC_fdiagnostics-show-option) \
-  	-Wno-c++11-extensions -Wno-c99-extensions -Wno-extra-semi -Wno-zero-length-array \
+  	$(VBOX_GCC_fdiagnostics-color) -Wno-c++11-extensions -Wno-c99-extensions -Wno-extra-semi -Wno-zero-length-array \
   	-Wno-gnu-zero-variadic-macro-arguments -Wno-four-char-constants \
   	-fno-common -nostdinc -fno-builtin $(VBOX_GCC_fvisibility-inlines-hidden) $(VBOX_GCC_fvisibility-hidden) \
   	-fno-exceptions -fapple-kext -fno-rtti -mkernel \
@@ -6014,7 +6017,7 @@ ifeq ($(KBUILD_TARGET),darwin)
   TEMPLATE_VBoxR0Drv_CXXFLAGS.x86      = -m32 -msoft-float
   TEMPLATE_VBoxR0Drv_CXXFLAGS.arm64    = -m64 -fno-sanitize=vptr -Wno-gcc-compat
   TEMPLATE_VBoxR0Drv_CFLAGS            = $(VBOX_DARWIN_DEF_SDK_CFLAGS) -mkernel \
-  	-g $(VBOX_GCC_pipe) $(VBOX_GCC_PEDANTIC_C) -Wno-long-long $(VBOX_GCC_fdiagnostics-show-option) \
+  	-g $(VBOX_GCC_pipe) $(VBOX_GCC_PEDANTIC_C) -Wno-long-long $(VBOX_GCC_fdiagnostics-show-option) $(VBOX_GCC_fdiagnostics-color) \
   	-fno-common -nostdinc -fno-builtin $(VBOX_GCC_fvisibility-inlines-hidden) $(VBOX_GCC_fvisibility-hidden) \
   	-fno-exceptions -fapple-kext -fno-rtti \
   	-fmodules -fmodules-prune-interval=86400 -fmodules-prune-after=345600 -Wnon-modular-include-in-framework-module \
@@ -6056,7 +6059,7 @@ ifeq ($(KBUILD_TARGET),solaris)
  TEMPLATE_VBoxR0Drv_LDFLAGS.amd64      = $(if $(eq $(KBUILD_HOST),solaris),-64,-m elf_x86_64)
  # Exclude -Wall because of solaris headers' pragma ident warnings that gcc refuses to supress.
  TEMPLATE_VBoxR0Drv_CFLAGS             = -Wpointer-arith -Winline $(VBOX_GCC_Wno-pointer-sign) \
- 	-Wmissing-prototypes -Wstrict-prototypes $(VBOX_GCC_fdiagnostics-show-option) \
+ 	-Wmissing-prototypes -Wstrict-prototypes $(VBOX_GCC_fdiagnostics-show-option) $(VBOX_GCC_fdiagnostics-color) \
  	-Wshadow -Wuninitialized -Wunused-function -Wunused-label -Wunused-value -Wunused-variable \
  	-Wformat  -Wimplicit-int -Wimplicit-function-declaration -Werror-implicit-function-declaration -Wparentheses \
  	-O2 -fno-omit-frame-pointer -ffreestanding -nodefaultlibs -fno-strict-aliasing -fno-common -std=c99
@@ -6118,7 +6121,7 @@ ifeq ($(KBUILD_TARGET),freebsd)
  # omitting: -Wcast-qual, -Wredundant-decls
  TEMPLATE_VBoxR0Drv_CFLAGS             = \
  	$(VBOX_GCC_WARN) -Wpointer-arith -Winline $(VBOX_GCC_Wno-pointer-sign) $(VBOX_GCC_fdiagnostics-show-option) \
- 	-Wstrict-prototypes -Wmissing-prototypes -Wstrict-prototypes \
+ 	$(VBOX_GCC_fdiagnostics-color) -Wstrict-prototypes -Wmissing-prototypes -Wstrict-prototypes \
  	-Wimplicit-function-declaration -Werror-implicit-function-declaration \
  	-O2 -ffreestanding -fno-strict-aliasing -fno-common \
  	$(VBOX_GCC_fno-stack-protector) $(VBOX_GCC_R0_OPT) $(VBOX_GCC_R0_FP) \
@@ -6201,7 +6204,7 @@ ifeq ($(KBUILD_TARGET),netbsd)
 
  TEMPLATE_VBoxR0Drv_CFLAGS             = \
  	$(VBOX_GCC_WARN) -Wpointer-arith -Winline $(VBOX_GCC_Wno-pointer-sign) \
- 	$(VBOX_GCC_fdiagnostics-show-option) \
+ 	$(VBOX_GCC_fdiagnostics-show-option) $(VBOX_GCC_fdiagnostics-color) \
  	-Wstrict-prototypes -Wmissing-prototypes -Wstrict-prototypes \
  	-Wimplicit-function-declaration -Werror-implicit-function-declaration \
  	-O2 -ffreestanding -fno-strict-aliasing -fno-common -finline-limit=8000 \
