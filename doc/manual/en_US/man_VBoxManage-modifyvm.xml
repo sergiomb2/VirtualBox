@@ -386,6 +386,11 @@ time on documenting it. -->
           <arg choice="plain">off</arg>
         </group>
       </arg>
+      <arg>--nat-enable-tftp<replaceable>N</replaceable>=<group choice="plain">
+          <arg choice="plain">on</arg>
+          <arg choice="plain">off</arg>
+        </group>
+      </arg>
     </cmdsynopsis>
 
     <cmdsynopsis id="synopsis-vboxmanage-modifyvm-other-hardware">
