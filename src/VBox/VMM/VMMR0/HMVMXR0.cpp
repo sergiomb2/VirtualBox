@@ -4991,6 +4991,10 @@ VMMR0DECL(int) VMXR0AssertionCallback(PVMCPUCC pVCpu)
        cleared as part of importing the guest state above. */
     hmR0VmxClearVmcs(pVmcsInfo);
 
+#ifdef VBOX_WITH_NESTED_HWVIRT_VMX
+    Assert(!pVmcsInfo->pvShadowVmcs || pVmcsInfo->fShadowVmcsState == VMX_V_VMCS_LAUNCH_STATE_CLEAR);
+#endif
+
     /** @todo eliminate the need for calling VMMR0ThreadCtxHookDisable here!  */
     VMMR0ThreadCtxHookDisable(pVCpu);
 
@@ -6303,6 +6307,7 @@ static void hmR0VmxPostRunGuest(PVMCPUCC pVCpu, PVMXTRANSIENT pVmxTransient, int
 
     pVCpu->hmr0.s.vmx.fRestoreHostFlags |= VMX_RESTORE_HOST_REQUIRED;   /* Some host state messed up by VMX needs restoring. */
     pVmcsInfo->fVmcsState = VMX_V_VMCS_LAUNCH_STATE_LAUNCHED;           /* Use VMRESUME instead of VMLAUNCH in the next run. */
+    pVmcsInfo->fShadowVmcsState = VMX_V_VMCS_LAUNCH_STATE_LAUNCHED;     /* Shadow VMCS isn't launched but set it as not clear. */
 #ifdef VBOX_STRICT
     hmR0VmxCheckHostEferMsr(pVmcsInfo);                                 /* Verify that the host EFER MSR wasn't modified. */
 #endif
