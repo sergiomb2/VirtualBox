@@ -3758,7 +3758,7 @@ if "$(VBOX_VCC_TOOL_STEM)" >= "VCC140"
  #    -wd5027: 'SUPDRVTRACERDATA': move assignment operator was implicitly defined as deleted
  #    -wd4435: 'xml::Input': Object layout under /vd2 will change due to virtual base 'xml::Stream'
  #    -wd4577: 'noexcept' used with no exception handling mode specified; termination on exception is not guaranteed. Specify /EHsc
- VBOX_VCC_WARN_ALL += -wd5045 -wd4464 -wd4623 -wd4625 -wd4626 -wd5026 -wd5027 -wd4435 -wd4577
+ VBOX_VCC_WARN_ALL += -wd5045 -wd4464 -wd4623 -wd4625 -wd4626 -wd5026 -wd5027 -wd4435 -wd4577 -diagnostics:caret
 endif
 if "$(VBOX_VCC_TOOL_STEM)" >= "VCC142"  # With v16.11.9, not with v16.6.0 4242
  #    -wd5220: 'RTDBGMODINT::cRefs': a non-static data member with a volatile qualified type no longer implies that compiler generated copy/move constructors and copy/move assignment operators are not trivial
@@ -3774,8 +3774,14 @@ if "$(VBOX_VCC_TOOL_STEM)" >= "VCC142"  # With v16.11.9, not with v16.6.0 4242
 endif
 #    -wd4548: socket.cpp(1931): warning C4548: expression before comma has no effect; expected expression with side-effect
 VBOX_VCC_WARN_ALL += -wd4548
-if "$(VBOX_VCC_TOOL_STEM)" >= "VCC143" && "$(KBUILD_TARGET_ARCH)" == "arm64"
- VBOX_VCC_WARN_ALL += -wd4746
+if "$(VBOX_VCC_TOOL_STEM)" >= "VCC143"
+ if "$(KBUILD_TARGET_ARCH)" == "arm64"
+  VBOX_VCC_WARN_ALL += -wd4746
+ endif
+ ## @todo this isn't working, since kmk will always talk to cl.exe via pipes.
+ # Waiting for https://developercommunity.visualstudio.com/t/No-way-to-enable-color-in-diagnostics-if/10489073
+ # to perhaps result in something like -diagnostics:force-color
+ #VBOX_VCC_WARN_ALL += -diagnostics:color
 endif
 ifndef VBOX_NEWER_VCC_WARN_ALL
  if "$(VBOX_VCC_TOOL_STEM)" < "VCC120"
