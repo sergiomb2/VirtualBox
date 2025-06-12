@@ -844,8 +844,8 @@ static DECLCALLBACK(void) drvNATInfo(PPDMDRVINS pDrvIns, PCDBGFINFOHLP pHlp, con
 static int drvNATConstructRedir(unsigned iInstance, PDRVNAT pThis, PCFGMNODE pCfg, PRTNETADDRIPV4 pNetwork)
 {
     /** @todo r=jack: rewrite to support IPv6? */
-    PPDMDRVINS pDrvIns = pThis->pDrvIns;
-    PCPDMDRVHLPR3 pHlp = pDrvIns->pHlpR3;
+    PPDMDRVINS const    pDrvIns = pThis->pDrvIns;
+    PCPDMDRVHLPR3 const pHlp    = pDrvIns->pHlpR3;
 
     RT_NOREF(pNetwork); /** @todo figure why pNetwork isn't used */
 
@@ -858,6 +858,11 @@ static int drvNATConstructRedir(unsigned iInstance, PDRVNAT pThis, PCFGMNODE pCf
      */
     for (PCFGMNODE pNode = pHlp->pfnCFGMGetFirstChild(pPFTree); pNode; pNode = pHlp->pfnCFGMGetNextChild(pNode))
     {
+        char szNodeNm[128] = {0};
+        int rc = pHlp->pfnCFGMGetName(pNode, szNodeNm, sizeof(szNodeNm));
+        if (RT_FAILURE(rc))
+            RTStrCopy(szNodeNm, sizeof(szNodeNm), "xxxx");
+
         /*
          * Validate the port forwarding config.
          */
@@ -866,16 +871,16 @@ static int drvNATConstructRedir(unsigned iInstance, PDRVNAT pThis, PCFGMNODE pCf
                                     N_("Unknown configuration in port forwarding"));
 
         /* protocol type */
-        int rc;
-
         bool fUDP = false;
         char szProtocol[32];
-        rc = pDrvIns->pHlpR3->pfnCFGMQueryString(pNode, "Protocol", szProtocol, sizeof(szProtocol));
-
+        rc = pHlp->pfnCFGMQueryString(pNode, "Protocol", szProtocol, sizeof(szProtocol));
         if (rc == VERR_CFGM_VALUE_NOT_FOUND)
         {
-            rc = pDrvIns->pHlpR3->pfnCFGMQueryBool(pNode, "UDP", &fUDP);
-            AssertLogRelRC(rc);
+            rc = pHlp->pfnCFGMQueryBoolDef(pNode, "UDP", &fUDP, false);
+            if (RT_FAILURE(rc))
+                return PDMDrvHlpVMSetError(pDrvIns, rc, RT_SRC_POS,
+                                           N_("NAT#%d: configuration query for \"%s/UDP\" as boolan failed"),
+                                           iInstance, szNodeNm);
         }
         else if (RT_SUCCESS(rc))
         {
@@ -885,55 +890,50 @@ static int drvNATConstructRedir(unsigned iInstance, PDRVNAT pThis, PCFGMNODE pCf
                 fUDP = true;
             else
                 return PDMDrvHlpVMSetError(pDrvIns, VERR_INVALID_PARAMETER, RT_SRC_POS,
-                    N_("NAT#%d: Invalid configuration value for \"Protocol\": \"%s\""),
-                    iInstance, szProtocol);
+                                           N_("NAT#%d: Invalid configuration value for \"%s/Protocol\": \"%s\""),
+                                           iInstance, szNodeNm, szProtocol);
         }
         else
             return PDMDrvHlpVMSetError(pDrvIns, rc, RT_SRC_POS,
-                                       N_("NAT#%d: configuration query for \"Protocol\" failed"),
-                                       iInstance);
-        /* host port */
+                                       N_("NAT#%d: configuration query for \"%s/Protocol\" as failed"),  iInstance, szNodeNm);
+        /* host port - required */
         uint16_t uHostPort;
-        rc = pDrvIns->pHlpR3->pfnCFGMQueryU16(pNode, "HostPort", &uHostPort);
-        if (rc == VERR_CFGM_VALUE_NOT_FOUND)
+        rc = pHlp->pfnCFGMQueryU16(pNode, "HostPort", &uHostPort);
+        if (RT_FAILURE(rc))
             return PDMDrvHlpVMSetError(pDrvIns, rc, RT_SRC_POS,
-                                       N_("NAT#%d: configuration query for \"HostPort\" failed"),
-                                       iInstance);
+                                       N_("NAT#%d: configuration query for \"%s/HostPort\" failed"), iInstance, szNodeNm);
 
-        /* guest port */
+        /* guest port - required */
         uint16_t uGuestPort;
-        rc = pDrvIns->pHlpR3->pfnCFGMQueryU16(pNode, "GuestPort", &uGuestPort);
-        if (rc == VERR_CFGM_VALUE_NOT_FOUND)
+        rc = pHlp->pfnCFGMQueryU16(pNode, "GuestPort", &uGuestPort);
+        if (RT_FAILURE(rc))
             return PDMDrvHlpVMSetError(pDrvIns, rc, RT_SRC_POS,
-                                       N_("NAT#%d: configuration query for \"GuestPort\" failed"),
-                                       iInstance);
+                                       N_("NAT#%d: configuration query for \"%s/GuestPort\" failed"), iInstance, szNodeNm);
 
         /* host address ("BindIP" name is rather unfortunate given "HostPort" to go with it) */
         char szHostIp[MAX_IP_ADDRESS_STR_LEN_W_NULL] = {0};
-        rc = pDrvIns->pHlpR3->pfnCFGMQueryString(pNode, "BindIP", szHostIp, MAX_IP_ADDRESS_STR_LEN_W_NULL);
-        if (rc == VERR_CFGM_VALUE_NOT_FOUND)
+        rc = pHlp->pfnCFGMQueryStringDef(pNode, "BindIP", szHostIp, sizeof(szHostIp), "");
+        if (RT_FAILURE(rc))
             return PDMDrvHlpVMSetError(pDrvIns, rc, RT_SRC_POS,
-                                       N_("NAT#%d: configuration query for \"BindIP\" failed"),
-                                       iInstance);
+                                       N_("NAT#%d: configuration query for \"%s/BindIP\" failed"), iInstance, szNodeNm);
 
         /* guest address */
         char szGuestIp[MAX_IP_ADDRESS_STR_LEN_W_NULL] = {0};
-        rc = pDrvIns->pHlpR3->pfnCFGMQueryString(pNode, "GuestIP", szGuestIp, MAX_IP_ADDRESS_STR_LEN_W_NULL);
-        if (rc == VERR_CFGM_VALUE_NOT_FOUND)
+        rc = pHlp->pfnCFGMQueryStringDef(pNode, "GuestIP", szGuestIp, sizeof(szGuestIp), "");
+        if (RT_FAILURE(rc))
             return PDMDrvHlpVMSetError(pDrvIns, rc, RT_SRC_POS,
-                                       N_("NAT#%d: configuration query for \"GuestIP\" failed"),
-                                       iInstance);
+                                       N_("NAT#%d: configuration query for \"%s/GuestIP\" failed"), iInstance, szNodeNm);
 
         LogRelMax(256, ("Preconfigured port forward rule discovered on startup: fUdp=%d, HostIp=%s, u16HostPort=%u, GuestIp=%s, u16GuestPort=%u\n",
-                        RT_BOOL(fUDP), szHostIp, uHostPort, szGuestIp, uGuestPort));
+                        fUDP, szHostIp, uHostPort, szGuestIp, uGuestPort));
 
         /*
          * Apply port forward.
          */
-        if (drvNATNotifyApplyPortForwardCommand(pThis, false /* fRemove */, fUDP, szHostIp, uHostPort, szGuestIp, uGuestPort) < 0)
-            LogFlowFunc(("NAT#%d: configuration error: failed to set up redirection of %d to %d. "
-                                          "Probably a conflict with existing services or other rules",
-                                       iInstance, uHostPort, uGuestPort));
+        rc = drvNATNotifyApplyPortForwardCommand(pThis, false /* fRemove */, fUDP, szHostIp, uHostPort, szGuestIp, uGuestPort);
+        if (RT_FAILURE(rc))
+            LogFlowFunc(("NAT#%d: configuration error: failed to set up redirection of %d to %d (probably a conflict with existing services or other rules): %Rrc\n",
+                         iInstance, uHostPort, uGuestPort, rc));
     } /* for each redir rule */
 
     return VINF_SUCCESS;
@@ -978,14 +978,13 @@ static DECLCALLBACK(int) drvNATNotifyApplyPortForwardCommand(PDRVNAT pThis, bool
     if (rc < 0)
     {
         LogRelFunc(("Port forward modify FAIL! Details: fRemove=%d, fUdp=%d, pszHostIp=%s, u16HostPort=%u, pszGuestIp=%s, u16GuestPort=%u\n",
-                    RT_BOOL(fRemove), RT_BOOL(fUdp), pszHostIp, u16HostPort, pszGuestIp, u16GuestPort));
+                    fRemove, fUdp, pszHostIp, u16HostPort, pszGuestIp, u16GuestPort));
         return PDMDrvHlpVMSetError(pThis->pDrvIns, VERR_NAT_REDIR_SETUP, RT_SRC_POS,
-                                   N_("NAT#%d: configuration error: failed to set up redirection of %d to %d. "
-                                      "Probably a conflict with existing services or other rules"),
+                                   N_("NAT#%d: configuration error: failed to set up redirection of %d to %d. Probably a conflict with existing services or other rules"),
                                    pThis->pDrvIns->iInstance, u16HostPort, u16GuestPort);
     }
 
-    return rc;
+    return VINF_SUCCESS;
 }
 
 /**
@@ -1595,27 +1594,32 @@ static DECLCALLBACK(int) drvNATConstruct(PPDMDRVINS pDrvIns, PCFGMNODE pCfg, uin
 
     if (fEnableTFTP)
     {
-        char pTmpBuf[1024];
-
-        rc = pDrvIns->pHlpR3->pfnCFGMQueryStringDef(pCfg, "TFTPPrefix", &pTmpBuf[0], sizeof(pTmpBuf), "");
+        char *pszTmp = NULL;
+        rc = pDrvIns->pHlpR3->pfnCFGMQueryStringAllocDef(pCfg, "TFTPPrefix", &pszTmp, "");
         AssertLogRelRCReturn(rc, rc);
-        slirpCfg.tftp_path = pTmpBuf;
+        slirpCfg.tftp_path = pszTmp;
 
-        rc = pDrvIns->pHlpR3->pfnCFGMQueryStringDef(pCfg, "BootFile", &pTmpBuf[0], sizeof(pTmpBuf), "");
+        rc = pDrvIns->pHlpR3->pfnCFGMQueryStringAllocDef(pCfg, "BootFile", &pszTmp, "");
         AssertLogRelRCReturn(rc, rc);
-        slirpCfg.bootfile = pTmpBuf;
+        slirpCfg.bootfile = pszTmp;
 
-        rc = pDrvIns->pHlpR3->pfnCFGMQueryStringDef(pCfg, "NextServer", &pTmpBuf[0], sizeof(pTmpBuf), "");
+        rc = pDrvIns->pHlpR3->pfnCFGMQueryStringAllocDef(pCfg, "NextServer", &pszTmp, "");
         AssertLogRelRCReturn(rc, rc);
-        slirpCfg.tftp_server_name = pTmpBuf;
+        slirpCfg.tftp_server_name = pszTmp;
     }
 
-    rc = pDrvIns->pHlpR3->pfnCFGMQueryU64Def(pCfg, "SlirpMTU", (uint64_t *)&slirpCfg.if_mtu, 1500);
+    uint32_t uTmpMtu = 0;
+    rc = pDrvIns->pHlpR3->pfnCFGMQueryU32Def(pCfg, "SlirpMTU", &uTmpMtu, 1500);
     AssertLogRelRCReturn(rc, rc);
+    /** @todo We need some range restrictions here, I think... */
+    slirpCfg.if_mtu = (size_t)uTmpMtu;
 
     /** @todo r=jack: make this configurable with the right cfgm key */
-    rc = pDrvIns->pHlpR3->pfnCFGMQueryU64Def(pCfg, "SlirpMTU", (uint64_t *)&slirpCfg.if_mru, 1500);
+    uint32_t uTmpMru = 0;
+    rc = pDrvIns->pHlpR3->pfnCFGMQueryU32Def(pCfg, "SlirpMTU", &uTmpMru, 1500);
     AssertLogRelRCReturn(rc, rc);
+    /** @todo We need some range restrictions here, I think... */
+    slirpCfg.if_mru = uTmpMru;
 
     rc = pDrvIns->pHlpR3->pfnCFGMQueryBoolDef(pCfg, "LocalhostReachable", &slirpCfg.disable_host_loopback, false);
     // Invert the input since the libslirp config is "disable" not "is reachable"
