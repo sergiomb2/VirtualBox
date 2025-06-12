@@ -1472,6 +1472,35 @@ static RTEXITCODE s2gSvnHasIgnores(PS2GSVNREV pRev, const char *pszSvnPath, bool
 }
 
 
+static RTEXITCODE s2gSvnHasGitIgnore(PS2GSVNREV pRev, const char *pszSvnPath, bool *pfHasGitIgnore)
+{
+    *pfHasGitIgnore = false;
+
+    apr_hash_t *pEntries = NULL;
+    svn_error_t *pSvnErr = svn_fs_dir_entries(&pEntries, pRev->pSvnFsRoot, pszSvnPath, pRev->pPoolRev);
+    if (pSvnErr)
+    {
+        svn_error_trace(pSvnErr);
+        return RTEXITCODE_FAILURE;
+    }
+
+    for (apr_hash_index_t *pIt = apr_hash_first(pRev->pPoolRev, pEntries); pIt; pIt = apr_hash_next(pIt))
+    {
+        const void *vkey;
+        apr_hash_this(pIt, &vkey, NULL, NULL);
+        const char *pszEntry = (const char *)vkey;
+
+        if (!RTStrCmp(pszEntry, ".gitignore"))
+        {
+            *pfHasGitIgnore = true;
+            return RTEXITCODE_SUCCESS;
+        }
+    }
+
+    return RTEXITCODE_SUCCESS;
+}
+
+
 static RTEXITCODE s2gSvnDumpDirRecursiveWorker(PS2GCTX pThis, PS2GSVNREV pRev, svn_fs_root_t *pSvnFsRoot, apr_pool_t *pPool,
                                                const char *pszSvnPath, const char *pszGitPath)
 {
@@ -1656,38 +1685,46 @@ static RTEXITCODE s2gSvnExportSinglePath(PS2GCTX pThis, PS2GSVNREV pRev, const c
                     rcExit = s2gSvnProcessExternals(pThis, pRev, pszSvnPath);
                     if (rcExit == RTEXITCODE_SUCCESS)
                     {
-                        /* Process svn:ignore. */
-                        rcExit = s2gSvnProcessIgnores(pThis, pRev, pszSvnPath, pszGitPath);
+                        /* Process svn:ignore but only if there is not .gitignore in the source tree. */
+                        bool fHasGitIgnore = false;
+                        rcExit = s2gSvnHasGitIgnore(pRev, pszSvnPath, &fHasGitIgnore);
+                        if (   rcExit == RTEXITCODE_SUCCESS
+                            && !fHasGitIgnore)
+                            rcExit = s2gSvnProcessIgnores(pThis, pRev, pszSvnPath, pszGitPath);
                     }
                 }
-                else
+
+                if (rcExit == RTEXITCODE_SUCCESS)
                 {
-                    /* If the directory is empty we need to add a .gitignore. */
+                    /* If the directory is empty and doesn't has any svn:ignore properties set we need to add a .gitignore. */
                     bool fIsEmpty = false;
+                    bool fHasIgnores = false;
                     rcExit = s2gSvnPathIsEmptyDir(pRev, pszSvnPath, &fIsEmpty);
-                    if (rcExit == RTEXITCODE_SUCCESS
-                        && fIsEmpty)
+                    if (rcExit == RTEXITCODE_SUCCESS)
+                        rcExit = s2gSvnHasIgnores(pRev, pszSvnPath, &fHasIgnores);
+                    if (   rcExit == RTEXITCODE_SUCCESS
+                        && fIsEmpty
+                        && !fHasIgnores)
                         rcExit = s2gSvnAddGitIgnore(pThis, pszGitPath, NULL /*pvData*/, 0 /*cbData*/);
-                }
 
-                /* Need to delete .gitignore in the parent the directory doesn't has svn:ignores set. */
-                char szSvnPath[RTPATH_MAX];
-                strncpy(szSvnPath, pszSvnPath, sizeof(szSvnPath));
-                RTPathStripFilename(szSvnPath);
+                    /* Need to delete .gitignore in the parent the directory doesn't has svn:ignores set. */
+                    char szSvnPath[RTPATH_MAX];
+                    strncpy(szSvnPath, pszSvnPath, sizeof(szSvnPath));
+                    RTPathStripFilename(szSvnPath);
 
-                bool fHasIgnores = false;
-                rcExit = s2gSvnHasIgnores(pRev, szSvnPath, &fHasIgnores);
-                if (   rcExit == RTEXITCODE_SUCCESS
-                    && !fHasIgnores)
-                {
-                    char szGitPath[RTPATH_MAX];
-                    strncpy(szGitPath, pszGitPath, sizeof(szGitPath));
-                    RTPathStripFilename(szGitPath);
-                    RTStrCat(szGitPath, sizeof(szGitPath), "/.gitignore");
+                    rcExit = s2gSvnHasIgnores(pRev, szSvnPath, &fHasIgnores);
+                    if (   rcExit == RTEXITCODE_SUCCESS
+                        && !fHasIgnores)
+                    {
+                        char szGitPath[RTPATH_MAX];
+                        strncpy(szGitPath, pszGitPath, sizeof(szGitPath));
+                        RTPathStripFilename(szGitPath);
+                        RTStrCat(szGitPath, sizeof(szGitPath), "/.gitignore");
 
-                    int rc = s2gGitTransactionFileRemove(pThis->hGitRepo, szGitPath);
-                    if (RT_FAILURE(rc))
-                        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to remove '%s' from git repository", szGitPath);
+                        int rc = s2gGitTransactionFileRemove(pThis->hGitRepo, szGitPath);
+                        if (RT_FAILURE(rc))
+                            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to remove '%s' from git repository", szGitPath);
+                    }
                 }
             }
         }
