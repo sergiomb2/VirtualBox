@@ -112,6 +112,12 @@
 # define VBOX_EXTRA_VERSION_STRING ""
 #endif
 
+/* Macro was renamed in 6.16. */
+# if RTLNX_VER_MIN(6,16,0)
+#  define VBOX_RDMSR_SAFE rdmsrq_safe
+# else
+#  define VBOX_RDMSR_SAFE rdmsrl_safe
+# endif
 
 /*********************************************************************************************************************************
 *   Structures and Typedefs                                                                                                      *
@@ -1579,7 +1585,7 @@ static DECLCALLBACK(void) supdrvLnxMsrProberModifyOnCpu(RTCPUID idCpu, void *pvU
     if (!fFaster)
         ASMWriteBackAndInvalidateCaches();
 
-    rcBefore = rdmsrl_safe(uMsr, &uBefore);
+    rcBefore = VBOX_RDMSR_SAFE(uMsr, &uBefore);
     if (rcBefore >= 0)
     {
         register uint64_t uRestore = uBefore;
@@ -1588,7 +1594,7 @@ static DECLCALLBACK(void) supdrvLnxMsrProberModifyOnCpu(RTCPUID idCpu, void *pvU
         uWritten |= pReq->u.In.uArgs.Modify.fOrMask;
 
         rcWrite   = wrmsr_safe(uMsr, RT_LODWORD(uWritten), RT_HIDWORD(uWritten));
-        rcAfter   = rdmsrl_safe(uMsr, &uAfter);
+        rcAfter   = VBOX_RDMSR_SAFE(uMsr, &uAfter);
         rcRestore = wrmsr_safe(uMsr, RT_LODWORD(uRestore), RT_HIDWORD(uRestore));
 
         if (!fFaster)
