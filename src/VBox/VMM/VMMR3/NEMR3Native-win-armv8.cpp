@@ -1503,7 +1503,7 @@ static DECLCALLBACK(int) nemR3WinSave(PVM pVM, PSSMHANDLE pSSM)
 
         HRESULT hrc = WHvGetVirtualProcessorRegisters(pVM->nem.s.hPartition, pVCpu->idCpu, &s_Name, 1, &Reg);
         AssertLogRelMsgReturn(SUCCEEDED(hrc),
-                              ("WHvSetVirtualProcessorRegisters(%p, 0,{WHvRegisterInternalActivityState}, 1,) -> %Rhrc (Last=%#x/%u)\n",
+                              ("WHvGetVirtualProcessorRegisters(%p, 0,{WHvRegisterInternalActivityState}, 1,) -> %Rhrc (Last=%#x/%u)\n",
                                pVM->nem.s.hPartition, pVCpu->idCpu, hrc, RTNtLastStatusValue(), RTNtLastErrorValue())
                               , VERR_NEM_IPE_9);
 
