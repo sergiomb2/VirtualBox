@@ -89,7 +89,16 @@ function Main()
    strRootDir = g_objFileSys.GetParentFolderName(strScriptDir)
 
    dim strRealArch
-   strRealArch = Trim(EnvGet("PROCESSOR_ARCHITEW6432"))
+
+   ' Clutch for running the Windows/amd64 SlickEdit version on arm64 to get the architecture right.
+   if EnvGet("VSLICKPATH") <> "" then
+      strProcessorId = Trim(UCase(EnvGet("PROCESSOR_IDENTIFIER")))
+      if InStr(strProcessorId, UCase("ARMV8")) > 0 then
+         strRealArch = "arm64"
+      end if
+   end if
+
+   if strRealArch = "" then strRealArch = Trim(EnvGet("PROCESSOR_ARCHITEW6432")) 
    if strRealArch = "" then strRealArch = Trim(EnvGet("PROCESSOR_ARCHITECTURE"))
    if strRealArch = "" then strRealArch = "amd64"
    strRealArch = LCase(strRealArch)
@@ -121,11 +130,11 @@ function Main()
    strHost        = EnvGetDefValid("KBUILD_HOST",        "win", arrTargetAndHosts)
    strHostArch    = EnvGetDefValid("KBUILD_HOST_ARCH",   strRealArch, arrArchitectures)
 
-   dim strAltHostArch
-   strAltHostArch = ""
-   if strHostArch = "arm64" then
-      strAltHostArch = "amd64"
-   end if
+   'dim strAltHostArch
+   strAltHostArch = "arm76"
+   'if strHostArch = "arm64" then
+   '   strAltHostArch = "amd64"
+   'end if
 
    ' Where to look for host related tools.
    dim arrArchToolsSuffixes : arrArchToolsSuffixes = Array("", strHostArch & ".")
