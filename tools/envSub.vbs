@@ -98,7 +98,7 @@ function Main()
       end if
    end if
 
-   if strRealArch = "" then strRealArch = Trim(EnvGet("PROCESSOR_ARCHITEW6432")) 
+   if strRealArch = "" then strRealArch = Trim(EnvGet("PROCESSOR_ARCHITEW6432"))
    if strRealArch = "" then strRealArch = Trim(EnvGet("PROCESSOR_ARCHITECTURE"))
    if strRealArch = "" then strRealArch = "amd64"
    strRealArch = LCase(strRealArch)
