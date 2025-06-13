@@ -1224,7 +1224,7 @@ const PDMDRVREG VMMDev::DrvReg =
     /* u32Version */
     PDM_DRVREG_VERSION,
     /* szName */
-    "HGCM",
+    "HGCM", /** @todo r=andy Shouldn't we rename this to "MainVMMDev" like the rest? */
     /* szRCMod */
     "",
     /* szR0Mod */
