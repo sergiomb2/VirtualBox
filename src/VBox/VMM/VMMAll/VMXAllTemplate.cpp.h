@@ -1100,8 +1100,6 @@ static int vmxHCSwitchToGstOrNstGstVmcs(PVMCPUCC pVCpu, bool fSwitchToNstGstVmcs
         else
             ASMAtomicUoOrU64(&VCPU_2_VMXSTATE(pVCpu).fCtxChanged, HM_CHANGED_HOST_CONTEXT | HM_CHANGED_VMX_HOST_GUEST_SHARED_STATE);
 
-        ASMSetFlags(fEFlags);
-
         /*
          * We use a different VM-exit MSR-store areas for the guest and nested-guest. Hence,
          * flag that we need to update the host MSR values there. Even if we decide in the
@@ -1109,9 +1107,14 @@ static int vmxHCSwitchToGstOrNstGstVmcs(PVMCPUCC pVCpu, bool fSwitchToNstGstVmcs
          * if its content differs, we would have to update the host MSRs anyway.
          */
         pVCpu->hmr0.s.vmx.fUpdatedHostAutoMsrs = false;
+
+#ifdef HMVMX_VERIFY_VMCS_MAGIC
+        AssertRC(hmR0VmxCheckVmcsMagic(fSwitchToNstGstVmcs));
+#endif
     }
-    else
-        ASMSetFlags(fEFlags);
+
+    ASMSetFlags(fEFlags);
+    AssertRC(rc);
     return rc;
 }
 
@@ -1812,11 +1815,13 @@ static void vmxHCExportGuestXcptIntercepts(PVMCPUCC pVCpu, PCVMXTRANSIENT pVmxTr
     if (ASMAtomicUoReadU64(&VCPU_2_VMXSTATE(pVCpu).fCtxChanged) & HM_CHANGED_VMX_XCPT_INTERCEPTS)
     {
         /* When executing a nested-guest, we do not need to trap GIM hypercalls by intercepting #UD. */
-        if (   !pVmxTransient->fIsNestedGuest
-            &&  VCPU_2_VMXSTATE(pVCpu).fGIMTrapXcptUD)
-            vmxHCAddXcptIntercept(pVCpu, pVmxTransient, X86_XCPT_UD);
-        else
-            vmxHCRemoveXcptIntercept(pVCpu, pVmxTransient, X86_XCPT_UD);
+        if (!pVmxTransient->fIsNestedGuest)
+        {
+            if (VCPU_2_VMXSTATE(pVCpu).fGIMTrapXcptUD)
+                vmxHCAddXcptIntercept(pVCpu, pVmxTransient, X86_XCPT_UD);
+            else
+                vmxHCRemoveXcptIntercept(pVCpu, pVmxTransient, X86_XCPT_UD);
+        }
 
         /* Other exception intercepts are handled elsewhere, e.g. while exporting guest CR0. */
         ASMAtomicUoAndU64(&VCPU_2_VMXSTATE(pVCpu).fCtxChanged, ~HM_CHANGED_VMX_XCPT_INTERCEPTS);
@@ -2029,9 +2034,6 @@ static void vmxHCEnableVmcsShadowing(PCVMCPUCC pVCpu, PVMXVMCSINFO pVmcsInfo)
         pVmcsInfo->u32ProcCtls2   = uProcCtls2;
         pVmcsInfo->u64VmcsLinkPtr = pVmcsInfo->HCPhysShadowVmcs;
         Log4Func(("Enabled\n"));
-#ifdef HMVMX_VERIFY_VMCS_MAGIC
-        AssertRC(hmR0VmxCheckVmcsMagic(false));
-#endif
     }
 }
 
@@ -2064,9 +2066,6 @@ static void vmxHCDisableVmcsShadowing(PCVMCPUCC pVCpu, PVMXVMCSINFO pVmcsInfo)
         pVmcsInfo->u32ProcCtls2   = uProcCtls2;
         pVmcsInfo->u64VmcsLinkPtr = NIL_RTHCPHYS;
         Log4Func(("Disabled\n"));
-#ifdef HMVMX_VERIFY_VMCS_MAGIC
-        AssertRC(hmR0VmxCheckVmcsMagic(false));
-#endif
     }
 }
 #endif
