@@ -634,6 +634,12 @@ PVBOXSHGSMI vboxWddmHgsmiGetHeapFromCmdOffset(PVBOXMP_DEVEXT pDevExt, HGSMIOFFSE
 
 NTSTATUS vboxWddmPickResources(PVBOXMP_DEVEXT pDevExt, PDXGK_DEVICE_INFO pDeviceInfo, PVBOXWDDM_HWRESOURCES pHwResources)
 {
+    /* Layout of PCI regions for each hardware type:
+     *   - VBoxVGA:   VRAM = 0
+     *   - VBoxSVGA:  VRAM = 0, PortIO = 1, FIFO = 2
+     *   - VBoxSVGA3: VRAM = 0, MMIO = 1
+     * This function infers the hardware type from the resource layout.
+     */
     RT_NOREF(pDevExt);
     NTSTATUS Status = STATUS_SUCCESS;
     USHORT DispiId;
@@ -658,53 +664,74 @@ NTSTATUS vboxWddmPickResources(PVBOXMP_DEVEXT pDevExt, PDXGK_DEVICE_INFO pDevice
        pHwResources->cbVRAM = VBVO_PORT_READ_U32(VBE_DISPI_IOPORT_DATA);
        if (VBoxHGSMIIsSupported ())
        {
-           PCM_RESOURCE_LIST pRcList = pDeviceInfo->TranslatedResourceList;
-           /** @todo verify resources */
-           for (ULONG i = 0; i < pRcList->Count; ++i)
+           /* Fetch as many resources as needed and ignore any additional resources for forward compatibility. */
+           int cMemoryResources = 0;
+           int cPortResources = 0;
+           for (ULONG i = 0; i < pDeviceInfo->TranslatedResourceList->Count; ++i)
            {
-               PCM_FULL_RESOURCE_DESCRIPTOR pFRc = &pRcList->List[i];
-               for (ULONG j = 0; j < pFRc->PartialResourceList.Count; ++j)
+               PCM_FULL_RESOURCE_DESCRIPTOR pFRD = &pDeviceInfo->TranslatedResourceList->List[i];
+               for (ULONG j = 0; j < pFRD->PartialResourceList.Count; ++j)
                {
-                   PCM_PARTIAL_RESOURCE_DESCRIPTOR pPRc = &pFRc->PartialResourceList.PartialDescriptors[j];
-                   switch (pPRc->Type)
+                   PCM_PARTIAL_RESOURCE_DESCRIPTOR pPRD = &pFRD->PartialResourceList.PartialDescriptors[j];
+                   switch (pPRD->Type)
                    {
                        case CmResourceTypePort:
 #ifdef VBOX_WITH_VMSVGA
-                           AssertBreak(pHwResources->phIO.QuadPart == 0);
-                           pHwResources->phIO = pPRc->u.Port.Start;
-                           pHwResources->cbIO = pPRc->u.Port.Length;
+                           if (cPortResources == 0)
+                           {
+                               pHwResources->phIO = pPRD->u.Port.Start;
+                               pHwResources->cbIO = pPRD->u.Port.Length;
+                           }
+                           else
+                               AssertFailedBreak();
+                           ++cPortResources;
 #endif
-                           break;
-                       case CmResourceTypeInterrupt:
                            break;
                        case CmResourceTypeMemory:
-#ifdef VBOX_WITH_VMSVGA
-                           if (pHwResources->phVRAM.QuadPart)
+                           if (cMemoryResources == 0)
                            {
-                               AssertBreak(pHwResources->phFIFO.QuadPart == 0);
-                               pHwResources->phFIFO = pPRc->u.Memory.Start;
-                               pHwResources->cbFIFO = pPRc->u.Memory.Length;
-                               break;
+                               /* The first memory region is always VRAM. */
+                               pHwResources->phVRAM = pPRD->u.Memory.Start;
+                               pHwResources->ulApertureSize = pPRD->u.Memory.Length;
                            }
-#else
-                           /* we assume there is one memory segment */
-                           AssertBreak(pHwResources->phVRAM.QuadPart == 0);
+#ifdef VBOX_WITH_VMSVGA
+                           else if (cMemoryResources == 1)
+                           {
+                               pHwResources->phFIFO = pPRD->u.Memory.Start;
+                               pHwResources->cbFIFO = pPRD->u.Memory.Length;
+                           }
 #endif
-                           pHwResources->phVRAM = pPRc->u.Memory.Start;
-                           Assert(pHwResources->phVRAM.QuadPart != 0);
-                           pHwResources->ulApertureSize = pPRc->u.Memory.Length;
-                           Assert(pHwResources->cbVRAM <= pHwResources->ulApertureSize);
-                           break;
-                       case CmResourceTypeDma:
-                           break;
-                       case CmResourceTypeDeviceSpecific:
-                           break;
-                       case CmResourceTypeBusNumber:
+                           else
+                               AssertFailedBreak();
+                           ++cMemoryResources;
                            break;
                        default:
                            break;
                    }
                }
+           }
+
+           if (cMemoryResources == 1)
+           {
+               /* Legacy VBoxVGA */
+           }
+           else if (cMemoryResources == 2 && cPortResources == 1)
+           {
+               /* VBoxSVGA */
+           }
+           else if (cMemoryResources == 2 && cPortResources == 0)
+           {
+               /* VBoxSVGA variant which corresponds to VMSVGA3 (no port IO, no FIFO) */
+               /* The second memory resource, which the code above saved as phFIFO, is the MMIO region. */
+               pHwResources->phIO = pHwResources->phFIFO;
+               pHwResources->cbIO = pHwResources->cbFIFO;
+               pHwResources->phFIFO.QuadPart = 0;
+               pHwResources->cbFIFO = 0;
+           }
+           else
+           {
+               LOGREL(("WDDM: Unexpected: cMemoryResources %d, cPortResources %d\n", cMemoryResources, cPortResources));
+               Status = STATUS_UNSUCCESSFUL;
            }
        }
        else

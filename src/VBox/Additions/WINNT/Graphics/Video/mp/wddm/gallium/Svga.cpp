@@ -303,8 +303,15 @@ static NTSTATUS svgaHwStart(VBOXWDDM_EXT_VMSVGA *pSvga)
      */
     pSvga->u32MaxTextureLevels = ASMBitLastSetU32(RT_MAX(pSvga->u32MaxTextureWidth, pSvga->u32MaxTextureHeight));
 
-    NTSTATUS Status = SvgaFifoInit(pSvga);
-    AssertReturn(NT_SUCCESS(Status), Status);
+    NTSTATUS Status = STATUS_SUCCESS;
+    if (!pSvga->fMMIO)
+    {
+        Status = SvgaFifoInit(pSvga);
+        AssertReturn(NT_SUCCESS(Status), Status);
+    }
+
+    SVGARegWrite(pSvga, SVGA_REG_TRACES, 0);
+    SVGARegWrite(pSvga, SVGA_REG_CONFIG_DONE, 1);
 
     if (pSvga->u32Caps & SVGA_CAP_COMMAND_BUFFERS)
     {
@@ -380,8 +387,17 @@ void SvgaAdapterStop(PVBOXWDDM_EXT_VMSVGA pSvga,
             SvgaGboUnreference(pSvga, &pSvga->pMiniportGbo);
         }
 
-        Status = pDxgkInterface->DxgkCbUnmapMemory(pDxgkInterface->DeviceHandle,
-                                                   (PVOID)pSvga->pu32FIFO);
+
+        if (pSvga->fMMIO)
+        {
+            Status = pDxgkInterface->DxgkCbUnmapMemory(pDxgkInterface->DeviceHandle,
+                                                       (PVOID)pSvga->hw.pu32MMIO);
+        }
+        else
+        {
+            Status = pDxgkInterface->DxgkCbUnmapMemory(pDxgkInterface->DeviceHandle,
+                                                       (PVOID)pSvga->hw.pu32FIFO);
+        }
         Assert(Status == STATUS_SUCCESS); RT_NOREF(Status);
 
 #ifdef DEBUG
@@ -423,17 +439,34 @@ NTSTATUS SvgaAdapterStart(PVBOXWDDM_EXT_VMSVGA *ppSvga,
     RTListInit(&pSvga->DeletedHostObjectsList);
     pSvga->mobidMiniport = SVGA3D_INVALID_ID;
 
-    /* The port IO address is also needed for hardware access. */
-    pSvga->ioportBase = (RTIOPORT)physIO.QuadPart;
+    /* If FIFO is not present, then it is VMSVGA3 hardware without port IO. */
+    pSvga->fMMIO = (cbFIFO == 0);
 
-    /* FIFO pointer is also needed for hardware access. */
-    Status = pDxgkInterface->DxgkCbMapMemory(pDxgkInterface->DeviceHandle,
-                 physFIFO,
-                 cbFIFO,
-                 FALSE, /* IN BOOLEAN InIoSpace */
-                 FALSE, /* IN BOOLEAN MapToUserMode */
-                 MmNonCached, /* IN MEMORY_CACHING_TYPE CacheType */
-                 (PVOID *)&pSvga->pu32FIFO /*OUT PVOID *VirtualAddress*/);
+    if (pSvga->fMMIO)
+    {
+        /* MMIO pointer is needed for hardware access. */
+        Status = pDxgkInterface->DxgkCbMapMemory(pDxgkInterface->DeviceHandle,
+                     physIO,
+                     cbIO,
+                     FALSE, /* IN BOOLEAN InIoSpace */
+                     FALSE, /* IN BOOLEAN MapToUserMode */
+                     MmNonCached, /* IN MEMORY_CACHING_TYPE CacheType */
+                     (PVOID *)&pSvga->hw.pu32MMIO /*OUT PVOID *VirtualAddress*/);
+    }
+    else
+    {
+        /* The port IO address is also needed for hardware access. */
+        pSvga->hw.ioportBase = (RTIOPORT)physIO.QuadPart;
+
+        /* FIFO pointer is also needed for hardware access. */
+        Status = pDxgkInterface->DxgkCbMapMemory(pDxgkInterface->DeviceHandle,
+                     physFIFO,
+                     cbFIFO,
+                     FALSE, /* IN BOOLEAN InIoSpace */
+                     FALSE, /* IN BOOLEAN MapToUserMode */
+                     MmNonCached, /* IN MEMORY_CACHING_TYPE CacheType */
+                     (PVOID *)&pSvga->hw.pu32FIFO /*OUT PVOID *VirtualAddress*/);
+    }
 
     if (NT_SUCCESS(Status))
     {
@@ -501,8 +534,24 @@ NTSTATUS SvgaQueryInfo(PVBOXWDDM_EXT_VMSVGA pSvga,
             pSvgaInfo->au32Caps[i] = SVGADevCapRead(pSvga, i);
     }
 
-    /* Beginning of FIFO. */
-    memcpy(pSvgaInfo->au32Fifo, (void *)&pSvga->pu32FIFO[0], sizeof(pSvgaInfo->au32Fifo));
+    if (pSvga->fMMIO)
+    {
+        /* User mode Mesa/Gallium based OpenGL driver uses following fields:
+         * SVGA_FIFO_CAPABILITIES
+         * SVGA_FIFO_3D_HWVERSION_REVISED
+         * SVGA_FIFO_3D_HWVERSION
+         */
+        memset(pSvgaInfo->au32Fifo, 0, sizeof(pSvgaInfo->au32Fifo));
+
+        pSvgaInfo->au32Fifo[SVGA_FIFO_CAPABILITIES] = pSvgaInfo->au32Regs[SVGA_REG_FIFO_CAPS];
+        pSvgaInfo->au32Fifo[SVGA_FIFO_3D_HWVERSION] = SVGA3D_HWVERSION_CURRENT;
+        pSvgaInfo->au32Fifo[SVGA_FIFO_3D_HWVERSION_REVISED] = SVGA3D_HWVERSION_CURRENT;
+    }
+    else
+    {
+        /* Beginning of FIFO. */
+        memcpy(pSvgaInfo->au32Fifo, (void *)&pSvga->hw.pu32FIFO[0], sizeof(pSvgaInfo->au32Fifo));
+    }
 
     return STATUS_SUCCESS;
 }

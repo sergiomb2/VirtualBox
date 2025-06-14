@@ -194,10 +194,24 @@ typedef struct VMSVGAOT
 /* VMSVGA specific part of Gallium device extension. */
 typedef struct VBOXWDDM_EXT_VMSVGA
 {
-    /** First IO port. SVGA_*_PORT are relative to it. */
-    RTIOPORT ioportBase;
-    /** Pointer to FIFO MMIO region. */
-    volatile uint32_t *pu32FIFO;
+    union
+    {
+        struct
+        {
+            /** First IO port. SVGA_*_PORT are relative to it. */
+            RTIOPORT ioportBase;
+            /** Pointer to FIFO MMIO region. */
+            volatile uint32_t *pu32FIFO;
+        };
+        struct
+        {
+            /** MMIO base address. SVGA_REG_* are relative to it. */
+            volatile uint32_t *pu32MMIO;
+        };
+    } hw;
+
+    /** Whether MMIO (hw.pu32MMIO) must be used instead of port IO. */
+    bool fMMIO;
 
     /**
      * Hardware capabilities.

@@ -59,7 +59,6 @@ NTSTATUS SvgaFifoInit(PVBOXWDDM_EXT_VMSVGA pSvga)
            u32EnableState, u32ConfigDone, u32TracesState));
 
     SVGARegWrite(pSvga, SVGA_REG_ENABLE, SVGA_REG_ENABLE_ENABLE | SVGA_REG_ENABLE_HIDE);
-    SVGARegWrite(pSvga, SVGA_REG_TRACES, 0);
 
     uint32_t offMin = 4;
     if (pSvga->u32Caps & SVGA_CAP_EXTENDED_FIFO)
@@ -81,8 +80,6 @@ NTSTATUS SvgaFifoInit(PVBOXWDDM_EXT_VMSVGA pSvga)
     SVGAFifoWrite(pSvga, SVGA_FIFO_STOP, offMin);
     SVGAFifoWrite(pSvga, SVGA_FIFO_BUSY, 0);
     ASMCompilerBarrier();
-
-    SVGARegWrite(pSvga, SVGA_REG_CONFIG_DONE, 1);
 
     pFifo->u32FifoCaps = SVGAFifoRead(pSvga, SVGA_FIFO_CAPABILITIES);
 
@@ -196,7 +193,7 @@ void *SvgaFifoReserve(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t cbReserve)
 
 static void svgaFifoPingHost(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t u32Reason)
 {
-    if (ASMAtomicCmpXchgU32(&pSvga->pu32FIFO[SVGA_FIFO_BUSY], 1, 0))
+    if (ASMAtomicCmpXchgU32(&pSvga->hw.pu32FIFO[SVGA_FIFO_BUSY], 1, 0))
     {
         SVGARegWrite(pSvga, SVGA_REG_SYNC, u32Reason);
     }
