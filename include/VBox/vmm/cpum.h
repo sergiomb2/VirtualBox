@@ -2181,11 +2181,11 @@ typedef DECLCALLBACKPTR(PCCPUMDBENTRY, PFNCPUMDBGETBESTENTRYBYNAME, (const char 
 VMMR3DECL(PCCPUMDBENTRYARM) CPUMR3DbGetBestEntryByArm64MainId(uint64_t idMain, uint32_t *puScore);
 /** Pointer to CPUMR3DbGetBestEntryByArm64MainId.  */
 typedef DECLCALLBACKPTR(PCCPUMDBENTRYARM, PFNCPUMDBGETBESTENTRYBYARM64MAINID, (uint64_t idMain, uint32_t *puScore));
-VMMR3DECL(void)             CPUMR3CpuIdPrintArmV8Features(PCDBGFINFOHLP pHlp,
+VMMR3DECL(void)             CPUMR3CpuIdPrintArmV8Features(PCDBGFINFOHLP pHlp, uint32_t cchOutput,
                                                           CPUMFEATURESARMV8 const *pFeatures, const char *pszLabel,
                                                           CPUMFEATURESARMV8 const *pSecondary, const char *pszSecondary);
 /** Pointer to CPUMR3CpuIdPrintArmV8Features   */
-typedef DECLCALLBACKPTR(void, PFNCPUMCPUIDPRINTARMV8FEATURES,(PCDBGFINFOHLP pHlp,
+typedef DECLCALLBACKPTR(void, PFNCPUMCPUIDPRINTARMV8FEATURES,(PCDBGFINFOHLP pHlp, uint32_t cchOutput,
                                                               CPUMFEATURESARMV8 const *pFeatures, const char *pszLabel,
                                                               CPUMFEATURESARMV8 const *pSecondary, const char *pszSecondary));
 VMMR3DECL(int)              CPUMCpuIdDetermineArmV8MicroarchEx(uint64_t idMain, const char *pszCpuName,

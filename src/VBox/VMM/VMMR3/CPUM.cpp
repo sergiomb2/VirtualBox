@@ -799,7 +799,7 @@ static DECLCALLBACK(void) cpumR3InfoHost(PVM pVM, PCDBGFINFOHLP pHlp, const char
 static DECLCALLBACK(void) cpumR3InfoCpuFeatHost(PVM pVM, PCDBGFINFOHLP pHlp, const char *pszArgs)
 {
     RT_NOREF_PV(pszArgs);
-    CPUMR3CpuIdPrintArmV8Features(pHlp, &pVM->cpum.s.HostFeatures.s, "Host", NULL, NULL);
+    CPUMR3CpuIdPrintArmV8Features(pHlp, 0, &pVM->cpum.s.HostFeatures.s, "Host", NULL, NULL);
 }
 #endif /* RT_ARCH_AMD64 || RT_ARCH_ARM32 */
 

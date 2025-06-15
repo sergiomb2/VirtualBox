@@ -100,7 +100,9 @@ static const struct
 #endif
 };
 
-static unsigned g_cVerbosity = 1;
+static uint32_t g_cchStdOutWidth   = 80;
+static unsigned g_cVerbosity       = 1;
+static bool     g_fShowArmFeatures = false;
 
 
 /** @interface_method_impl{DBGFINFOHLP,pfnPrintfV} */
@@ -152,10 +154,14 @@ DECLCALLBACK(int) armrmRegValSortCmp(void const *pvElement1, void const *pvEleme
 #define DISPLAY_ENTRY_F_NOTHING     UINT32_C(0x00000000)
 #define DISPLAY_ENTRY_F_INDEX       UINT32_C(0x00000001)
 #define DISPLAY_ENTRY_F_SCORE       UINT32_C(0x00000002)
-void displayEntry(PCCPUMDBENTRY pEntry, uint32_t uInfo, uint32_t fFlags)
+void displayEntry(PCCPUMDBENTRY pEntry, uint32_t uInfo, uint32_t fFlags, uint32_t iVerboseSub)
 {
     if (fFlags & DISPLAY_ENTRY_F_INDEX)
+    {
+        if (g_cVerbosity >= 2 && uInfo > 0)
+            RTPrintf("\n");
         RTPrintf("#%u: ", uInfo);
+    }
     switch (pEntry->enmEntryType)
     {
         case CPUMDBENTRYTYPE_ARM:       RTPrintf("arm"); break;
@@ -166,12 +172,34 @@ void displayEntry(PCCPUMDBENTRY pEntry, uint32_t uInfo, uint32_t fFlags)
     if (fFlags & DISPLAY_ENTRY_F_SCORE)
         RTPrintf(" - score %u%%", uInfo);
     RTPrintf("\n");
-    /** @todo more detailed listing if -v is high enough...   */
+    if (g_cVerbosity >= 2)
+    {
+        RTPrintf("     enmVendor = %s\n", g_pVMM->pfnCPUMCpuVendorName(pEntry->enmVendor));
+        RTPrintf("  enmMicroarch = %s\n", g_pVMM->pfnCPUMMicroarchName(pEntry->enmMicroarch));
+        if (pEntry->fFlags)
+            RTPrintf("        fFlags = %#010x\n", pEntry->fFlags);
+        if (pEntry->enmEntryType == CPUMDBENTRYTYPE_X86)
+        {
+            //PCCPUMDBENTRYX86 const pEntryX86   = (PCCPUMDBENTRYX86)pEntry;
+            /** @todo more detailed listing if -v is high enough...   */
+        }
+        else if (pEntry->enmEntryType == CPUMDBENTRYTYPE_ARM)
+        {
+            PCCPUMDBENTRYARM const pEntryArm   = (PCCPUMDBENTRYARM)pEntry;
+            //RTPrintf("     cVariants = %u\n", pEntryArm->cVariants);
+            for (unsigned iVar = 0; iVar < pEntryArm->cVariants; iVar++)
+                RTPrintf("   Core Var #%u = %s\n", iVar, pEntryArm->aVariants[iVar].pszName);
+        }
+        /** @todo more detailed listing if -v is high enough...   */
+    }
 
     /*
      * Display the CPU ID info for the entry.
      */
-    if (g_cVerbosity >= 2)
+    if (   g_cVerbosity >= 2 + iVerboseSub
+        || (   pEntry->enmEntryType == CPUMDBENTRYTYPE_ARM
+            && g_cVerbosity >= 1
+            && g_fShowArmFeatures) )
     {
         bool fSameAsHost = false;
         if (   pEntry->enmEntryType == CPUMDBENTRYTYPE_X86
@@ -187,7 +215,7 @@ void displayEntry(PCCPUMDBENTRY pEntry, uint32_t uInfo, uint32_t fFlags)
                 {
                     {
                         /* .pHlp        = */    &g_StdOutInfoHlp,
-                        /* .iVerbosity  = */    g_cVerbosity - 2,
+                        /* .iVerbosity  = */    g_cVerbosity - 2 - iVerboseSub,
                         /* .cchLabelMax = */    5,
                         /* .pszShort    = */    "Gst",
                         /* .pszLabel    = */    "Guest",
@@ -208,8 +236,7 @@ void displayEntry(PCCPUMDBENTRY pEntry, uint32_t uInfo, uint32_t fFlags)
                 RTMsgError("CPUMCpuIdExplodeFeaturesX86 failed: %Rrc", rc);
         }
         else if (   pEntry->enmEntryType == CPUMDBENTRYTYPE_ARM
-                 && g_pfnCPUMCpuIdExplodeFeaturesArmV8
-                 && g_pfnCPUMR3CpuIdInfoArmV8)
+                 && g_pfnCPUMCpuIdExplodeFeaturesArmV8)
         {
             PCCPUMDBENTRYARM const pEntryArm   = (PCCPUMDBENTRYARM)pEntry;
             uint32_t               cSysRegs    = pEntryArm->cSysRegCmnVals + pEntryArm->aVariants[0].cSysRegVals;
@@ -228,26 +255,36 @@ void displayEntry(PCCPUMDBENTRY pEntry, uint32_t uInfo, uint32_t fFlags)
                 int rc = g_pfnCPUMCpuIdExplodeFeaturesArmV8(paSysRegs, cSysRegs, &FeaturesArm);
                 if (RT_SUCCESS(rc))
                 {
-                    CPUMCPUIDINFOSTATEARMV8 InfoState =
+                    if (   g_pfnCPUMR3CpuIdInfoArmV8
+                        && g_cVerbosity >= 2 + iVerboseSub)
                     {
+                        CPUMCPUIDINFOSTATEARMV8 InfoState =
                         {
-                            /* .pHlp        = */    &g_StdOutInfoHlp,
-                            /* .iVerbosity  = */    g_cVerbosity - 2,
-                            /* .cchLabelMax = */    5,
-                            /* .pszShort    = */    "Gst",
-                            /* .pszLabel    = */    "Guest",
-                            /* .cchLabel    = */    5,
-                            /* .cchLabel2   = */    0,
-                            /* .pszShort2   = */    fSameAsHost ? "Hst"  : NULL,
-                            /* .pszLabel2   = */    fSameAsHost ? "Host" : NULL,
-                        },
-                        /* .pFeatures         = */  &FeaturesArm,
-                        /* .paLeaves/IdRegs   = */  paSysRegs,
-                        /* .cLeaves/IdRegs    = */  cSysRegs,
-                        /* .cLeaves2/IdRegs2  = */  fSameAsHost ? cSysRegs  : 0,
-                        /* .paLeaves2/IdRegs2 = */  fSameAsHost ? paSysRegs : NULL,
-                    };
-                    g_pfnCPUMR3CpuIdInfoArmV8(&InfoState);
+                            {
+                                /* .pHlp        = */    &g_StdOutInfoHlp,
+                                /* .iVerbosity  = */    g_cVerbosity - 2 - iVerboseSub,
+                                /* .cchLabelMax = */    5,
+                                /* .pszShort    = */    "Gst",
+                                /* .pszLabel    = */    "Guest",
+                                /* .cchLabel    = */    5,
+                                /* .cchLabel2   = */    0,
+                                /* .pszShort2   = */    fSameAsHost ? "Hst"  : NULL,
+                                /* .pszLabel2   = */    fSameAsHost ? "Host" : NULL,
+                            },
+                            /* .pFeatures         = */  &FeaturesArm,
+                            /* .paLeaves/IdRegs   = */  paSysRegs,
+                            /* .cLeaves/IdRegs    = */  cSysRegs,
+                            /* .cLeaves2/IdRegs2  = */  fSameAsHost ? cSysRegs  : 0,
+                            /* .paLeaves2/IdRegs2 = */  fSameAsHost ? paSysRegs : NULL,
+                        };
+                        g_pfnCPUMR3CpuIdInfoArmV8(&InfoState);
+                    }
+
+                    /* Display the feature list if sufficiently verbose or explicitly requested. */
+                    if (   g_pfnCPUMR3CpuIdPrintArmV8Features
+                        && (   g_fShowArmFeatures
+                            || g_cVerbosity >= 4 + iVerboseSub) )
+                        g_pfnCPUMR3CpuIdPrintArmV8Features(&g_StdOutInfoHlp, g_cchStdOutWidth, &FeaturesArm, "Guest", NULL, NULL);
                 }
                 else
                     RTMsgError("CPUMCpuIdExplodeFeaturesArmV8 failed: %Rrc", rc);
@@ -401,16 +438,34 @@ int main(int argc, char **argv)
     if (RT_FAILURE(rc))
         return RTMsgInitFailure(rc);
 
+
+    /*
+     * Initialize globals.
+     */
+    rc = RTStrmQueryTerminalWidth(g_pStdOut, &g_cchStdOutWidth);
+    if (RT_FAILURE(rc))
+        g_cchStdOutWidth = 80;
+
     /*
      * Parse parameters.
      */
     static const RTGETOPTDEF s_aOptions[] =
     {
-        { "--path",             'p', RTGETOPT_REQ_STRING },
-        { "--vmm",              'p', RTGETOPT_REQ_STRING },
-        { "--vmm-path",         'p', RTGETOPT_REQ_STRING },
-        { "--quiet",            'q', RTGETOPT_REQ_NOTHING },
-        { "--verbose",          'v', RTGETOPT_REQ_NOTHING },
+        { "--path",                 'p', RTGETOPT_REQ_STRING },
+        { "--vmm",                  'p', RTGETOPT_REQ_STRING },
+        { "--vmm-path",             'p', RTGETOPT_REQ_STRING },
+        { "--quiet",                'q', RTGETOPT_REQ_NOTHING },
+        { "--verbose",              'v', RTGETOPT_REQ_NOTHING },
+
+        { "--arm-feat",             'a', RTGETOPT_REQ_NOTHING },
+        { "--arm-feats",            'a', RTGETOPT_REQ_NOTHING },
+        { "--arm-features",         'a', RTGETOPT_REQ_NOTHING },
+        { "--show-arm-features",    'a', RTGETOPT_REQ_NOTHING },
+
+        { "--no-arm-feat",          'A', RTGETOPT_REQ_NOTHING },
+        { "--no-arm-feats",         'A', RTGETOPT_REQ_NOTHING },
+        { "--no-arm-features",      'A', RTGETOPT_REQ_NOTHING },
+        { "--no-show-arm-features", 'A', RTGETOPT_REQ_NOTHING },
     };
 
     char            szPath[RTPATH_MAX];
@@ -498,6 +553,14 @@ int main(int argc, char **argv)
                 g_cVerbosity += 1;
                 break;
 
+            case 'a':
+                g_fShowArmFeatures = true;
+                break;
+
+            case 'A':
+                g_fShowArmFeatures = false;
+                break;
+
             case VINF_GETOPT_NOT_OPTION:
             {
                 if (g_hModVMM == NIL_RTLDRMOD)
@@ -510,7 +573,7 @@ int main(int argc, char **argv)
 
                     uint32_t const cEntries = g_pfnCPUMR3DbGetEntries();
                     for (uint32_t i = 0; i < cEntries; i++)
-                        displayEntry(g_pfnCPUMR3DbGetEntryByIndex(i), i, DISPLAY_ENTRY_F_INDEX);
+                        displayEntry(g_pfnCPUMR3DbGetEntryByIndex(i), i, DISPLAY_ENTRY_F_INDEX, 1);
                 }
                 else if (   strcmp(pszCmd, "best-by-name") == 0
                          || strcmp(pszCmd, "best-arm-by-name") == 0
@@ -527,7 +590,7 @@ int main(int argc, char **argv)
                     uint32_t      uScore = 0;
                     PCCPUMDBENTRY pEntry = g_pfnCPUMR3DbGetBestEntryByName(ValueUnion.psz, enmEntryType, &uScore);
                     if (pEntry)
-                        displayEntry(pEntry, uScore, DISPLAY_ENTRY_F_SCORE);
+                        displayEntry(pEntry, uScore, DISPLAY_ENTRY_F_SCORE, 0);
                     else
                         rcExit = RTMsgErrorExitFailure("%s: No match for '%s'", pszCmd, ValueUnion.psz);
                 }
@@ -543,7 +606,7 @@ int main(int argc, char **argv)
                         uint32_t         uScore = 0;
                         PCCPUMDBENTRYARM pEntry = g_pfnCPUMR3DbGetBestEntryByArm64MainId(ValueUnion.u64, &uScore);
                         if (pEntry)
-                            displayEntry(&pEntry->Core, uScore, DISPLAY_ENTRY_F_SCORE);
+                            displayEntry(&pEntry->Core, uScore, DISPLAY_ENTRY_F_SCORE, 0);
                         else
                             rcExit = RTMsgErrorExitFailure("%s: No match for midr %#RX64", pszCmd, ValueUnion.u64);
                     }

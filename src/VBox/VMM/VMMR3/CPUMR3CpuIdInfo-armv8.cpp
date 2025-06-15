@@ -558,9 +558,11 @@ VMMR3DECL(void) CPUMR3CpuIdInfoArmV8(PCPUMCPUIDINFOSTATEARMV8 pThis)
         }
         else
         {
-            pHlp->pfnPrintf(pHlp, "%16s = %#018RX64\n", pszName, pIdReg->uValue);
+            pHlp->pfnPrintf(pHlp, "%16s = %#018RX64", pszName, pIdReg->uValue);
             if (pDesc && pDesc->paFields)
-                cpumR3CpuIdInfoMnemonicListU64(&pThis->Cmn, pIdReg->uValue, pDesc->paFields, " :", 0);
+                cpumR3CpuIdInfoMnemonicListU64(&pThis->Cmn, pIdReg->uValue, pDesc->paFields, ":", 0);
+            else
+                pHlp->pfnPrintf(pHlp, "\n");
         }
         idRegPrev = idReg;
     }
@@ -604,9 +606,9 @@ DECLCALLBACK(void) cpumR3CpuFeatInfo(PVM pVM, PCDBGFINFOHLP pHlp, const char *ps
      */
 # ifdef RT_ARCH_ARM64
     if (fVerbose)
-        CPUMR3CpuIdPrintArmV8Features(pHlp, &pVM->cpum.s.GuestFeatures, "guest", &pVM->cpum.s.HostFeatures.s, "host");
+        CPUMR3CpuIdPrintArmV8Features(pHlp, 80, &pVM->cpum.s.GuestFeatures, "guest", &pVM->cpum.s.HostFeatures.s, "host");
     else
 # endif
-        CPUMR3CpuIdPrintArmV8Features(pHlp, &pVM->cpum.s.GuestFeatures, "guest", NULL, NULL);
+        CPUMR3CpuIdPrintArmV8Features(pHlp, 80, &pVM->cpum.s.GuestFeatures, "guest", NULL, NULL);
 }
 #endif /* VBOX_VMM_TARGET_ARMV8 */
