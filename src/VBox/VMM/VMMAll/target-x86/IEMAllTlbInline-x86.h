@@ -412,24 +412,24 @@ DECLINLINE(void) iemTlbInvalidateLargePageWorker(PVMCPUCC pVCpu, IEMTLB *pTlb, R
 }
 
 template<bool const a_fDataTlb>
-DECLINLINE(void) iemTlbInvalidatePageWorker(PVMCPUCC pVCpu, IEMTLB *pTlb, RTGCPTR GCPtrTag, uintptr_t idxEven) RT_NOEXCEPT
+DECLINLINE(void) iemTlbInvalidatePageWorker(PVMCPUCC pVCpu, IEMTLB *pTlb, RTGCPTR GCPtrTag, uintptr_t idxBase) RT_NOEXCEPT
 {
     pTlb->cTlbInvlPg += 1;
 
     /*
      * Flush the entry pair.
      */
-    if (pTlb->aEntries[idxEven].uTag == (GCPtrTag | pTlb->uTlbRevision))
+    if (pTlb->aEntries[idxBase].uTag == (GCPtrTag | pTlb->uTlbRevision))
     {
-        IEMTLBTRACE_EVICT_SLOT(pVCpu, GCPtrTag, pTlb->aEntries[idxEven].GCPhys, idxEven, a_fDataTlb);
-        pTlb->aEntries[idxEven].uTag = 0;
+        IEMTLBTRACE_EVICT_SLOT(pVCpu, GCPtrTag, pTlb->aEntries[idxBase].GCPhys, idxBase, a_fDataTlb);
+        pTlb->aEntries[idxBase].uTag = 0;
         if (!a_fDataTlb && GCPtrTag == IEMTLB_CALC_TAG_NO_REV(pVCpu, pVCpu->iem.s.uInstrBufPc))
             pVCpu->iem.s.cbInstrBufTotal = 0;
     }
-    if (pTlb->aEntries[idxEven + 1].uTag == (GCPtrTag | pTlb->uTlbRevisionGlobal))
+    if (pTlb->aEntries[idxBase + 1].uTag == (GCPtrTag | pTlb->uTlbRevisionGlobal))
     {
-        IEMTLBTRACE_EVICT_SLOT(pVCpu, GCPtrTag, pTlb->aEntries[idxEven + 1].GCPhys, idxEven + 1, a_fDataTlb);
-        pTlb->aEntries[idxEven + 1].uTag = 0;
+        IEMTLBTRACE_EVICT_SLOT(pVCpu, GCPtrTag, pTlb->aEntries[idxBase + 1].GCPhys, idxBase + 1, a_fDataTlb);
+        pTlb->aEntries[idxBase + 1].uTag = 0;
         if (!a_fDataTlb && GCPtrTag == IEMTLB_CALC_TAG_NO_REV(pVCpu, pVCpu->iem.s.uInstrBufPc))
             pVCpu->iem.s.cbInstrBufTotal = 0;
     }

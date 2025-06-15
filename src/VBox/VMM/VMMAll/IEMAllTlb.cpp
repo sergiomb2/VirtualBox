@@ -77,10 +77,17 @@ DECL_FORCE_INLINE(void) iemTlbInvalidateOne(IEMTLB *pTlb)
             pTlb->aEntries[i * 2].uTag = 0;
     }
 
+# ifdef VBOX_VMM_TARGET_X86
     pTlb->cTlbNonGlobalLargePageCurLoads    = 0;
     pTlb->NonGlobalLargePageRange.uLastTag  = 0;
     pTlb->NonGlobalLargePageRange.uFirstTag = UINT64_MAX;
+# else
+    pTlb->cTlbLargePageCurLoads    = 0;
+    pTlb->LargePageRange.uLastTag  = 0;
+    pTlb->LargePageRange.uFirstTag = UINT64_MAX;
+# endif
 
+# ifdef VBOX_VMM_TARGET_X86
     if (a_fGlobal)
     {
         pTlb->uTlbRevisionGlobal += IEMTLB_REVISION_INCR;
@@ -99,6 +106,7 @@ DECL_FORCE_INLINE(void) iemTlbInvalidateOne(IEMTLB *pTlb)
         pTlb->GlobalLargePageRange.uLastTag  = 0;
         pTlb->GlobalLargePageRange.uFirstTag = UINT64_MAX;
     }
+# endif
 }
 #endif
 
@@ -115,17 +123,21 @@ DECL_FORCE_INLINE(void) iemTlbInvalidateAll(PVMCPUCC pVCpu)
 # ifdef IEM_WITH_CODE_TLB
     pVCpu->iem.s.cbInstrBufTotal = 0;
     iemTlbInvalidateOne<a_fGlobal>(&pVCpu->iem.s.CodeTlb);
+#  ifdef VBOX_VMM_TARGET_X86
     if (a_fGlobal)
         IEMTLBTRACE_FLUSH_GLOBAL(pVCpu, pVCpu->iem.s.CodeTlb.uTlbRevision, pVCpu->iem.s.CodeTlb.uTlbRevisionGlobal, false);
     else
+#  endif
         IEMTLBTRACE_FLUSH(pVCpu, pVCpu->iem.s.CodeTlb.uTlbRevision, false);
 # endif
 
 # ifdef IEM_WITH_DATA_TLB
     iemTlbInvalidateOne<a_fGlobal>(&pVCpu->iem.s.DataTlb);
+#  ifdef VBOX_VMM_TARGET_X86
     if (a_fGlobal)
         IEMTLBTRACE_FLUSH_GLOBAL(pVCpu, pVCpu->iem.s.DataTlb.uTlbRevision, pVCpu->iem.s.DataTlb.uTlbRevisionGlobal, true);
     else
+#  endif
         IEMTLBTRACE_FLUSH(pVCpu, pVCpu->iem.s.DataTlb.uTlbRevision, true);
 # endif
 #else
@@ -177,13 +189,13 @@ VMM_INT_DECL(void) IEMTlbInvalidatePage(PVMCPUCC pVCpu, RTGCPTR GCPtr)
     Log10(("IEMTlbInvalidatePage: GCPtr=%RGv\n", GCPtr));
     GCPtr = IEMTLB_CALC_TAG_NO_REV(pVCpu, GCPtr);
     Assert(!(GCPtr >> (48 - X86_PAGE_SHIFT)));
-    uintptr_t const idxEven = IEMTLB_TAG_TO_EVEN_INDEX(GCPtr);
+    uintptr_t const idx = IEMTLB_TAG_TO_INDEX(GCPtr);
 
 # ifdef IEM_WITH_CODE_TLB
-    iemTlbInvalidatePageWorker<false>(pVCpu, &pVCpu->iem.s.CodeTlb, GCPtr, idxEven);
+    iemTlbInvalidatePageWorker<false>(pVCpu, &pVCpu->iem.s.CodeTlb, GCPtr, idx);
 # endif
 # ifdef IEM_WITH_DATA_TLB
-    iemTlbInvalidatePageWorker<true>(pVCpu, &pVCpu->iem.s.DataTlb, GCPtr, idxEven);
+    iemTlbInvalidatePageWorker<true>(pVCpu, &pVCpu->iem.s.DataTlb, GCPtr, idx);
 # endif
 #else
     NOREF(pVCpu); NOREF(GCPtr);
@@ -204,8 +216,19 @@ VMM_INT_DECL(void) IEMTlbInvalidatePage(PVMCPUCC pVCpu, RTGCPTR GCPtr)
 void iemTlbInvalidateAllPhysicalSlow(PVMCPUCC pVCpu) RT_NOEXCEPT
 {
     Log10(("iemTlbInvalidateAllPhysicalSlow\n"));
+# ifdef VBOX_VMM_TARGET_ARMV8
+    uint64_t const uTlbPhysRevAndStuff0 = (pVCpu->iem.s.CodeTlb.uTlbPhysRevAndStuff0 & IEMTLB_STUFF_BITS)
+                                        | (IEMTLB_PHYS_REV_INCR * 2);
+    uint64_t const uTlbPhysRevAndStuff1 = (pVCpu->iem.s.CodeTlb.uTlbPhysRevAndStuff1 & IEMTLB_STUFF_BITS)
+                                        | (IEMTLB_PHYS_REV_INCR * 2);
+    ASMAtomicWriteU64(&pVCpu->iem.s.CodeTlb.uTlbPhysRevAndStuff0, uTlbPhysRevAndStuff0);
+    ASMAtomicWriteU64(&pVCpu->iem.s.CodeTlb.uTlbPhysRevAndStuff1, uTlbPhysRevAndStuff1);
+    ASMAtomicWriteU64(&pVCpu->iem.s.DataTlb.uTlbPhysRevAndStuff0, uTlbPhysRevAndStuff0);
+    ASMAtomicWriteU64(&pVCpu->iem.s.DataTlb.uTlbPhysRevAndStuff1, uTlbPhysRevAndStuff1);
+# else
     ASMAtomicWriteU64(&pVCpu->iem.s.CodeTlb.uTlbPhysRev, IEMTLB_PHYS_REV_INCR * 2);
     ASMAtomicWriteU64(&pVCpu->iem.s.DataTlb.uTlbPhysRev, IEMTLB_PHYS_REV_INCR * 2);
+# endif
 
     unsigned i;
 # ifdef IEM_WITH_CODE_TLB
@@ -253,16 +276,29 @@ VMM_INT_DECL(void) IEMTlbInvalidateAllPhysical(PVMCPUCC pVCpu)
 # ifdef IEM_WITH_CODE_TLB
     pVCpu->iem.s.cbInstrBufTotal = 0;
 # endif
-    uint64_t uTlbPhysRev = pVCpu->iem.s.CodeTlb.uTlbPhysRev + IEMTLB_PHYS_REV_INCR;
+# ifdef VBOX_VMM_TARGET_ARMV8
+    uint64_t const uTlbPhysRev1 = pVCpu->iem.s.CodeTlb.uTlbPhysRevAndStuff1 + IEMTLB_PHYS_REV_INCR;
+    uint64_t const uTlbPhysRev  = pVCpu->iem.s.CodeTlb.uTlbPhysRevAndStuff0 + IEMTLB_PHYS_REV_INCR;
+# else
+    uint64_t const uTlbPhysRev  = pVCpu->iem.s.CodeTlb.uTlbPhysRev + IEMTLB_PHYS_REV_INCR;
+# endif
     if (RT_LIKELY(uTlbPhysRev > IEMTLB_PHYS_REV_INCR * 2))
     {
+# ifdef VBOX_VMM_TARGET_ARMV8
+        pVCpu->iem.s.CodeTlb.uTlbPhysRevAndStuff0 = uTlbPhysRev;
+        pVCpu->iem.s.CodeTlb.uTlbPhysRevAndStuff1 = uTlbPhysRev1;
+        pVCpu->iem.s.DataTlb.uTlbPhysRevAndStuff0 = uTlbPhysRev;
+        pVCpu->iem.s.DataTlb.uTlbPhysRevAndStuff1 = uTlbPhysRev1;
+# else
         pVCpu->iem.s.CodeTlb.uTlbPhysRev = uTlbPhysRev;
-        pVCpu->iem.s.CodeTlb.cTlbPhysRevFlushes++;
         pVCpu->iem.s.DataTlb.uTlbPhysRev = uTlbPhysRev;
+# endif
+        pVCpu->iem.s.CodeTlb.cTlbPhysRevFlushes++;
         pVCpu->iem.s.DataTlb.cTlbPhysRevFlushes++;
     }
     else
         iemTlbInvalidateAllPhysicalSlow(pVCpu);
+
 #else
     NOREF(pVCpu);
 #endif
@@ -295,8 +331,15 @@ VMM_INT_DECL(void) IEMTlbInvalidateAllPhysicalAllCpus(PVMCC pVM, VMCPUID idCpuCa
         if (pVCpuCaller == pVCpu)
             pVCpu->iem.s.cbInstrBufTotal = 0;
 # endif
-
+        /*
+         * The TLBs have the same physical revision at all time (except when its
+         * increased), so use the (first) one from CodeTlb and increase it.
+         */
+# ifdef VBOX_VMM_TARGET_ARMV8
+        uint64_t const uTlbPhysRevPrev = ASMAtomicUoReadU64(&pVCpu->iem.s.CodeTlb.uTlbPhysRevAndStuff0) & IEMTLBE_F_PHYS_REV;
+# else
         uint64_t const uTlbPhysRevPrev = ASMAtomicUoReadU64(&pVCpu->iem.s.CodeTlb.uTlbPhysRev);
+# endif
         uint64_t       uTlbPhysRevNew  = uTlbPhysRevPrev + IEMTLB_PHYS_REV_INCR;
         if (RT_LIKELY(uTlbPhysRevNew > IEMTLB_PHYS_REV_INCR * 2))
         { /* likely */}
@@ -307,11 +350,48 @@ VMM_INT_DECL(void) IEMTlbInvalidateAllPhysicalAllCpus(PVMCC pVM, VMCPUID idCpuCa
             iemTlbInvalidateAllPhysicalSlow(pVCpu);
             continue;
         }
+
+        /*
+         * Apply the increased value on the other copies.
+         *
+         * The ARM variant ASSUMES that the PGM locking prevents races wrt the
+         * physical revision, though it has to deal with other vCPUs changing
+         * the ASID, VMID, and stuff while we're here...
+         */
+# ifdef VBOX_VMM_TARGET_ARMV8
+        uint64_t *apuTlbPhysRevAndStuff0[4] =
+        {
+            &pVCpu->iem.s.CodeTlb.uTlbPhysRevAndStuff0,
+            &pVCpu->iem.s.CodeTlb.uTlbPhysRevAndStuff1,
+            &pVCpu->iem.s.DataTlb.uTlbPhysRevAndStuff0,
+            &pVCpu->iem.s.DataTlb.uTlbPhysRevAndStuff1,
+        };
+        for (unsigned i = 0; i < RT_ELEMENTS(apuTlbPhysRevAndStuff0); i++)
+        {
+            uint64_t * const puTlbPhysRevAndStuff = apuTlbPhysRevAndStuff0[i];
+            for (;;)
+            {
+                uint64_t const uPrev = ASMAtomicUoReadU64(puTlbPhysRevAndStuff);
+                Assert((uPrev & IEMTLBE_F_PHYS_REV) == uTlbPhysRevPrev);
+                if (ASMAtomicCmpXchgU64(puTlbPhysRevAndStuff, uTlbPhysRevNew | (uPrev & IEMTLB_STUFF_BITS), uPrev))
+                    break;
+                ASMNopPause();
+            }
+        }
+        pVCpu->iem.s.CodeTlb.cTlbPhysRevFlushes++;
+        pVCpu->iem.s.DataTlb.cTlbPhysRevFlushes++;
+
+# else
         if (ASMAtomicCmpXchgU64(&pVCpu->iem.s.CodeTlb.uTlbPhysRev, uTlbPhysRevNew, uTlbPhysRevPrev))
             pVCpu->iem.s.CodeTlb.cTlbPhysRevFlushes++;
+        else
+            AssertFailed();
 
         if (ASMAtomicCmpXchgU64(&pVCpu->iem.s.DataTlb.uTlbPhysRev, uTlbPhysRevNew, uTlbPhysRevPrev))
             pVCpu->iem.s.DataTlb.cTlbPhysRevFlushes++;
+        else
+            AssertFailed();
+# endif
     }
     VMCC_FOR_EACH_VMCPU_END(pVM);
 

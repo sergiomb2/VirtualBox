@@ -36,6 +36,89 @@
 
 
 /**
+ * Figures out the current translation regime.
+ *
+ * This is necessary for proper TLB handling, since entries from different
+ * translation regimes shall not intermix.
+ *
+ * @returns IEM_F_ARM_REGIME_MASK
+ * @param   pVCpu               The cross context virtual CPU structure of the
+ *                              calling thread.
+ * @param   fExecMode           The mode part of fExec.
+ */
+DECL_FORCE_INLINE(uint32_t) iemCalcExecTranslationRegime(PVMCPU pVCpu, uint32_t fExecMode)
+{
+#if 0 /** @todo EL3 */
+    uint64_t const uScrEl3 = pVCpu->cpum.GstCtx.ScrEl3.u64;
+#else
+    uint64_t const uScrEl3 = RT_BIT_64(0) /*NS*/;
+#endif
+    uint64_t const uNseNs = (uScrEl3         & RT_BIT_64(0))
+                          | ((uScrEl3 >> 62) & RT_BIT_64(1));
+    switch (fExecMode & IEM_F_MODE_ARM_EL_MASK)
+    {
+        default:
+        case 0:
+            if (   (pVCpu->cpum.GstCtx.HcrEl2.u64 & (ARMV8_HCR_EL2_E2H | ARMV8_HCR_EL2_TGE))
+                == (ARMV8_HCR_EL2_E2H | ARMV8_HCR_EL2_TGE)) /* Effective VM is 0 here. */
+            {
+                if (uNseNs == 1)
+                    return IEM_ARM_REGIME_EL20_NOSEC << IEM_F_ARM_REGIME_SHIFT;
+                if (uNseNs == 0)
+                {
+                    Assert(uScrEl3 & RT_BIT_64(18));
+                    return IEM_ARM_REGIME_EL20_SEC << IEM_F_ARM_REGIME_SHIFT;
+                }
+                Assert(uNseNs == 3);
+                return IEM_ARM_REGIME_EL20_REALM << IEM_F_ARM_REGIME_SHIFT;
+            }
+            RT_FALL_THRU();
+
+        case 1 << IEM_F_MODE_ARM_EL_SHIFT:
+            if (!(pVCpu->cpum.GstCtx.HcrEl2.u64 & ARMV8_HCR_EL2_VM))
+            {
+                if (uNseNs == 1)
+                    return IEM_ARM_REGIME_EL10_NOSEC << IEM_F_ARM_REGIME_SHIFT;
+                Assert(uNseNs == 0);
+                return IEM_ARM_REGIME_EL10_SEC << IEM_F_ARM_REGIME_SHIFT;
+            }
+            if (uNseNs == 1)
+                return IEM_ARM_REGIME_EL10_NOSEC_S2 << IEM_F_ARM_REGIME_SHIFT;
+            if (uNseNs == 0)
+                return IEM_ARM_REGIME_EL10_SEC_S2 << IEM_F_ARM_REGIME_SHIFT;
+            Assert(uNseNs == 3);
+            return IEM_ARM_REGIME_EL10_REALM_S2 << IEM_F_ARM_REGIME_SHIFT;
+
+        case 2 << IEM_F_MODE_ARM_EL_SHIFT:
+            if (pVCpu->cpum.GstCtx.HcrEl2.u64 & ARMV8_HCR_EL2_E2H)
+            {
+                if (uNseNs == 1)
+                    return IEM_ARM_REGIME_EL20_NOSEC << IEM_F_ARM_REGIME_SHIFT;
+                if (uNseNs == 0)
+                {
+                    Assert(uScrEl3 & RT_BIT_64(18));
+                    return IEM_ARM_REGIME_EL20_SEC << IEM_F_ARM_REGIME_SHIFT;
+                }
+                Assert(uNseNs == 3);
+                return IEM_ARM_REGIME_EL20_REALM << IEM_F_ARM_REGIME_SHIFT;
+            }
+            if (uNseNs == 1)
+                return IEM_ARM_REGIME_EL2_NONSEC << IEM_F_ARM_REGIME_SHIFT;
+            if (uNseNs == 0)
+            {
+                Assert(uScrEl3 & RT_BIT_64(18));
+                return IEM_ARM_REGIME_EL2_SEC << IEM_F_ARM_REGIME_SHIFT;
+            }
+            Assert(uNseNs == 3);
+            return  IEM_ARM_REGIME_EL2_REALM << IEM_F_ARM_REGIME_SHIFT;
+
+        case 3 << IEM_F_MODE_ARM_EL_SHIFT:
+            return IEM_ARM_REGIME_EL3 << IEM_F_ARM_REGIME_SHIFT;
+    }
+}
+
+
+/**
  * Calculates the IEM_F_ARM_A & IEM_F_ARM_AA flags.
  *
  * @returns Mix of IEM_F_ARM_A, IEM_F_ARM_AA and zero.
@@ -61,15 +144,16 @@ DECL_FORCE_INLINE(uint32_t) iemCalcExecAcFlag(PVMCPUCC pVCpu, uint32_t fExecMode
 }
 
 
+#if 0 /* revisit when needed */
 /**
- * Calculates the stage 1 page size.
+ * Calculates the minimum page size.
  *
  * @returns IEM_F_ARM_S1_PAGE_MASK
  * @param   pVCpu               The cross context virtual CPU structure of the
  *                              calling thread.
  * @param   fExecMode           The mode part of fExec.
  */
-DECL_FORCE_INLINE(uint32_t) iemCalcExecStage1PageSize(PVMCPUCC pVCpu, uint32_t fExecMode) RT_NOEXCEPT
+DECL_FORCE_INLINE(uint32_t) iemCalcExecMinPageSize(PVMCPUCC pVCpu, uint32_t fExecMode) RT_NOEXCEPT
 {
     IEM_CTX_ASSERT(pVCpu, CPUMCTX_EXTRN_SCTLR_TCR_TTBR | CPUMCTX_EXTRN_PSTATE);
     uint64_t const fSCtlR = IEM_F_MODE_ARM_GET_EL(fExecMode) <= 1 ? pVCpu->cpum.GstCtx.Sctlr.u64
@@ -105,6 +189,7 @@ DECL_FORCE_INLINE(uint32_t) iemCalcExecStage1PageSize(PVMCPUCC pVCpu, uint32_t f
     /** @todo check out 64KB for non-MMU mode. */
     return IEM_F_ARM_S1_PAGE_4K; /** @todo Do we need a NO_MMU flag? */
 }
+#endif /* revisit when needed */
 
 
 /**
@@ -131,7 +216,7 @@ DECL_FORCE_INLINE(uint32_t) iemCalcExecModeAndSpIdxAndAcFlagsAndS1PgSize(PVMCPUC
     {
         Assert(!(fExec & ARMV8_SPSR_EL2_AARCH64_T)); /* aarch64 */
         if (pVCpu->cpum.GstCtx.fPState & ARMV8_SPSR_EL2_AARCH64_SP)
-            fExec |= IEM_F_MODE_ARM_GET_EL(fExec);
+            fExec |= IEM_F_MODE_ARM_GET_EL(fExec); /* SP index = ELx */
     }
     else
     {
@@ -161,15 +246,20 @@ DECL_FORCE_INLINE(uint32_t) iemCalcExecModeAndSpIdxAndAcFlagsAndS1PgSize(PVMCPUC
 
 #if 0 /** @todo SP index for aarch32: We don't have SPSEL. */
         if (pVCpu->cpum.GstCtx.SpSel.u32 & 1)
-            fExec |= IEM_F_MODE_ARM_GET_EL(fExec);
+            fExec |= IEM_F_MODE_ARM_GET_EL(fExec); /* SP index = ELx */
 #endif
     }
+
+    /* The translation regime. */
+    fExec |= iemCalcExecTranslationRegime(pVCpu, fExec);
 
     /* Alignment checks: */
     fExec |= iemCalcExecAcFlag(pVCpu, fExec);
 
+#if 0 /* revisit when needed */
     /* Page size. */
-    fExec |= iemCalcExecStage1PageSize(pVCpu, fExec);
+    fExec |= iemCalcExecMinPageSize(pVCpu, fExec);
+#endif
     return fExec;
 }
 

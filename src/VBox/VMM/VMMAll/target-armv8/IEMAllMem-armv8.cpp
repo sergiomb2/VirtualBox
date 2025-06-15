@@ -173,6 +173,7 @@ iemMemCheckDataBreakpoint(PVMCC pVM, PVMCPUCC pVCpu, RTGCPTR GCPtrMem, size_t cb
 #endif
 
 
+#if 0 /** @todo rework this once the code TLB is working... */
 /**
  * Converts PGM_PTATTRS_XXX to IEMTLBE_F_XXX.
  */
@@ -219,6 +220,7 @@ DECL_FORCE_INLINE(uint64_t) iemMemArmPtAttrsToTlbeFlags(uint64_t fPtAttrs)
 
     return fTlbe;
 }
+#endif
 
 
 /**
@@ -259,6 +261,7 @@ VBOXSTRICTRC iemMemMap(PVMCPUCC pVCpu, void **ppvMem, uint8_t *pbUnmapInfo, size
                        uint32_t fAccess, uint32_t uAlignCtl) RT_NOEXCEPT
 {
     STAM_COUNTER_INC(&pVCpu->iem.s.StatMemMapNoJmp);
+#if 0 /** @todo rework this once the code TLB is working... */
 
     /*
      * Check the input and figure out which mapping entry to use.
@@ -568,6 +571,10 @@ VBOXSTRICTRC iemMemMap(PVMCPUCC pVCpu, void **ppvMem, uint8_t *pbUnmapInfo, size
     AssertCompile(RT_ELEMENTS(pVCpu->iem.s.aMemMappings) < 8);
 
     return VINF_SUCCESS;
+#else
+    RT_NOREF(pVCpu, ppvMem, pbUnmapInfo, cbMem, GCPtrMem, fAccess, uAlignCtl);
+    AssertFailedReturn(VERR_IEM_ASPECT_NOT_IMPLEMENTED);
+#endif
 }
 
 

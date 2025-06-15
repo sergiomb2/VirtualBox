@@ -38,7 +38,7 @@
 #ifdef VMM_INCLUDED_SRC_VMMAll_target_armv8_IEMAllIntprA64Tables_armv8_h
 DECL_FORCE_INLINE_THROW(VBOXSTRICTRC) iemExecDecodeAndInterpretTargetInstruction(PVMCPUCC pVCpu)
 {
-    uint32_t const uOpcode = 0; /// @todo iemOpcodeGetU32Jmp(pVCpu);
+    uint32_t const uOpcode = iemOpcodeGetU32Jmp(pVCpu);
     return FNIEMOP_CALL_1(g_apfnIemInterpretOnlyA64[iemInterpretOnlyA64CalcIndex(uOpcode)], uOpcode);
 }
 #endif

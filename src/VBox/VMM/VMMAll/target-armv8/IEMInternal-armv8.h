@@ -41,11 +41,93 @@ RT_C_DECLS_BEGIN
  * @{
  */
 
-VBOXSTRICTRC iemOpcodeFetchPrefetch(PVMCPUCC pVCpu) RT_NOEXCEPT;
+
+/** @name IEM_ARM_REGIME_XXX - Translation regime
+ * We've taken the ones listed in DDI0487L section D8.1.2 and added variations
+ * with and without stage 2 as appropriate.
+ *
+ * Overview:
+ *    0.  D8.1.2.1:  Non-secure EL1&0.   w/o stage2    two ranges    asid
+ *    1.  D8.1.2.1:  Non-secure EL1&0.   with stage2   two ranges    asid    vmid
+ *    2.  D8.1.2.2:  Secure EL1&0.       w/o stage2    two ranges    asid
+ *    3.  D8.1.2.2:  Secure EL1&0.       with stage2   two ranges    asid    vmid
+ *    4.  D8.1.2.3:  Realm EL1&0.        with stage2   two ranges    asid    vmid
+ *    5.  D8.1.2.4:  Non-secure EL2&0.   w/o stage2    two ranges    asid
+ *    6.  D8.1.2.5:  Secure EL2&0.       w/o stage2    two ranges    asid
+ *    7.  D8.1.2.6:  Realm EL2&0.        w/o stage2    two ranges    asid
+ *    8.  D8.1.2.7:  Non-secure EL2.     w/o stage2    single range  none
+ *    9.  D8.1.2.8:  Secure EL2.         w/o stage2    single range  none
+ *    10. D8.1.2.9:  Realm EL2.          w/o stage2    single range  none
+ *    11. D8.1.2.10: EL3.                w/o stage2    single range  none
+ *
+ * @todo There is a EL3&0 regime where EL3 is aarch32.
+ *
+ * @sa IEM_F_ARM_REGIME
+ * @{
+ */
+#define IEM_ARM_REGIME_EL10_NOSEC       0U   /**< Non-secure EL1&0, no stage 2,   two ranges,   asid. */
+#define IEM_ARM_REGIME_EL10_NOSEC_S2    1U   /**< Non-secure EL1&0, with stage 2, two ranges,   asid, vmid. */
+#define IEM_ARM_REGIME_EL10_SEC         2U   /**< Secure EL1&0,     no stage 2,   two ranges,   asid. */
+#define IEM_ARM_REGIME_EL10_SEC_S2      3U   /**< Secure EL1&0,     with stage 2, two ranges,   asid, vmid. */
+#define IEM_ARM_REGIME_EL10_REALM_S2    4U   /**< Realm EL1&0,      with stage 2, two ranges,   asid, vmid. */
+#define IEM_ARM_REGIME_EL20_NOSEC       5U   /**< Non-secure EL2&0, no stage 2,   two ranges,   asid. */
+#define IEM_ARM_REGIME_EL20_SEC         6U   /**< Secure EL2&0,     no stage 2,   two ranges,   asid. */
+#define IEM_ARM_REGIME_EL20_REALM       7U   /**< Realm EL2&0,      no stage 2,   two ranges,   asid. */
+#define IEM_ARM_REGIME_EL2_NONSEC       8U   /**< Non-secure EL2,   no stage 2,   single range, no asid. */
+#define IEM_ARM_REGIME_EL2_SEC          9U   /**< Secure EL2,       no stage 2,   single range, no asid. */
+#define IEM_ARM_REGIME_EL2_REALM        10U  /**< Realm EL2,        no stage 2,   single range, no asid. */
+#define IEM_ARM_REGIME_EL3              11U  /**< EL3,              no stage 2,   single range, no asid. */
+#define IEM_ARM_REGIME_LAST             IEM_ARM_REGIME_EL3
+
+/** Checks if @a a_uRegime is a secure one. */
+#define IEM_ARM_REGIME_IS_SECURE(a_uRegime) \
+    (   (a_uRegime) == IEM_ARM_REGIME_EL10_SEC \
+     || (a_uRegime) == IEM_ARM_REGIME_EL10_SEC_S2 \
+     || (a_uRegime) == IEM_ARM_REGIME_EL20_SEC \
+     || (a_uRegime) == IEM_ARM_REGIME_EL2_SEC )
+
+/** Checks if @a a_uRegime is a non-secure one. */
+#define IEM_ARM_REGIME_IS_NON_SECURE(a_uRegime) \
+    (   (a_uRegime) == IEM_ARM_REGIME_EL10_NOSEC \
+     || (a_uRegime) == IEM_ARM_REGIME_EL10_NOSEC_S2 \
+     || (a_uRegime) == IEM_ARM_REGIME_EL20_NOSEC \
+     || (a_uRegime) == IEM_ARM_REGIME_EL2_NONSEC )
+
+/** Checks if @a a_uRegime is a realm one. */
+#define IEM_ARM_REGIME_IS_REALM(a_uRegime) \
+    (   (a_uRegime) == IEM_ARM_REGIME_EL10_REALM_S2 \
+     || (a_uRegime) == IEM_ARM_REGIME_EL20_REALM \
+     || (a_uRegime) == IEM_ARM_REGIME_EL2_REALM )
+
+/** Checks if @a a_uRegime includes stage 2 translation.
+ * Implies that EL2 is enabled. */
+#define IEM_ARM_REGIME_HAS_STAGE_2(a_uRegime) \
+    (   (a_uRegime) == IEM_ARM_REGIME_EL10_NOSEC_S2 \
+     || (a_uRegime) == IEM_ARM_REGIME_EL10_SEC_S2 \
+     || (a_uRegime) == IEM_ARM_REGIME_EL10_REALM_S2 )
+
+/** Checks if @a a_uRegime may use two translation ranges. */
+#define IEM_ARM_REGIME_MAY_HAVE_TWO_RANGES(a_uRegime)   ( (a_uRegime) <= IEM_ARM_REGIME_EL20_REALM )
+
+/** Checks if @a a_uRegime uses ASID. */
+#define IEM_ARM_REGIME_USE_ASID(a_uRegime)              ( (a_uRegime) <= IEM_ARM_REGIME_EL20_REALM )
+
+/** Checks if @a a_uRegime uses VMID. */
+#define IEM_ARM_REGIME_USE_VMID(a_uRegime)              IEM_ARM_REGIME_HAS_STAGE_2(a_uRegime)
+
+/** Checks if @a a_uRegime includes stage 2 translation. */
+#define IEM_ARM_REGIME_HAS_UNPRIVILEGED(a_uRegime)      ( (a_uRegime) <= IEM_ARM_REGIME_EL20_REALM )
+
+
+/** @} */
 
 
 /** @name Misc Helpers
  * @{  */
+/** For checking whether an address is in the positive (true) or negative
+ *  (false) address space.
+ * @note ASSUMES aarch64. Will not work if in aarch32 EL1+ mode. */
+#define IEMARM_IS_POSITIVE_64BIT_ADDR(a_uAddr)          ( ((a_uAddr) & RT_BIT_64(55)) == 0 )
 
 /** @} */
 
@@ -66,6 +148,14 @@ IEM_RAISE_PROTOS(iemRaiseDataAbortFromWalk,
 
 IEM_RAISE_PROTOS(iemRaiseDebugDataAccessOrInvokeDbgf,
                  PVMCPUCC pVCpu, uint32_t fDataBps, RTGCPTR GCPtrMem, size_t cbMem, uint32_t fAccess);
+
+
+IEM_RAISE_PROTOS(iemRaiseInstructionAbortFromWalk,
+                 PVMCPUCC pVCpu, RTGCPTR GCPtrMem, uint8_t cbMem, uint32_t fAccess, int rc, PCPGMPTWALKFAST pWalkFast);
+
+IEM_RAISE_PROTOS(iemRaiseInstructionAbortTlbPermision,
+                 PVMCPUCC pVCpu, RTGCPTR GCPtrMem, uint8_t cbMem, PCIEMTLBENTRY pTlbe);
+
 
 
 IEM_CIMPL_PROTO_0(iemCImplRaiseInvalidOpcode);
@@ -102,12 +192,8 @@ VBOXSTRICTRC    iemRegRipRelativeJumpS32AndFinishClearingRF(PVMCPUCC pVCpu, uint
 VBOXSTRICTRC    iemMemMap(PVMCPUCC pVCpu, void **ppvMem, uint8_t *pbUnmapInfo, size_t cbMem, RTGCPTR GCPtrMem,
                           uint32_t fAccess, uint32_t uAlignCtl) RT_NOEXCEPT;
 
-#ifdef IEM_WITH_CODE_TLB
-void            iemOpcodeFetchBytesJmp(PVMCPUCC pVCpu, size_t cbDst, void *pvDst) IEM_NOEXCEPT_MAY_LONGJMP;
-#else
-VBOXSTRICTRC    iemOpcodeFetchMoreBytes(PVMCPUCC pVCpu, size_t cbMin) RT_NOEXCEPT;
-#endif
-uint16_t        iemOpcodeGetNextU16SlowJmp(PVMCPUCC pVCpu) IEM_NOEXCEPT_MAY_LONGJMP;
+uint32_t        iemOpcodeGetU32SlowJmp(PVMCPUCC pVCpu) IEM_NOEXCEPT_MAY_LONGJMP;
+uint16_t        iemOpcodeGetU16SlowJmp(PVMCPUCC pVCpu) IEM_NOEXCEPT_MAY_LONGJMP;
 
 #if 0 /* rework this later */
 VBOXSTRICTRC    iemMemFetchDataU8(PVMCPUCC pVCpu, uint8_t *pu8Dst, RTGCPTR GCPtrMem) RT_NOEXCEPT;

@@ -66,6 +66,40 @@ iemRaiseDebugDataAccessOrInvokeDbgf(PVMCPUCC pVCpu, uint32_t fDataBps, RTGCPTR G
 }
 
 
+VBOXSTRICTRC
+iemRaiseInstructionAbortTlbPermision(PVMCPUCC pVCpu, RTGCPTR GCPtrMem, uint8_t cbMem, PCIEMTLBENTRY pTlbe) RT_NOEXCEPT
+{
+    RT_NOREF(pVCpu, GCPtrMem, cbMem, pTlbe);
+    AssertFailedReturn(VERR_IEM_ASPECT_NOT_IMPLEMENTED);
+}
+
+
+DECL_NO_RETURN(void)
+iemRaiseInstructionAbortTlbPermisionJmp(PVMCPUCC pVCpu, RTGCPTR GCPtrMem, uint8_t cbMem, PCIEMTLBENTRY pTlbe)
+{
+    VBOXSTRICTRC const rcStrict = iemRaiseInstructionAbortTlbPermision(pVCpu, GCPtrMem, cbMem, pTlbe);
+    IEM_DO_LONGJMP(pVCpu, VBOXSTRICTRC_VAL(rcStrict));
+}
+
+
+VBOXSTRICTRC
+iemRaiseInstructionAbortFromWalk(PVMCPUCC pVCpu, RTGCPTR GCPtrMem, uint8_t cbMem, uint32_t fAccess, int rc,
+                                 PCPGMPTWALKFAST pWalkFast) RT_NOEXCEPT
+{
+    RT_NOREF(pVCpu, GCPtrMem, cbMem, fAccess, rc, pWalkFast);
+    AssertFailedReturn(VERR_IEM_ASPECT_NOT_IMPLEMENTED);
+}
+
+
+DECL_NO_RETURN(void)
+iemRaiseInstructionAbortFromWalkJmp(PVMCPUCC pVCpu, RTGCPTR GCPtrMem, uint8_t cbMem, uint32_t fAccess, int rc,
+                                    PCPGMPTWALKFAST pWalkFast) IEM_NOEXCEPT_MAY_LONGJMP
+{
+    VBOXSTRICTRC const rcStrict = iemRaiseInstructionAbortFromWalk(pVCpu, GCPtrMem, cbMem, fAccess, rc, pWalkFast);
+    IEM_DO_LONGJMP(pVCpu, VBOXSTRICTRC_VAL(rcStrict));
+}
+
+
 DECL_NO_RETURN(void)
 iemRaiseDebugDataAccessOrInvokeDbgfJmp(PVMCPUCC pVCpu, uint32_t fDataBps, RTGCPTR GCPtrMem, size_t cbMem,
                                        uint32_t fAccess) IEM_NOEXCEPT_MAY_LONGJMP
