@@ -6313,7 +6313,7 @@ static void Usage(PRTSTREAM pStrm)
         const char *pszHelp;
         switch (g_aCmdOptions[i].iShort)
         {
-            case 'd':                           pszHelp = "The directory to use for testing.            default: CWD/fstestdir"; break;
+            case 'd':                           pszHelp = "The directory to use for testing.            default: <temp>/fstestdir-<PID>"; break;
             case 'r':                           pszHelp = "Don't abspath test dir (good for deep dirs). default: disabled"; break;
             case 'e':                           pszHelp = "Enables all tests.                           default: -e"; break;
             case 'z':                           pszHelp = "Disables all tests.                          default: -e"; break;
