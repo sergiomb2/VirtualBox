@@ -314,9 +314,17 @@ static void tstIterator(RTTEST hTest, RTJSONVAL hJsonVal)
             switch (enmTypeMember)
             {
                 case RTJSONVALTYPE_OBJECT:
+                {
                     RTTEST_CHECK(hTest, strcmp(pszName, "subobject") == 0);
+                    RTTEST_CHECK(hTest, RTJsonValueGetObjectMemberCount(hJsonValMember) == 3);
+
+                    uint32_t cMembers = 0;
+                    RTTEST_CHECK_RC_OK(hTest, RTJsonValueQueryObjectMemberCount(hJsonValMember, &cMembers));
+                    RTTEST_CHECK(hTest, cMembers == RTJsonValueGetObjectMemberCount(hJsonValMember));
+
                     tstIterator(hTest, hJsonValMember);
                     break;
+                }
                 case RTJSONVALTYPE_ARRAY:
                     RTTEST_CHECK(hTest, strcmp(pszName, "array") == 0);
                     tstArray(hTest, hJsonValMember);
