@@ -1818,9 +1818,13 @@ static RTEXITCODE s2gSvnExportSinglePath(PS2GCTX pThis, PS2GSVNREV pRev, const c
                 RTPathStripFilename(szSvnPath);
 
                 bool fIsEmpty = false;
+                bool fHasIgnores = false;
                 rcExit = s2gSvnPathIsEmptyDir(pRev, szSvnPath, &fIsEmpty);
+                if (rcExit == RTEXITCODE_SUCCESS)
+                    rcExit = s2gSvnHasIgnores(pRev, szSvnPath, &fHasIgnores);
                 if (   rcExit == RTEXITCODE_SUCCESS
-                    && fIsEmpty)
+                    && fIsEmpty
+                    && !fHasIgnores) /* Don't overwrite .gitignore files due to existing svn:ignore properties. */
                 {
                     char szGitPath[RTPATH_MAX];
                     strncpy(szGitPath, pszGitPath, sizeof(szGitPath));
@@ -2277,7 +2281,7 @@ static RTEXITCODE s2gSvnGetInternalRevisionFromPublic(PS2GCTX pThis, uint32_t id
         if (g_cVerbosity >= 4)
             RTMsgInfo("Searching r%u: %s\n", idRev, pSvnXRef ? pSvnXRef->data : "");
 
-        uint32_t idRevRef = pSvnXRef ? RTStrToUInt32(pSvnXRef->data) : 17427;
+        uint32_t idRevRef = pSvnXRef ? RTStrToUInt32(pSvnXRef->data) : 17427; /** @todo This is for the case of r1 for our OSE repository. */
         if (idRevRef)
         {
             *pidRevInternal = idRevRef;
