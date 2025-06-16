@@ -2594,7 +2594,7 @@ static PS2GDIRENTRY s2gFindGitEntry(PRTLISTANCHOR pLstEntries, const char *pszNa
 
 
 static RTEXITCODE s2gSvnVerifyIgnores(PS2GCTX pThis, PS2GSVNREV pRev, const char *pszSvnPath, const char *pszGitPath,
-                                      uint32_t cGitPathEntries, bool fSvnDirEmpty)
+                                      uint32_t cGitPathEntries, bool fSvnDirEmpty, uint32_t uLvl)
 {
     s2gScratchBufReset(&pThis->BufScratch);
 
@@ -2608,7 +2608,7 @@ static RTEXITCODE s2gSvnVerifyIgnores(PS2GCTX pThis, PS2GSVNREV pRev, const char
 
         /* Process global ignores only in the root path. */
         if (   rcExit == RTEXITCODE_SUCCESS
-            && *pszGitPath == '\0')
+            && uLvl == 0)
         {
             pProp = NULL;
             pSvnErr = svn_fs_node_prop(&pProp, pRev->pSvnFsRoot, pszSvnPath, "svn:global-ignores", pRev->pPoolRev);
@@ -2804,7 +2804,7 @@ static RTEXITCODE s2gSvnVerifyRecursiveWorker(PS2GCTX pThis, PS2GSVNREV pRev, co
                      * .gitignore files appear either when there is a svn:ignore property set on the svn directory
                      * or when the SVN directory is empty.
                      */
-                    rcExit = s2gSvnVerifyIgnores(pThis, pRev, pszSvnPath, pszGitPath, cGitEntries, fSvnDirEmpty);
+                    rcExit = s2gSvnVerifyIgnores(pThis, pRev, pszSvnPath, pszGitPath, cGitEntries, fSvnDirEmpty, uLvl);
                 }
                 else if (   !RTStrCmp(pIt->pszName, ".git")
                          && uLvl == 0)
