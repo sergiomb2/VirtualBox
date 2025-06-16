@@ -3659,7 +3659,9 @@ bool NAT::areDefaultSettings(SettingsVersion_T sv) const
         && areAliasDefaultSettings()
         && areTFTPDefaultSettings()
         && mapRules.size() == 0
-        && areLocalhostReachableDefaultSettings(sv);
+        && areLocalhostReachableDefaultSettings(sv)
+        && fForwardBroadcast == false
+        && fEnableTFTP == false;
 }
 
 /**
@@ -3687,6 +3689,8 @@ bool NAT::operator==(const NAT &n) const
             && fAliasProxyOnly     == n.fAliasProxyOnly
             && fAliasUseSamePorts  == n.fAliasUseSamePorts
             && fLocalhostReachable == n.fLocalhostReachable
+            && fForwardBroadcast   == n.fForwardBroadcast
+            && fEnableTFTP         == n.fEnableTFTP
             && mapRules            == n.mapRules);
 }
 
@@ -4857,6 +4861,8 @@ void MachineConfigFile::readAttachedNetworkMode(const xml::ElementNode &elmMode,
         elmMode.getAttributeValue("tcprcv", nic.nat.u32TcpRcv);
         elmMode.getAttributeValue("tcpsnd", nic.nat.u32TcpSnd);
         elmMode.getAttributeValue("localhost-reachable", nic.nat.fLocalhostReachable);
+        elmMode.getAttributeValue("forward-broadcast", nic.nat.fForwardBroadcast);
+        elmMode.getAttributeValue("enable-tftp", nic.nat.fEnableTFTP);
         const xml::ElementNode *pelmDNS;
         if ((pelmDNS = elmMode.findChildElement("DNS")))
         {
@@ -8689,6 +8695,10 @@ void MachineConfigFile::buildNetworkXML(NetworkAttachmentType_T mode,
                         pelmNAT->setAttribute("tcpsnd", nic.nat.u32TcpSnd);
                     if (!nic.nat.areLocalhostReachableDefaultSettings(m->sv))
                         pelmNAT->setAttribute("localhost-reachable", nic.nat.fLocalhostReachable);
+                    if (!nic.nat.fForwardBroadcast)
+                        pelmNAT->setAttribute("forward-broadcast", nic.nat.fForwardBroadcast);
+                    if (!nic.nat.fEnableTFTP)
+                        pelmNAT->setAttribute("enable-tftp", nic.nat.fEnableTFTP);
                     if (!nic.nat.areDNSDefaultSettings())
                     {
                         xml::ElementNode *pelmDNS = pelmNAT->createChild("DNS");
@@ -9723,6 +9733,31 @@ void MachineConfigFile::bumpSettingsVersionIfNeeded()
             return;
         }
 #endif
+
+        NetworkAdaptersList::const_iterator netit;
+        for (netit = hardwareMachine.llNetworkAdapters.begin();
+             netit != hardwareMachine.llNetworkAdapters.end();
+             ++netit)
+        {
+            // VirtualBox 7.2 adds a flag if NAT can forward broadcast packets to
+            // external, host-side network (added in 7.1, settings file updated in 7.2).
+            if (   netit->fEnabled
+                && netit->mode == NetworkAttachmentType_NAT
+                && !netit->nat.fForwardBroadcast)
+            {
+                m->sv = SettingsVersion_v1_21;
+                break;
+            }
+
+            // VirtualBox 7.2 adds a flag if NAT has enabled TFTP
+            if (   netit->fEnabled
+                && netit->mode == NetworkAttachmentType_NAT
+                && !netit->nat.fEnableTFTP)
+            {
+                m->sv = SettingsVersion_v1_21;
+                break;
+            }
+        }
     }
 
     if (m->sv < SettingsVersion_v1_20)
