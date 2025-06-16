@@ -44,19 +44,9 @@
 #include <iprt/stdarg.h>
 #include <iprt/time.h>
 
-#include <apr_lib.h>
-#include <apr_getopt.h>
-#include <apr_general.h>
+#include <stdio.h>
 
-#include <svn_fs.h>
-#include <svn_pools.h>
-#include <svn_repos.h>
-#include <svn_types.h>
-#include <svn_version.h>
-#include <svn_subst.h>
-#include <svn_props.h>
-#include <svn_time.h>
-
+#include "libsvn.h"
 #include "svn2git-internal.h"
 
 
