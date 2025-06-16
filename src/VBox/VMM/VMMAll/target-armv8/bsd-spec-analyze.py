@@ -38,6 +38,7 @@ import argparse;
 import collections;
 import datetime;
 import functools;
+import hashlib;
 import io;
 import json;
 import operator;
@@ -3033,7 +3034,7 @@ class DecoderNode(object):
             return uCost;
 
         #
-        # The cost of one indirect call is 32, so just bail if we don't have
+        # The cost of one indirect call is 256, so just bail if we don't have
         # the budget for any of that.
         #
         if uMaxCost <= 256:                                                             # 256 = kCostIndirectCall
@@ -3125,15 +3126,37 @@ class DecoderNode(object):
                     for oInstr in self.aoInstructions:
                         idx = fnToIndex(oInstr.fFixedValue, aaiMaskToIdxAlgo);
                         #self.dprint(uDepth, '%#010x -> %#05x %s' % (oInstr.fFixedValue, idx, oInstr.sName));
-                        daoTmp[idx].append(oInstr);
+                        fNonFixedMatches = ~oInstr.fFixedMask & fMask;
+                        if fNonFixedMatches == 0:
+                            daoTmp[idx].append(oInstr);
+                        else:
+                            fIdxNonFixedMatches  = fnToIndex(fNonFixedMatches, aaiMaskToIdxAlgo);
+                            cBitsNonFixedMatches = fNonFixedMatches.bit_count();
+                            if cBitsNonFixedMatches < 8:
+                                idxStep         = fIdxNonFixedMatches & (~fIdxNonFixedMatches + 1);
+                                idxInstrMask    = fnToIndex(oInstr.fFixedMask, aaiMaskToIdxAlgo);
+                                idxInstrLast    = idx | fIdxNonFixedMatches;
+                                for idx2 in range(idx, idxInstrLast + idxStep, idxStep):
+                                    if (idx2 & idxInstrMask) == idx:
+                                        daoTmp[idx2].append(oInstr);
+                            else:
+                                aaiNonFixedAlgo = MaskZipper.compileAlgo(fIdxNonFixedMatches);
+                                fnNonFixedUnzip = MaskZipper.algoToUnzipLambda(aaiNonFixedAlgo, fIdxNonFixedMatches);
+                                for idx3 in range(MaskZipper.zipMask(fIdxNonFixedMatches, aaiNonFixedAlgo) + 1):
+                                    idx2 = idx | fnNonFixedUnzip(idx3, aaiNonFixedAlgo);
+                                    daoTmp[idx2].append(oInstr);
+
+                    ## @todo Account for entires causing instruction duplication...
+                    ##       Perhaps by summing up the number of instructions for the next level?
+                    cEffTmpSize = len(daoTmp);
 
                     # Reject anything that ends up putting all the stuff in a single slot.
-                    if len(daoTmp) <= 1:
+                    if cEffTmpSize <= 1:
                         #if uDepth <= 2: self.dprint(uDepth, '!!! bad distribution #1: fMask=%#x' % (fMask,));
                         continue;
 
                     # Add cost for poor average distribution.
-                    rdAvgLen = float(cInstructions) / len(daoTmp);
+                    rdAvgLen = float(cInstructions) / cEffTmpSize;
                     if rdAvgLen > 1.2:
                         uCostTmp += int(rdAvgLen * 8)
                         if uCostTmp >= uCostBest:
@@ -3144,8 +3167,8 @@ class DecoderNode(object):
 
                     # Add the cost for unused entries under reasonable table population.
                     cNominalFill = 1 << (cMaskBits - 1); # 50% full or better is great.
-                    if len(daoTmp) < cNominalFill:
-                        uCostTmp += ((cNominalFill - len(daoTmp)) * 2);                 # 2 = kCostUnusedTabEntry
+                    if cEffTmpSize < cNominalFill:
+                        uCostTmp += ((cNominalFill - cEffTmpSize) * 2);                 # 2 = kCostUnusedTabEntry
                         if uCostTmp >= uCostBest:
                             #if uDepth <= 2:
                             #    self.dprint(uDepth, '!!! %#010x too expensive #3: %#x vs %#x' % (fMask, uCostTmp, uCostBest));
@@ -3472,105 +3495,202 @@ class IEMArmGenerator(object):
             asLines.extend(asTail);
         return asLines;
 
-    def generateDecoderCodeMultiIfFunc(self, sInstrSet, oNode, uDepth):
-        """
-        Handles a leaf node.
-        """
-        assert not oNode.dChildren, \
-               'fChildMask=%#x dChildren=%s aoInstr=%s' % (oNode.fChildMask, oNode.dChildren, oNode.aoInstructions,);
 
-        asLines = [
-            '',
-            '/* %08x/%08x level %u */' % (oNode.fCheckedMask, oNode.fCheckedValue, uDepth,),
-            'FNIEMOP_DEF_1(%s, uint32_t, uOpcode)' % (oNode.getFuncName(sInstrSet, uDepth),),
-            '{',
-        ];
-        ## @todo check if the masks are restricted to a few bit differences at
-        ## this point and we can skip the iemDecodeA64_Invalid call.
-        for oInstr in oNode.aoInstructions:
-            asLines += [
-                '    if ((uOpcode & UINT32_C(%#010x)) == UINT32_C(%#010x))' % (oInstr.fFixedMask, oInstr.fFixedValue,),
-                '        return iemDecode%s_%s(pVCpu, uOpcode);' % (sInstrSet, oInstr.getCName(),),
+    class DecoderCodeBlock(object):
+        """ A code block. """
+
+        def __init__(self, sInstrSet, sName, sMatches, sStats = None):
+            self.sHash     = sInstrSet;
+            self.sName     = sName;
+            self.asMatches = [sMatches,];
+            self.sStats    = sStats;
+
+        def getName(self):
+            return self.sName;
+
+        def getLines(self):
+            return [
+                '',
+                '/* %s */' % ('\n   '.join(self.asMatches if not self.sStats else list(self.asMatches) + [self.sStats,]),),
             ];
-        asLines += [
-            '    return iemDecode%s_Invalid(pVCpu, uOpcode);' % (sInstrSet,),
-            '}',
-        ];
-        return asLines;
 
-    def generateDecoderCode(self, sInstrSet, oNode, uDepth):
+        def getHash(self):
+            return self.sHash;
+
+        def _addLinesToHash(self, asLines):
+            """ Adds the lines to the hash value. """
+            oHash = hashlib.sha256();
+            oHash.update(b'%u lines\n' % (len(asLines),));
+            for sLine in asLines:
+                oHash.update(sLine.encode('utf-8'));
+            self.sHash += '-' + oHash.hexdigest();
+
+    class DecoderCodeMultiIfFunc(DecoderCodeBlock):
+        """ Helper class for deduplicating multiple-if functions. """
+        def __init__(self, sInstrSet, oNode, uDepth):
+            IEMArmGenerator.DecoderCodeBlock.__init__(self, sInstrSet, oNode.getFuncName(sInstrSet, uDepth),
+                                                      '%08x/%08x level %u' % (oNode.fCheckedMask, oNode.fCheckedValue, uDepth,) );
+            self.asBody = [];
+            for oInstr in oNode.aoInstructions:
+                self.asBody += [
+                    '    if ((uOpcode & UINT32_C(%#010x)) == UINT32_C(%#010x))' % (oInstr.fFixedMask, oInstr.fFixedValue,),
+                    '        return iemDecode%s_%s(pVCpu, uOpcode);' % (sInstrSet, oInstr.getCName(),),
+                ];
+            ## @todo check if the masks are restricted to a few bit differences at
+            ## this point and we can skip the iemDecodeA64_Invalid call.
+            self.asBody += [
+                '    return iemDecode%s_Invalid(pVCpu, uOpcode);' % (sInstrSet,),
+            ];
+            self._addLinesToHash(self.asBody);
+
+        def getLines(self):
+            asLines  = IEMArmGenerator.DecoderCodeBlock.getLines(self);
+            asLines += [
+                'FNIEMOP_DEF_1(%s, uint32_t, uOpcode)' % (self.getName(),),
+                '{',
+            ];
+            asLines += self.asBody;
+            asLines += [
+                '}',
+            ];
+            return asLines;
+
+    class DecoderCodeTableLeafEntry(object):
+        """ Special DecoderCodeTableFunc::dChildCode for leaf decoder functions. """
+        def __init__(self, sName):
+            self.sName = sName;
+
+        def getHash(self):
+            return self.sName;
+
+        def getName(self):
+            return self.sName;
+
+    class DecoderCodeTableFunc(DecoderCodeBlock):
+        """ Helper class for table based decoder function. """
+
+        def __init__(self, sInstrSet, sName, sMatches, sStats, uDepth, cTabEntries, dChildCode, asIdx):
+            IEMArmGenerator.DecoderCodeBlock.__init__(self, sInstrSet, sName, sMatches, sStats);
+            self.sInstrSet   = sInstrSet;
+            self.uDepth      = uDepth;
+            self.cTabEntries = cTabEntries;
+            self.dChildCode  = dChildCode;      # Note! DecoderCodeBlock or DecoderCodeTableLeafEntry instances.
+            self.asIdx       = asIdx;
+
+            self._addLinesToHash(asIdx);
+            self._addLinesToHash(['%s-%s' % (idx, oCodeBlock.getHash(),) for idx, oCodeBlock in dChildCode.items()]);
+
+        def getLines(self):
+            # Generate the function.  For the top level we just do the table, as
+            # the functions are static and we need the interpreter code to be able
+            # to address the symbol and this is the speedier way.
+            asLines = IEMArmGenerator.DecoderCodeBlock.getLines(self);
+            if self.uDepth > 0:
+                asLines += [
+                    'FNIEMOP_DEF_1(%s, uint32_t, uOpcode)' % (self.getName(),),
+                    '{',
+                    '    static PFIEMOPU32 const s_apfn[] =',
+                    '    {',
+                ];
+                sTabNm  = 's_apfn';
+                sIndent = '    ';
+            else:
+                sTabNm  = 'g_apfnIemInterpretOnly' + self.sInstrSet;
+                asLines += [
+                    'PFIEMOPU32 const %s[] =' % (sTabNm,),
+                    '{',
+                ];
+                sIndent = '';
+
+            idxPrev = -1;
+            for idx in sorted(self.dChildCode):
+                idxPrev += 1;
+                while idxPrev < idx:
+                    asLines.append(sIndent + '    iemDecode%s_Invalid, // %s' % (self.sInstrSet, idxPrev,));
+                    idxPrev += 1;
+                asLines.append('%s    %s,' % (sIndent, self.dChildCode[idx].getName(),));
+
+            while idxPrev + 1 < self.cTabEntries:
+                idxPrev += 1;
+                asLines.append(sIndent + '    iemDecode%s_Invalid, // %s' % (self.sInstrSet, idxPrev,));
+
+            asLines += [
+                '%s};' % (sIndent,),
+                '%sAssertCompile(RT_ELEMENTS(%s) == %#x);' % (sIndent, sTabNm, self.cTabEntries,),
+                '',
+            ];
+
+            if self.uDepth > 0:
+                asLines += self.asIdx;
+                asLines += [
+                    '    return s_apfn[idx](pVCpu, uOpcode);',
+                    '}'
+                ];
+            return asLines;
+
+
+    def generateDecoderCode(self, sInstrSet, oNode, uDepth, dCodeCache):
         """
         Recursively generates the decoder code.
         """
         assert oNode.fChildMask != 0 and oNode.fChildMask not in (0x7fffffff, 0xffffffff, 0x4fffffff), \
             'fChildMask=%s #dChildren=%s aoInstr=%s' % (oNode.fChildMask, len(oNode.dChildren), oNode.aoInstructions,);
-        asLines = [];
+        assert oNode.dChildren;
 
+        #
         # First recurse.
+        #
+        aoCodeBlocks    = [];
+        dChildCode      = {};
         cLeafEntries    = 0;
         cMultiIfEntries = 0;
+        cReusedCode     = 0;
         for idx in sorted(oNode.dChildren):
             oChildNode = oNode.dChildren[idx];
             if oChildNode.dChildren:
-                asLines += self.generateDecoderCode(sInstrSet, oChildNode, uDepth + 1);
+                aoSubCodeBlocks = self.generateDecoderCode(sInstrSet, oChildNode, uDepth + 1, dCodeCache);
             elif oChildNode.fChildMask == DecoderNode.kChildMaskMultipleOpcodeValueIfs:
                 assert len(oChildNode.aoInstructions) > 1;
-                asLines += self.generateDecoderCodeMultiIfFunc(sInstrSet, oChildNode, uDepth + 1);
+                aoSubCodeBlocks = [IEMArmGenerator.DecoderCodeMultiIfFunc(sInstrSet, oChildNode, uDepth + 1),];
                 cMultiIfEntries += 1;
             else:
                 assert len(oChildNode.aoInstructions) == 1;
                 assert oChildNode.fChildMask in [DecoderNode.kChildMaskOpcodeValueIf, 0];
                 cLeafEntries += 1;
+                dChildCode[idx] = IEMArmGenerator.DecoderCodeTableLeafEntry(oChildNode.getFuncName(sInstrSet, -1));
+                continue;
 
-        # Generate the function.  For the top level we just do the table, as
-        # the functions are static and we need the interpreter code to be able
-        # to address the symbol and this is the speedier way.
+            oCodeBlock  = aoSubCodeBlocks[-1];
+            oCachedCode = dCodeCache.get(oCodeBlock.getHash(), None);
+            if len(aoSubCodeBlocks) != 1 or oCachedCode is None:
+                assert oCachedCode is None; # Code shouldn't be in the hash if it has new dependencies!
+                dChildCode[idx] = oCodeBlock;
+                aoCodeBlocks.extend(aoSubCodeBlocks);
+                dCodeCache[oCodeBlock.getHash()] = oCodeBlock; # comment out of disable code reuse.
+            else:
+                #print('debug: code cache hit');
+                oCachedCode.asMatches += oCodeBlock.asMatches;
+                dChildCode[idx] = oCachedCode;
+                cReusedCode += 1;
+
+        assert len(dChildCode) == len(oNode.dChildren);
+        assert dChildCode;
+
+        #
+        # Match info w/ stats.
+        #
         cTabEntries = 1 << oNode.fChildMask.bit_count();
-        asLines += [
-            '',
-            '/* %08x/%08x level %u - mask=%#x entries=%#x valid=%%%u (%#x) leaf=%%%u (%#x) multi-if=%%%u (%#x) */'
-            % (oNode.fCheckedMask, oNode.fCheckedValue, uDepth, oNode.fChildMask, cTabEntries,
-               int(round(len(oNode.dChildren) * 100.0 / cTabEntries)), len(oNode.dChildren),
-               int(round(cLeafEntries         * 100.0 / cTabEntries)), cLeafEntries,
-               int(round(cMultiIfEntries      * 100.0 / cTabEntries)), cMultiIfEntries, ),
-        ];
-        if uDepth > 0:
-            asLines += [
-                'FNIEMOP_DEF_1(%s, uint32_t, uOpcode)' % (oNode.getFuncName(sInstrSet, uDepth),),
-                '{',
-                '    static PFIEMOPU32 const s_apfn[] =',
-                '    {',
-            ];
-            sTabNm  = 's_apfn';
-            sIndent = '    ';
-        else:
-            sTabNm  = 'g_apfnIemInterpretOnly' + sInstrSet;
-            asLines += [
-                'PFIEMOPU32 const %s[] =' % (sTabNm,),
-                '{',
-            ];
-            sIndent = '';
+        sStats   = 'mask=%#x entries=%#x children=%#x valid=%%%u (%#x) leaf=%%%u (%#x) multi-if=%%%u (%#x) reuse=%%%u (%#x)' \
+                 % (oNode.fChildMask, cTabEntries, len(oNode.dChildren),
+                    int(round(len(oNode.dChildren) * 100.0 / cTabEntries)), len(oNode.dChildren),
+                    int(round(cLeafEntries         * 100.0 / cTabEntries)), cLeafEntries,
+                    int(round(cMultiIfEntries      * 100.0 / cTabEntries)), cMultiIfEntries,
+                    int(round(cReusedCode          * 100.0 / cTabEntries)), cReusedCode, );
+        sMatches = '%08x/%08x level %u' % (oNode.fCheckedMask, oNode.fCheckedValue, uDepth,);
 
-        idxPrev = -1;
-        for idx in sorted(oNode.dChildren):
-            oChildNode = oNode.dChildren[idx];
-            idxPrev += 1;
-            while idxPrev < idx:
-                asLines.append(sIndent + '    iemDecode%s_Invalid, // %s' % (sInstrSet, idxPrev,));
-                idxPrev += 1;
-            asLines.append('%s    %s,' % (sIndent, oChildNode.getFuncName(sInstrSet, uDepth + 1),));
-
-        while idxPrev + 1 < cTabEntries:
-            idxPrev += 1;
-            asLines.append(sIndent + '    iemDecode%s_Invalid, // %s' % (sInstrSet, idxPrev,));
-
-        asLines += [
-            '%s};' % (sIndent,),
-            '%sAssertCompile(RT_ELEMENTS(%s) == %#x);' % (sIndent, sTabNm, cTabEntries,),
-            '',
-        ];
-
-        # Extract the index from uOpcode.
+        #
+        # Code for extracting the index from uOpcode.
+        #
         aaiAlgo = MaskZipper.compileAlgo(oNode.fChildMask);
         assert aaiAlgo, 'fChildMask=%s #children=%s instrs=%s' % (oNode.fChildMask, len(oNode.dChildren), oNode.aoInstructions,);
         asIdx = [
@@ -3583,17 +3703,16 @@ class IEMArmGenerator(object):
                          % (iSrcBit - iDstBit, fMask << iDstBit, iSrcBit, fMask.bit_count(), iDstBit));
         asIdx[-1] += ';';
 
-        # Make the call and complete the function.  For the top level, we save
-        # the expression so we can later put it in a header file.
-        if uDepth > 0:
-            asLines += asIdx;
-            asLines += [
-                '    return s_apfn[idx](pVCpu, uOpcode);',
-                '}'
-            ];
-        else:
+        # For the top level table, we save the expression so we can later put in a header file.
+        if uDepth == 0:
             self.dRootsIndexExpr[sInstrSet] = asIdx;
-        return asLines;
+
+        #
+        # Create the code block for this table-based decoder function.
+        #
+        oCodeBlock = IEMArmGenerator.DecoderCodeTableFunc(sInstrSet, oNode.getFuncName(sInstrSet, uDepth), sMatches, sStats,
+                                                          uDepth, cTabEntries, dChildCode, asIdx)
+        return aoCodeBlocks + [oCodeBlock,];
 
     def generateDecoderCpp(self, sInstrSet):
         """ Generates the decoder data & code. """
@@ -3612,8 +3731,11 @@ class IEMArmGenerator(object):
             '',
             '#include "IEMMc.h"',
             '',
-            '#include "%s"' % (os.path.basename(self.oOptions.sFileDecoderHdr),),
-            '#include "%s"' % (os.path.basename(self.oOptions.sFileStubHdr),),
+            '#include "%s"' % (os.path.basename(self.oOptions.sFileDecoderHdr) if self.oOptions.sFileDecoderHdr
+                               else 'IEMAllIntpr%sTables-armv8.h' % (sInstrSet),),
+            '#include "%s"' % (os.path.basename(self.oOptions.sFileStubHdr) if self.oOptions.sFileStubHdr
+                               else 'IEMAllInstr%sImpl.h' % (sInstrSet),),
+            '',
             '',
             '/** Invalid instruction decoder function. */',
             'FNIEMOP_DEF_1(iemDecode%s_Invalid, uint32_t, uOpcode)' % (sInstrSet,),
@@ -3626,8 +3748,11 @@ class IEMArmGenerator(object):
 
         asLines += self.generateDecoderFunctions(sInstrSet);
 
+        dCodeCache   = {};
         assert self.dDecoderRoots[sInstrSet].dChildren;
-        asLines += self.generateDecoderCode(sInstrSet, self.dDecoderRoots[sInstrSet], 0);
+        aoCodeBlocks = self.generateDecoderCode(sInstrSet, self.dDecoderRoots[sInstrSet], 0, dCodeCache);
+        for oCodeBlock in aoCodeBlocks:
+            asLines.extend(oCodeBlock.getLines());
 
         return (True, asLines);
 
