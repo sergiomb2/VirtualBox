@@ -8159,11 +8159,12 @@ HRESULT Console::i_loadVMM(const char *pszVMMMod) RT_NOEXCEPT
                             return S_OK;
                         }
 
-                        hrc = setErrorVrc(vrc, "Bogus VMM vtable: uMagicVersion=%#RX64 uMagicVersionEnd=%#RX64",
+                        hrc = setErrorVrc(VWRN_INVALID_MAGIC, "Bogus VMM vtable: uMagicVersion=%#RX64 uMagicVersionEnd=%#RX64",
                                           pVMM->uMagicVersion, pVMM->uMagicVersionEnd);
                     }
                     else
-                        hrc = setErrorVrc(vrc, "Incompatible of bogus VMM version magic: %#RX64", pVMM->uMagicVersion);
+                        hrc = setErrorVrc(VERR_VERSION_MISMATCH, "Incompatible of bogus VMM version magic: %#RX64",
+                                          pVMM->uMagicVersion);
                 }
                 else
                     hrc = setErrorVrc(vrc, "pfnGetVTable return NULL!");
