@@ -8695,9 +8695,9 @@ void MachineConfigFile::buildNetworkXML(NetworkAttachmentType_T mode,
                         pelmNAT->setAttribute("tcpsnd", nic.nat.u32TcpSnd);
                     if (!nic.nat.areLocalhostReachableDefaultSettings(m->sv))
                         pelmNAT->setAttribute("localhost-reachable", nic.nat.fLocalhostReachable);
-                    if (!nic.nat.fForwardBroadcast)
+                    if (nic.nat.fForwardBroadcast)
                         pelmNAT->setAttribute("forward-broadcast", nic.nat.fForwardBroadcast);
-                    if (!nic.nat.fEnableTFTP)
+                    if (nic.nat.fEnableTFTP)
                         pelmNAT->setAttribute("enable-tftp", nic.nat.fEnableTFTP);
                     if (!nic.nat.areDNSDefaultSettings())
                     {
@@ -9739,20 +9739,13 @@ void MachineConfigFile::bumpSettingsVersionIfNeeded()
              netit != hardwareMachine.llNetworkAdapters.end();
              ++netit)
         {
-            // VirtualBox 7.2 adds a flag if NAT can forward broadcast packets to
-            // external, host-side network (added in 7.1, settings file updated in 7.2).
-            if (   netit->fEnabled
+            if ((  netit->fEnabled // VirtualBox 7.2 adds a flag if NAT can forward broadcast packets to
+                                   // external, host-side network (added in 7.1, settings file updated in 7.2).
                 && netit->mode == NetworkAttachmentType_NAT
-                && !netit->nat.fForwardBroadcast)
-            {
-                m->sv = SettingsVersion_v1_21;
-                break;
-            }
-
-            // VirtualBox 7.2 adds a flag if NAT has enabled TFTP
-            if (   netit->fEnabled
+                && netit->nat.fForwardBroadcast) ||
+                ( netit->fEnabled // VirtualBox 7.2 adds a flag if NAT has enabled TFTP
                 && netit->mode == NetworkAttachmentType_NAT
-                && !netit->nat.fEnableTFTP)
+                && netit->nat.fEnableTFTP))
             {
                 m->sv = SettingsVersion_v1_21;
                 break;
