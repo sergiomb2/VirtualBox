@@ -41,6 +41,12 @@
 #define PCI_DEVICE_ID_VMWARE_SVGA3      0x0406
 
 //
+// VirtualBox VGA PCI Configuration Header values
+//
+#define PCI_VENDOR_ID_VBOX             0x80ee
+#define PCI_DEVICE_ID_VBOX_SVGA        0xbeef
+
+//
 // Used commands
 //
 #define VMWSVGA3_CMD_UPDATE             1
@@ -118,9 +124,13 @@ typedef struct {
   EFI_GRAPHICS_OUTPUT_PROTOCOL    GraphicsOutput;
   EFI_DEVICE_PATH_PROTOCOL        *GopDevicePath;
 
+  UINT16                          VendorId;
+  UINT16                          DeviceId;
+
   FRAME_BUFFER_CONFIGURE          *FrameBufferBltConfigure;
   UINTN                           FrameBufferBltConfigureSize;
   UINT8                           FrameBufferVramBarIndex;
+  UINT8                           MmioBarIndex;
 
   VMWSVGA3_CB_HDR                 *CmdBufHdr;
   VOID                            *CmdBuf;
@@ -148,6 +158,12 @@ extern EFI_COMPONENT_NAME2_PROTOCOL  gVmwSvga3VideoComponentName2;
 //
 #define VMWSVGA3_MMIO_BAR            0
 #define VMWSVGA3_VRAM_BAR            2
+
+//
+// PCI BARs defined by VBoxSVGA that corresponds to VMSVGA3
+//
+#define VBOXSVGA3_MMIO_BAR            1
+#define VBOXSVGA3_VRAM_BAR            0
 
 //
 // MMIO Registers defined by SVGA3
