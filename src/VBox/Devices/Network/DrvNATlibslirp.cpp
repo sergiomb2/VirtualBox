@@ -913,14 +913,14 @@ static int drvNATConstructRedir(unsigned iInstance, PDRVNAT pThis, PCFGMNODE pCf
         /* host address ("BindIP" name is rather unfortunate given "HostPort" to go with it) */
         char szHostIp[MAX_IP_ADDRESS_STR_LEN_W_NULL] = {0};
         rc = pHlp->pfnCFGMQueryStringDef(pNode, "BindIP", szHostIp, sizeof(szHostIp), "");
-        if (RT_FAILURE(rc))
+        if (RT_FAILURE(rc) && rc != VERR_CFGM_VALUE_NOT_FOUND)
             return PDMDrvHlpVMSetError(pDrvIns, rc, RT_SRC_POS,
                                        N_("NAT#%d: configuration query for \"%s/BindIP\" failed"), iInstance, szNodeNm);
 
         /* guest address */
         char szGuestIp[MAX_IP_ADDRESS_STR_LEN_W_NULL] = {0};
         rc = pHlp->pfnCFGMQueryStringDef(pNode, "GuestIP", szGuestIp, sizeof(szGuestIp), "");
-        if (RT_FAILURE(rc))
+        if (RT_FAILURE(rc) && rc != VERR_CFGM_VALUE_NOT_FOUND)
             return PDMDrvHlpVMSetError(pDrvIns, rc, RT_SRC_POS,
                                        N_("NAT#%d: configuration query for \"%s/GuestIP\" failed"), iInstance, szNodeNm);
 
