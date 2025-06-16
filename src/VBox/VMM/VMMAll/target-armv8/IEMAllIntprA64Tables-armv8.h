@@ -36,17 +36,16 @@
 #endif
 
 /** The top-level A64 decoder table for the IEM interpreter. */
-extern PFIEMOPU32 const g_apfnIemInterpretOnlyA64[0x800];
+extern PFIEMOPU32 const g_apfnIemInterpretOnlyA64[0x1000];
 
 /**
  * Calculates the index for @a uOpcode in g_apfnIemInterpretOnlyA64.
  */
 DECL_FORCE_INLINE(uintptr_t) iemInterpretOnlyA64CalcIndex(uint32_t uOpcode)
 {
-    /* fMask=0x60e0fc00 -> 0x000007ff */
+    /* fMask=0x07e0fc00 -> 0x00000fff */
     uintptr_t const idx = ((uOpcode >> 10) & UINT32_C(0x0000003f)) /* bit 10 L 6 -> 0 */
-                        | ((uOpcode >> 15) & UINT32_C(0x000001c0)) /* bit 21 L 3 -> 6 */
-                        | ((uOpcode >> 20) & UINT32_C(0x00000600)) /* bit 29 L 2 -> 9 */;
+                        | ((uOpcode >> 15) & UINT32_C(0x00000fc0)) /* bit 21 L 6 -> 6 */;
     return idx;
 }
 
