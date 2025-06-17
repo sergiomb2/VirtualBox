@@ -3907,6 +3907,7 @@ static int vmxHCImportGuestStateEx(PVMCPUCC pVCpu, PVMXVMCSINFO pVmcsInfo, uint6
                 {
                     Assert(CPUMIsGuestInVmxRootMode(pCtx));
                     rc = vmxHCCopyShadowToNstGstVmcs(pVCpu, pVmcsInfo);
+                    pVCpu->hm.s.vmx.fCopiedNstGstToShadowVmcs = false;
                     if (RT_SUCCESS(rc))
                     { /* likely */ }
                     else
@@ -4175,6 +4176,7 @@ static int vmxHCImportGuestStateInner(PVMCPUCC pVCpu, PVMXVMCSINFO pVmcsInfo, ui
             Assert(CPUMIsGuestInVmxRootMode(&pVCpu->cpum.GstCtx));
             int const rc = vmxHCCopyShadowToNstGstVmcs(pVCpu, pVmcsInfo);
             AssertRCReturn(rc, rc);
+            pVCpu->hm.s.vmx.fCopiedNstGstToShadowVmcs = false;
         }
     }
 #endif
