@@ -44,8 +44,6 @@
 #include <iprt/stdarg.h>
 #include <iprt/time.h>
 
-#include <stdio.h>
-
 #include "libsvn.h"
 #include "svn2git-internal.h"
 
@@ -1042,7 +1040,6 @@ static RTEXITCODE s2gSvnDumpBlob(PS2GCTX pThis, PS2GSVNREV pRev, svn_fs_root_t *
     bool fIsExec = s2gPathIsExec(pSvnFsRoot, pszSvnPath, pPool);
     RTEXITCODE rcExit = RTEXITCODE_SUCCESS;
 
-    /** @todo Symlinks. */
     if (!s2gPathIsSymlink(pSvnFsRoot, pszSvnPath, pPool))
     {
         svn_stream_t *pSvnStrmIn = NULL;
@@ -1069,10 +1066,10 @@ static RTEXITCODE s2gSvnDumpBlob(PS2GCTX pThis, PS2GSVNREV pRev, svn_fs_root_t *
                     {
                         /** @todo */
                         char aszRev[32];
-                        snprintf(aszRev, sizeof(aszRev), "%u", pRev->idRev);
+                        RTStrPrintf2(aszRev, sizeof(aszRev), "%u", pRev->idRev);
 
                         char aszUrl[4096];
-                        snprintf(aszUrl, sizeof(aszUrl), "https://localhost/vbox/svn");
+                        RTStrPrintf2(aszUrl, sizeof(aszUrl), "https://localhost/vbox/svn");
                         char *pb = &aszUrl[sizeof("https://localhost/vbox/svn") - 1];
                         while (*pszSvnPath)
                         {
@@ -1702,7 +1699,7 @@ static RTEXITCODE s2gSvnExportSinglePath(PS2GCTX pThis, PS2GSVNREV pRev, const c
                      * and there is no .gitignore in the tree.
                      */
                     char szSvnPath[RTPATH_MAX];
-                    strncpy(szSvnPath, pszSvnPath, sizeof(szSvnPath));
+                    RTStrCopy(szSvnPath, sizeof(szSvnPath), pszSvnPath);
                     RTPathStripFilename(szSvnPath);
 
                     bool fHasGitIgnore = false;
@@ -1715,7 +1712,7 @@ static RTEXITCODE s2gSvnExportSinglePath(PS2GCTX pThis, PS2GSVNREV pRev, const c
                             && !fHasIgnores)
                         {
                             char szGitPath[RTPATH_MAX];
-                            strncpy(szGitPath, pszGitPath, sizeof(szGitPath));
+                            RTStrCopy(szGitPath, sizeof(szGitPath), pszGitPath);
                             RTPathStripFilename(szGitPath);
                             RTStrCat(szGitPath, sizeof(szGitPath), "/.gitignore");
 
@@ -1744,7 +1741,7 @@ static RTEXITCODE s2gSvnExportSinglePath(PS2GCTX pThis, PS2GSVNREV pRev, const c
                          * svn:ignore properties.
                          */
                         char szSvnPath[RTPATH_MAX];
-                        strncpy(szSvnPath, pszSvnPath, sizeof(szSvnPath));
+                        RTStrCopy(szSvnPath, sizeof(szSvnPath), pszSvnPath);
                         RTPathStripFilename(szSvnPath);
 
                         bool fIsEmpty = false;
@@ -1753,7 +1750,7 @@ static RTEXITCODE s2gSvnExportSinglePath(PS2GCTX pThis, PS2GSVNREV pRev, const c
                             && fIsEmpty)
                         {
                             char szGitPath[RTPATH_MAX];
-                            strncpy(szGitPath, pszGitPath, sizeof(szGitPath));
+                            RTStrCopy(szGitPath, sizeof(szGitPath), pszGitPath);
                             RTPathStripFilename(szGitPath);
 
                             rcExit = s2gSvnAddGitIgnore(pThis, szGitPath, NULL /*pvData*/, 0 /*cbData*/);
@@ -1787,7 +1784,7 @@ static RTEXITCODE s2gSvnExportSinglePath(PS2GCTX pThis, PS2GSVNREV pRev, const c
                  * because the directory was empty.
                  */
                 char szSvnPath[RTPATH_MAX];
-                strncpy(szSvnPath, pszSvnPath, sizeof(szSvnPath));
+                RTStrCopy(szSvnPath, sizeof(szSvnPath), pszSvnPath);
                 RTPathStripFilename(szSvnPath);
 
                 bool fWasEmpty = false;
@@ -1798,7 +1795,7 @@ static RTEXITCODE s2gSvnExportSinglePath(PS2GCTX pThis, PS2GSVNREV pRev, const c
                     && fWasEmpty)
                 {
                     char szGitPath[RTPATH_MAX];
-                    strncpy(szGitPath, pszGitPath, sizeof(szGitPath));
+                    RTStrCopy(szGitPath, sizeof(szGitPath), pszGitPath);
                     RTPathStripFilename(szGitPath);
                     RTStrCat(szGitPath, sizeof(szGitPath), "/.gitignore");
 
@@ -1814,7 +1811,7 @@ static RTEXITCODE s2gSvnExportSinglePath(PS2GCTX pThis, PS2GSVNREV pRev, const c
             if (RT_SUCCESS(rc))
             {
                 char szSvnPath[RTPATH_MAX];
-                strncpy(szSvnPath, pszSvnPath, sizeof(szSvnPath));
+                RTStrCopy(szSvnPath, sizeof(szSvnPath), pszSvnPath);
                 RTPathStripFilename(szSvnPath);
 
                 bool fIsEmpty = false;
@@ -1827,7 +1824,7 @@ static RTEXITCODE s2gSvnExportSinglePath(PS2GCTX pThis, PS2GSVNREV pRev, const c
                     && !fHasIgnores) /* Don't overwrite .gitignore files due to existing svn:ignore properties. */
                 {
                     char szGitPath[RTPATH_MAX];
-                    strncpy(szGitPath, pszGitPath, sizeof(szGitPath));
+                    RTStrCopy(szGitPath, sizeof(szGitPath), pszGitPath);
                     RTPathStripFilename(szGitPath);
 
                     rcExit = s2gSvnAddGitIgnore(pThis, szGitPath, NULL /*pvData*/, 0 /*cbData*/);
@@ -2300,6 +2297,47 @@ static RTEXITCODE s2gSvnGetInternalRevisionFromPublic(PS2GCTX pThis, uint32_t id
 }
 
 
+static RTEXITCODE s2gSvnVerifyBlobIgnoreLineEndings(const char *pszGitPath, const void *pvGit, uint64_t cbGit,
+                                                    const char *pszSvnPath, const void *pvSvn, uint64_t cbSvn)
+{
+    const uint8_t *pbGit = (const uint8_t *)pvGit;
+    uint64_t cbGitLeft = cbGit;
+    const uint8_t *pbSvn = (const uint8_t *)pvSvn;
+    uint64_t cbSvnLeft = cbSvn;
+
+    for (;;)
+    {
+        if (*pbGit != *pbSvn)
+        {
+            /* Check whether the difference is a line ending. */
+            if (*pbGit == '\r' && *pbSvn == '\n')
+            {
+                pbGit++;
+                cbGitLeft--;
+                if (*pbGit != '\n')
+                    return RTMsgErrorExit(RTEXITCODE_FAILURE, "'%s' has broken line endings",
+                                          pszGitPath, cbGitLeft);
+            }
+            else
+                return RTMsgErrorExit(RTEXITCODE_FAILURE, "'%s' and '%s' differ in content (cbGitLeft=%RU64, cbSvnLeft=%RU64)",
+                                      pszSvnPath, pszGitPath, cbGitLeft, cbSvnLeft);
+        }
+
+        pbGit++;
+        pbSvn++;
+        cbGitLeft--;
+        cbSvnLeft--;
+        if (!cbGitLeft && !cbSvnLeft)
+            break;
+        else if (!cbGitLeft || !cbSvnLeft)
+            return RTMsgErrorExit(RTEXITCODE_FAILURE, "'%s' and '%s' differ in content (cbGitLeft=%RU64, cbSvnLeft=%RU64)",
+                                  pszSvnPath, pszGitPath, cbGitLeft, cbSvnLeft);
+    }
+
+    return RTEXITCODE_SUCCESS;
+}
+
+
 static RTEXITCODE s2gSvnVerifyBlob(PS2GCTX pThis, PCS2GSVNREV pRev, const char *pszSvnPath, const char *pszGitPath)
 {
     /* Create a new temporary pool. */
@@ -2358,7 +2396,7 @@ static RTEXITCODE s2gSvnVerifyBlob(PS2GCTX pThis, PCS2GSVNREV pRev, const char *
                         svn_string_t *pSvnDate   = (svn_string_t *)apr_hash_get(pRevPros, "svn:date",   APR_HASH_KEY_STRING);
 
                         char aszRev[32];
-                        snprintf(aszRev, sizeof(aszRev), "%ld", revnum);
+                        RTStrPrintf2(aszRev, sizeof(aszRev), "%ld", revnum);
 
                         apr_time_t AprTimeLast = 0;
                         if (pSvnDate)
@@ -2368,7 +2406,7 @@ static RTEXITCODE s2gSvnVerifyBlob(PS2GCTX pThis, PCS2GSVNREV pRev, const char *
                         if (pAuthor)
                         {
                             char aszUrl[4096];
-                            snprintf(aszUrl, sizeof(aszUrl), "https://localhost/vbox/svn");
+                            RTStrPrintf2(aszUrl, sizeof(aszUrl), "https://localhost/vbox/svn");
                             char *pb = &aszUrl[sizeof("https://localhost/vbox/svn") - 1];
                             const char *pszTmp = pszSvnPath;
                             while (*pszTmp)
@@ -2433,15 +2471,19 @@ static RTEXITCODE s2gSvnVerifyBlob(PS2GCTX pThis, PCS2GSVNREV pRev, const char *
                                                         pszSvnPath, pszGitPath);
                         }
                         else
-                            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "'%s' and '%s' differ in size (%RU64 vs %zu)",
-                                                    pszSvnPath, pszGitPath, cbFile, cbGitFile);
-                        if (rcExit == RTEXITCODE_FAILURE)
                         {
-                            AssertFailed();
-                            RTFILE hFile;
-                            RTFileOpen(&hFile, "/tmp/out", RTFILE_O_WRITE | RTFILE_O_CREATE_REPLACE | RTFILE_O_DENY_NONE);
-                            RTFileWrite(hFile, pThis->BufScratch.pbBuf, cbFile, NULL);
-                            RTFileClose(hFile);
+                            /** @todo We have some files with different line endings in the git worktree vs. how they are stored
+                             *        and the SVN due to .gitattributes. For those files line ending differences are ignored.
+                             *        Make this more generic using the config. */
+                            const char *pszSuffix = RTPathSuffix(pszGitPath);
+                            if (   pszSuffix
+                                && !RTStrCmp(pszSuffix, ".csv"))
+                                rcExit = s2gSvnVerifyBlobIgnoreLineEndings(pszGitPath, pvFile, cbGitFile,
+                                                                           pszSvnPath, pThis->BufScratch.pbBuf,
+                                                                           cbFile);
+                            else
+                                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "'%s' and '%s' differ in size (%RU64 vs %zu)",
+                                                        pszSvnPath, pszGitPath, cbFile, cbGitFile);
                         }
                         RTFileReadAllFree(pvFile, cbGitFile);
                     }
