@@ -53,34 +53,47 @@
 
 /** Advances RIP, finishes the instruction and returns.
  * This may include raising debug exceptions and such. */
-#define IEM_MC_ADVANCE_PC_AND_FINISH()                  return iemRegAddToPcAndFinishingClearingRF(pVCpu, IEM_GET_INSTR_LEN(pVCpu))
+#define IEM_MC_ADVANCE_PC_AND_FINISH() \
+    return iemRegPcIncAndFinishClearingFlags(pVCpu)
 
 
 /** Sets PC, finishes the instruction and returns. */
-#define IEM_MC_REL_JMP_S8_AND_FINISH(a_i8)              return iemRegPcRelativeJumpS8AndFinishClearingRF(pVCpu, (a_i8))
+#define IEM_MC_REL_JMP_S8_AND_FINISH(a_i8) \
+    return iemRegPcRelativeJumpS8AndFinishClearingFlags(pVCpu, (a_i8))
 /** Sets PC, finishes the instruction and returns. */
-#define IEM_MC_REL_JMP_S16_AND_FINISH(a_i16)            return iemRegPcRelativeJumpS16AndFinishClearingRF(pVCpu, (a_i16))
+#define IEM_MC_REL_JMP_S16_AND_FINISH(a_i16) \
+    return iemRegPcRelativeJumpS16AndFinishClearingFlags(pVCpu, (a_i16))
 /** Sets PC, finishes the instruction and returns. */
-#define IEM_MC_REL_JMP_S32_AND_FINISH(a_i32)            return iemRegPcRelativeJumpS32AndFinishClearingRF(pVCpu, (a_i32))
+#define IEM_MC_REL_JMP_S32_AND_FINISH(a_i32) \
+    return iemRegPcRelativeJumpS32AndFinishClearingFlags(pVCpu, (a_i32))
 /** Sets PC, finishes the instruction and returns. */
-#define IEM_MC_IND_JMP_U16_AND_FINISH(a_u16NewIP)       return iemRegPcJumpU16AndFinishClearingRF((pVCpu), (a_u16NewIP))
+#define IEM_MC_IND_JMP_U16_AND_FINISH(a_u16NewIP) \
+    return iemRegPcJumpU16AndFinishClearingFlags((pVCpu), (a_u16NewIP))
 /** Sets PC, finishes the instruction and returns. */
-#define IEM_MC_IND_JMP_U32_AND_FINISH(a_u32NewIP)       return iemRegPcJumpU32AndFinishClearingRF((pVCpu), (a_u32NewIP))
+#define IEM_MC_IND_JMP_U32_AND_FINISH(a_u32NewIP) \
+    return iemRegPcJumpU32AndFinishClearingFlags((pVCpu), (a_u32NewIP))
 /** Sets PC, finishes the instruction and returns. */
-#define IEM_MC_IND_JMP_U64_AND_FINISH(a_u64NewIP)       return iemRegPcJumpU64AndFinishClearingRF((pVCpu), (a_u64NewIP))
+#define IEM_MC_IND_JMP_U64_AND_FINISH(a_u64NewIP) \
+    return iemRegPcJumpU64AndFinishClearingFlags((pVCpu), (a_u64NewIP))
 
 /** Saves the return address, sets PC, finishes the instruction and returns. */
-#define IEM_MC_REL_CALL_S16_AND_FINISH(a_i16)           return iemRegPcRelativeCallS16AndFinishClearingRF(pVCpu, (a_i16))
+#define IEM_MC_REL_CALL_S16_AND_FINISH(a_i16) \
+    return iemRegPcRelativeCallS16AndFinishClearingFlags(pVCpu, (a_i16))
 /** Saves the return address, sets PC, finishes the instruction and returns. */
-#define IEM_MC_REL_CALL_S32_AND_FINISH(a_i32)           return iemRegPcRelativeCallS32AndFinishClearingRF(pVCpu, (a_i32))
+#define IEM_MC_REL_CALL_S32_AND_FINISH(a_i32) \
+    return iemRegPcRelativeCallS32AndFinishClearingFlags(pVCpu, (a_i32))
 /** Saves the return address, sets PC, finishes the instruction and returns. */
-#define IEM_MC_REL_CALL_S64_AND_FINISH(a_i64)           return iemRegPcRelativeCallS64AndFinishClearingRF(pVCpu, (a_i64))
+#define IEM_MC_REL_CALL_S64_AND_FINISH(a_i64) \
+    return iemRegPcRelativeCallS64AndFinishClearingFlags(pVCpu, (a_i64))
 /** Saves the return address, sets PC, finishes the instruction and returns. */
-#define IEM_MC_IND_CALL_U16_AND_FINISH(a_u16NewIP)      return iemRegPcIndirectCallU16AndFinishClearingRF((pVCpu), (a_u16NewIP))
+#define IEM_MC_IND_CALL_U16_AND_FINISH(a_u16NewIP) \
+    return iemRegPcIndirectCallU16AndFinishClearingFlags((pVCpu), (a_u16NewIP))
 /** Saves the return address, sets PC, finishes the instruction and returns. */
-#define IEM_MC_IND_CALL_U32_AND_FINISH(a_u32NewIP)      return iemRegPcIndirectCallU32AndFinishClearingRF((pVCpu), (a_u32NewIP))
+#define IEM_MC_IND_CALL_U32_AND_FINISH(a_u32NewIP) \
+    return iemRegPcIndirectCallU32AndFinishClearingFlags((pVCpu), (a_u32NewIP))
 /** Saves the return address, sets PC, finishes the instruction and returns. */
-#define IEM_MC_IND_CALL_U64_AND_FINISH(a_u64NewIP)      return iemRegPcIndirectCallU64AndFinishClearingRF((pVCpu), (a_u64NewIP))
+#define IEM_MC_IND_CALL_U64_AND_FINISH(a_u64NewIP) \
+    return iemRegPcIndirectCallU64AndFinishClearingFlags((pVCpu), (a_u64NewIP))
 
 
 #define IEM_MC_LOCAL(a_Type, a_Name)                    a_Type a_Name

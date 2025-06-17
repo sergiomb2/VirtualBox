@@ -3730,6 +3730,7 @@ class IEMArmGenerator(object):
             '#include "iprt/armv8.h"',
             '',
             '#include "IEMMc.h"',
+            '#include "IEMInline-armv8.h"',
             '',
             '#include "%s"' % (os.path.basename(self.oOptions.sFileDecoderHdr) if self.oOptions.sFileDecoderHdr
                                else 'IEMAllIntpr%sTables-armv8.h' % (sInstrSet),),

@@ -3262,7 +3262,10 @@
  */
 
 /* B  <label> (fc000000/14000000) */
-//#define IEM_INSTR_IMPL_A64__B_only_branch_imm(imm26)
+#define IEM_INSTR_IMPL_A64__B_only_branch_imm(imm26) \
+    IEM_MC_BEGIN(0,0); \
+    IEM_MC_REL_JMP_S32_AND_FINISH((int32_t)((uint32_t)(imm26) << 6) >> 4); \
+    IEM_MC_END()
 
 
 /* BL  <label> (fc000000/94000000) */

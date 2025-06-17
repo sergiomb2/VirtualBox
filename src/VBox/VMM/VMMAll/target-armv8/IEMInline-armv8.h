@@ -496,7 +496,7 @@ DECL_FORCE_INLINE(RTGCPTR) iemRegGetSp(PCVMCPU pVCpu) RT_NOEXCEPT
  * @param   pVCpu   The cross context virtual CPU structure of the calling thread.
  * @param   f32Bit  Set if it's a 32-bit wide instruction, clear if 16-bit (T32
  *                  mode only).
- * @see     iemRegPcIncA64, iemRegPcIncA32, iemRegPcIncT32
+ * @see     iemRegPcA64Inc, iemRegPcA32Inc, iemRegPcT32Inc
  */
 DECL_FORCE_INLINE(void) iemRegPcInc(PVMCPUCC pVCpu, bool f32Bit = true) RT_NOEXCEPT
 {
@@ -518,7 +518,7 @@ DECL_FORCE_INLINE(void) iemRegPcInc(PVMCPUCC pVCpu, bool f32Bit = true) RT_NOEXC
  *
  * @param   pVCpu   The cross context virtual CPU structure of the calling thread.
  */
-DECL_FORCE_INLINE(void) iemRegPcIncA64(PVMCPUCC pVCpu) RT_NOEXCEPT
+DECL_FORCE_INLINE(void) iemRegPcA64Inc(PVMCPUCC pVCpu) RT_NOEXCEPT
 {
     pVCpu->cpum.GstCtx.Pc.u64 += 4;
 }
@@ -529,7 +529,7 @@ DECL_FORCE_INLINE(void) iemRegPcIncA64(PVMCPUCC pVCpu) RT_NOEXCEPT
  *
  * @param   pVCpu   The cross context virtual CPU structure of the calling thread.
  */
-DECL_FORCE_INLINE(void) iemRegPcIncA32(PVMCPUCC pVCpu) RT_NOEXCEPT
+DECL_FORCE_INLINE(void) iemRegPcA32Inc(PVMCPUCC pVCpu) RT_NOEXCEPT
 {
     pVCpu->cpum.GstCtx.Pc.u64 = pVCpu->cpum.GstCtx.Pc.u32 + 4;
 }
@@ -541,9 +541,65 @@ DECL_FORCE_INLINE(void) iemRegPcIncA32(PVMCPUCC pVCpu) RT_NOEXCEPT
  * @param   pVCpu   The cross context virtual CPU structure of the calling thread.
  * @param   f32Bit  Set if it's a 32-bit wide instruction.
  */
-DECL_FORCE_INLINE(void) iemRegPcIncT32(PVMCPUCC pVCpu, bool f32Bit = false) RT_NOEXCEPT
+DECL_FORCE_INLINE(void) iemRegPcT32Inc(PVMCPUCC pVCpu, bool f32Bit = false) RT_NOEXCEPT
 {
     pVCpu->cpum.GstCtx.Pc.u64 = pVCpu->cpum.GstCtx.Pc.u32 + (!f32Bit ? 2 : 4);
+}
+
+
+/**
+ * Adds a signed values to PC.
+ *
+ * This is the generic version used by code that isn't mode specific.  Code that
+ * is only used in aarch64, aarch32 and t32 should call the specific versions
+ * below.
+ *
+ * @param   pVCpu       The cross context virtual CPU structure of the calling thread.
+ * @param   offAddend   What to add to PC.
+ * @see     iemRegPcA64Add, iemRegPcA32Add, iemRegPcT32Add
+ */
+DECL_FORCE_INLINE(void) iemRegPcAdd(PVMCPUCC pVCpu, int32_t offAddend) RT_NOEXCEPT
+{
+    if (!(pVCpu->iem.s.fExec & IEM_F_MODE_ARM_32BIT))
+        pVCpu->cpum.GstCtx.Pc.u64 = pVCpu->cpum.GstCtx.Pc.u64 + offAddend;
+    else
+        pVCpu->cpum.GstCtx.Pc.u64 = (uint32_t)(pVCpu->cpum.GstCtx.Pc.u32 + offAddend);
+}
+
+
+/**
+ * Updates the PC to point to the next instruction in aarch64 mode.
+ *
+ * @param   pVCpu       The cross context virtual CPU structure of the calling thread.
+ * @param   offAddend   What to add to PC.
+ */
+DECL_FORCE_INLINE(void) iemRegPcA64Add(PVMCPUCC pVCpu, int32_t offAddend) RT_NOEXCEPT
+{
+    pVCpu->cpum.GstCtx.Pc.u64 = pVCpu->cpum.GstCtx.Pc.u64 + offAddend;
+}
+
+
+/**
+ * Updates the PC to point to the next instruction in aarch32 mode.
+ *
+ * @param   pVCpu       The cross context virtual CPU structure of the calling thread.
+ * @param   offAddend   What to add to PC.
+ */
+DECL_FORCE_INLINE(void) iemRegPcA32Add(PVMCPUCC pVCpu, int32_t offAddend) RT_NOEXCEPT
+{
+    pVCpu->cpum.GstCtx.Pc.u64 = (uint32_t)(pVCpu->cpum.GstCtx.Pc.u32 + offAddend);
+}
+
+
+/**
+ * Updates the PC to point to the next instruction in T32 mode.
+ *
+ * @param   pVCpu       The cross context virtual CPU structure of the calling thread.
+ * @param   offAddend   What to add to PC.
+ */
+DECL_FORCE_INLINE(void) iemRegPcT32Add(PVMCPUCC pVCpu, int32_t offAddend) RT_NOEXCEPT
+{
+    pVCpu->cpum.GstCtx.Pc.u64 = (uint32_t)(pVCpu->cpum.GstCtx.Pc.u32 + offAddend);
 }
 
 
@@ -639,7 +695,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegFinishClearingFlags(PVMCPUCC pVCpu, int rc
  *                              taking the wrong conditional branhc.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC)
-iemRegPcIncAndFinishClearingFlags(PVMCPUCC pVCpu, bool f32Bit = true, int rcNormal = VINF_SUCCESS) RT_NOEXCEPT
+iemRegPcIncAndFinishClearingFlagsEx(PVMCPUCC pVCpu, bool f32Bit = true, int rcNormal = VINF_SUCCESS) RT_NOEXCEPT
 {
     iemRegPcInc(pVCpu, f32Bit);
     return iemRegFinishClearingFlags(pVCpu, rcNormal);
@@ -655,9 +711,9 @@ iemRegPcIncAndFinishClearingFlags(PVMCPUCC pVCpu, bool f32Bit = true, int rcNorm
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
  *                              taking the wrong conditional branhc.
  */
-DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcIncA64AndFinishingClearingFlags(PVMCPUCC pVCpu, int rcNormal) RT_NOEXCEPT
+DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcA64IncAndFinishingClearingFlags(PVMCPUCC pVCpu, int rcNormal = VINF_SUCCESS) RT_NOEXCEPT
 {
-    iemRegPcIncA64(pVCpu);
+    iemRegPcA64Inc(pVCpu);
     return iemRegFinishClearingFlags(pVCpu, rcNormal);
 }
 
@@ -671,9 +727,9 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcIncA64AndFinishingClearingFlags(PVMCPUCC
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
  *                              taking the wrong conditional branhc.
  */
-DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcIncA32AndFinishingClearingFlags(PVMCPUCC pVCpu, int rcNormal) RT_NOEXCEPT
+DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcA32IncAndFinishingClearingFlags(PVMCPUCC pVCpu, int rcNormal = VINF_SUCCESS) RT_NOEXCEPT
 {
-    iemRegPcIncA32(pVCpu);
+    iemRegPcA32Inc(pVCpu);
     return iemRegFinishClearingFlags(pVCpu, rcNormal);
 }
 
@@ -688,9 +744,10 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcIncA32AndFinishingClearingFlags(PVMCPUCC
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
  *                              taking the wrong conditional branhc.
  */
-DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcIncT32AndFinishingClearingFlags(PVMCPUCC pVCpu, bool f32Bit, int rcNormal) RT_NOEXCEPT
+DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcT32IncAndFinishingClearingFlags(PVMCPUCC pVCpu, bool f32Bit = false,
+                                                                        int rcNormal = VINF_SUCCESS) RT_NOEXCEPT
 {
-    iemRegPcIncT32(pVCpu, f32Bit);
+    iemRegPcT32Inc(pVCpu, f32Bit);
     return iemRegFinishClearingFlags(pVCpu, rcNormal);
 }
 
@@ -723,9 +780,9 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegFinishNoFlags(PVMCPUCC pVCpu, int rcNormal
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
  *                              taking the wrong conditional branhc.
  */
-DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcIncA64AndFinishingNoFlags(PVMCPUCC pVCpu, int rcNormal) RT_NOEXCEPT
+DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcA64IncAndFinishingNoFlags(PVMCPUCC pVCpu, int rcNormal) RT_NOEXCEPT
 {
-    iemRegPcIncA64(pVCpu);
+    iemRegPcA64Inc(pVCpu);
     return iemRegFinishNoFlags(pVCpu, rcNormal);
 }
 
@@ -739,9 +796,9 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcIncA64AndFinishingNoFlags(PVMCPUCC pVCpu
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
  *                              taking the wrong conditional branhc.
  */
-DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcIncA32AndFinishingNoFlags(PVMCPUCC pVCpu, int rcNormal) RT_NOEXCEPT
+DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcA32IncAndFinishingNoFlags(PVMCPUCC pVCpu, int rcNormal) RT_NOEXCEPT
 {
-    iemRegPcIncA32(pVCpu);
+    iemRegPcA32Inc(pVCpu);
     return iemRegFinishNoFlags(pVCpu, rcNormal);
 }
 
@@ -756,15 +813,14 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcIncA32AndFinishingNoFlags(PVMCPUCC pVCpu
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
  *                              taking the wrong conditional branhc.
  */
-DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcIncT32AndFinishingNoFlags(PVMCPUCC pVCpu, bool f32Bit, int rcNormal) RT_NOEXCEPT
+DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcT32IncAndFinishingNoFlags(PVMCPUCC pVCpu, bool f32Bit, int rcNormal) RT_NOEXCEPT
 {
-    iemRegPcIncT32(pVCpu, f32Bit);
+    iemRegPcT32Inc(pVCpu, f32Bit);
     return iemRegFinishNoFlags(pVCpu, rcNormal);
 }
 
 
 #if 0 /** @todo go over this later */
-
 
 /**
  * Adds a 8-bit signed jump offset to RIP from 64-bit code.
@@ -1326,9 +1382,31 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegEip32RelativeJumpS16FlatAndFinishNoFlags(P
     return iemRegFinishNoFlags(pVCpu, rcNormal);
 }
 
+#endif
+
 
 /**
- * Adds a 32-bit signed jump offset to RIP from 64-bit code.
+ * Adds a 32-bit signed jump offset to PC from 64-bit code.
+ *
+ * @returns Strict VBox status code.
+ * @param   pVCpu               The cross context virtual CPU structure of the calling thread.
+ * @param   offNextInstr        The offset of the next instruction.
+ * @param   rcNormal            VINF_SUCCESS to continue TB.
+ *                              VINF_IEM_REEXEC_BREAK to force TB exit when
+ *                              taking the wrong conditional branhc.
+ */
+DECL_FORCE_INLINE(VBOXSTRICTRC)
+iemRegPcA64RelativeJumpS32AndFinishClearingFlags(PVMCPUCC pVCpu, int32_t offNextInstr, int rcNormal = VINF_SUCCESS) RT_NOEXCEPT
+{
+    /** @todo set branch type. */
+    iemRegPcA64Add(pVCpu, offNextInstr);
+    return iemRegFinishClearingFlags(pVCpu, rcNormal);
+}
+
+
+#if 0 /** @todo go over this later */
+/**
+ * Adds a 32-bit signed jump offset to PC from 64-bit code.
  *
  * May raise a \#GP(0) if the new RIP is non-canonical or outside the code
  * segment limit.
@@ -2574,6 +2652,22 @@ iemRegRipNearReturnAndFinishNoFlags(PVMCPUCC pVCpu, uint8_t cbInstr, uint16_t cb
 }
 
 #endif /* go over this later */
+
+
+#if 1
+/* Mappings for A64 execution: */
+# define iemRegPcIncAndFinishClearingFlags                  iemRegPcA64IncAndFinishingClearingFlags
+# define iemRegPcRelativeJumpS32AndFinishClearingFlags      iemRegPcA64RelativeJumpS32AndFinishClearingFlags
+
+#elif 0
+/* Mappings for A32 execution: */
+# define iemRegPcIncAndFinishClearingFlags                  iemRegPcA32IncAndFinishingClearingFlags
+
+#elif 0
+/* Mappings for T32 execution: */
+# define iemRegPcIncAndFinishClearingFlags                  iemRegPcT32IncAndFinishingClearingFlags
+
+#endif
 
 /** @}  */
 
