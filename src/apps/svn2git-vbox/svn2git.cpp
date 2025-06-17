@@ -1787,21 +1787,27 @@ static RTEXITCODE s2gSvnExportSinglePath(PS2GCTX pThis, PS2GSVNREV pRev, const c
                 RTStrCopy(szSvnPath, sizeof(szSvnPath), pszSvnPath);
                 RTPathStripFilename(szSvnPath);
 
-                bool fWasEmpty = false;
-                bool fWasExisting = false;
-                rcExit = s2gSvnPathWasEmptyDir(pThis, pRev->idRev - 1, szSvnPath, &fWasExisting, &fWasEmpty);
+                bool fHasGitIgnore = false;
+                rcExit = s2gSvnHasGitIgnore(pRev, szSvnPath, &fHasGitIgnore);
                 if (   rcExit == RTEXITCODE_SUCCESS
-                    && fWasExisting
-                    && fWasEmpty)
+                    && !fHasGitIgnore)
                 {
-                    char szGitPath[RTPATH_MAX];
-                    RTStrCopy(szGitPath, sizeof(szGitPath), pszGitPath);
-                    RTPathStripFilename(szGitPath);
-                    RTStrCat(szGitPath, sizeof(szGitPath), "/.gitignore");
+                    bool fWasEmpty = false;
+                    bool fWasExisting = false;
+                    rcExit = s2gSvnPathWasEmptyDir(pThis, pRev->idRev - 1, szSvnPath, &fWasExisting, &fWasEmpty);
+                    if (   rcExit == RTEXITCODE_SUCCESS
+                        && fWasExisting
+                        && fWasEmpty)
+                    {
+                        char szGitPath[RTPATH_MAX];
+                        RTStrCopy(szGitPath, sizeof(szGitPath), pszGitPath);
+                        RTPathStripFilename(szGitPath);
+                        RTStrCat(szGitPath, sizeof(szGitPath), "/.gitignore");
 
-                    int rc = s2gGitTransactionFileRemove(pThis->hGitRepo, szGitPath);
-                    if (RT_FAILURE(rc))
-                        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to remove '%s' from git repository", szGitPath);
+                        int rc = s2gGitTransactionFileRemove(pThis->hGitRepo, szGitPath);
+                        if (RT_FAILURE(rc))
+                            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to remove '%s' from git repository", szGitPath);
+                    }
                 }
             }
         }
