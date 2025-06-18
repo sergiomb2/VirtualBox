@@ -133,6 +133,9 @@ VBOX_HDRS_OMIT := \
 	$(if-expr "$(KBUILD_TARGET)" != "win", \
 		VBox/com/microatl.h \
 		VBox/GuestHost/SharedClipboard-win.h \
+		VBox/GuestHost/VBoxWinDrvDefs.h \
+		VBox/GuestHost/VBoxWinDrvInst.h \
+		VBox/GuestHost/VBoxWinDrvStore.h \
 		VBox/usblib-win.h \
 		VBox/VBoxDrvCfg-win.h \
 		VBox/VBoxNetCfg-win.h \
