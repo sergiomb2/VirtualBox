@@ -81,6 +81,7 @@ static RTEXITCODE vboxDrvInstShowUsage(PRTSTREAM pStrm, VBOXDRVINSTCMD const *pO
 *   Global Variables                                                                                                             *
 *********************************************************************************************************************************/
 /** Verbosity level. */
+static bool      g_fDryrun = false;
 static unsigned  g_uVerbosity = 0;
 static PRTLOGGER g_pLoggerRelease = NULL;
 static char      g_szLogFile[RTPATH_MAX];
@@ -299,6 +300,7 @@ static const VBOXDRVINSTCMD * const g_apCommands[] =
 static const RTGETOPTDEF g_aCmdCommonOptions[] =
 {
     { "--logfile",     'l', RTGETOPT_REQ_STRING },
+    { "--dryrun",      'd', RTGETOPT_REQ_NOTHING },
     { "--help",        'h', RTGETOPT_REQ_NOTHING },
     { "--verbose",     'v', RTGETOPT_REQ_NOTHING },
     { "--version",     'V', RTGETOPT_REQ_NOTHING }
@@ -596,6 +598,9 @@ static DECLCALLBACK(RTEXITCODE) vboxDrvInstCmdInstallMain(PRTGETOPTSTATE pGetSta
         if (uOsVer)
             VBoxWinDrvInstSetOsVersion(hWinDrvInst, uOsVer);
 
+        if (g_fDryrun)
+            fInstall |= VBOX_WIN_DRIVERINSTALL_F_DRYRUN;
+
         rc = VBoxWinDrvInstInstallEx(hWinDrvInst, pszInfFile, pszModel, pszPnpId, fInstall);
         if (RT_SUCCESS(rc))
         {
@@ -800,6 +805,9 @@ static DECLCALLBACK(RTEXITCODE) vboxDrvInstCmdUninstallMain(PRTGETOPTSTATE pGetS
     rc = VBoxWinDrvInstCreateEx(&hWinDrvInst, g_uVerbosity, &vboxDrvInstLogCallback, NULL /* pvUser */);
     if (RT_SUCCESS(rc))
     {
+        if (g_fDryrun)
+            fInstall |= VBOX_WIN_DRIVERINSTALL_F_DRYRUN;
+
         if (fVBoxHost)
             rc = vboxDrvInstCmdUninstallVBoxHost(hWinDrvInst, fInstall);
         else
@@ -1111,15 +1119,19 @@ static RTEXITCODE vboxDrvInstShowCommands(PRTSTREAM pStrm)
  *
  * @returns RTEXITCODE
  * @param   pStrm               Stream to use.
+ * @param   pOnlyCmd            If not NULL, only show help for that (sub) command.
  */
 static RTEXITCODE vboxDrvInstShowUsage(PRTSTREAM pStrm, PCVBOXDRVINSTCMD pOnlyCmd)
 {
     const char *pszProcName = RTProcShortName();
 
+    /* Always show general usage + global options. */
     RTStrmPrintf(pStrm, "usage: %s [global options] <command> [command-options]\n", pszProcName);
     RTStrmPrintf(pStrm,
                  "\n"
                  "Global Options:\n"
+                 "  -d, --dryrun\n"
+                 "    Enables dryrun mode\n"
                  "  -h, -?, --help\n"
                  "    Displays help\n"
                  "  -l | --logfile <file>\n"
@@ -1168,7 +1180,7 @@ static RTEXITCODE vboxDrvInstShowUsage(PRTSTREAM pStrm, PCVBOXDRVINSTCMD pOnlyCm
     RTStrmPrintf(pStrm, "\t%s uninstall host\n", pszProcName);
     RTStrmPrintf(pStrm, "\t%s uninstall --inf -file C:\\Path\\To\\VBoxUSB.inf --pnp-id \"USB\\VID_80EE&PID_CAFE\"\n", pszProcName);
     RTStrmPrintf(pStrm, "\t%s uninstall --model \"VBoxUSB.AMD64\"\n", pszProcName);
-    RTStrmPrintf(pStrm, "\t%s uninstall --model \"VBoxUSB*\"\n", pszProcName);
+    RTStrmPrintf(pStrm, "\t%s --dryrun uninstall --model \"VBoxUSB*\"\n", pszProcName);
     RTStrmPrintf(pStrm, "\t%s service   VBoxSDS stop\n", pszProcName);
     RTStrmPrintf(pStrm, "\t%s service   VBoxSDS start --no-wait\n", pszProcName);
     RTStrmPrintf(pStrm, "\t%s service   VBoxSDS restart --wait 180\n", pszProcName);
@@ -1375,6 +1387,10 @@ int main(int argc, char **argv)
     {
         switch (ch)
         {
+            case 'd':
+                g_fDryrun = true;
+                break;
+
             case 'h':
                 return vboxDrvInstShowUsage(g_pStdOut, NULL);
 
