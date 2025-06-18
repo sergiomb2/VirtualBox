@@ -1683,7 +1683,7 @@ UINT __stdcall ServiceControl(MSIHANDLE hModule)
                                     &vboxWinDrvInstLogCallback, &hModule /* pvUser */);
         if (RT_SUCCESS(rc))
         {
-            rc = VBoxWinDrvInstControlServiceEx(hWinDrvInst, pszSvcCtlName, enmFn,
+            rc = VBoxWinDrvInstServiceControlEx(hWinDrvInst, pszSvcCtlName, enmFn,
                                                 msTimeout == 0 ? VBOXWINDRVSVCFN_F_NONE : VBOXWINDRVSVCFN_F_WAIT,
                                                 msTimeout);
             VBoxWinDrvInstDestroy(hWinDrvInst);
@@ -2705,13 +2705,13 @@ UINT __stdcall UninstallVBoxDrv(MSIHANDLE hModule)
         /*
          * Try stop it before we delete it.
          */
-        /* ignore rc */ VBoxWinDrvInstControlServiceEx(hWinDrvInst, "VBoxDrv",
+        /* ignore rc */ VBoxWinDrvInstServiceControlEx(hWinDrvInst, "VBoxDrv",
                                                        VBOXWINDRVSVCFN_STOP, VBOXWINDRVSVCFN_F_WAIT, RT_MS_10SEC);
 
         /*
          * Delete the service, or at least mark it for deletion.
          */
-        /* ignore rc */ VBoxWinDrvInstControlService(hWinDrvInst, "VBoxDrv", VBOXWINDRVSVCFN_DELETE);
+        /* ignore rc */ VBoxWinDrvInstServiceControl(hWinDrvInst, "VBoxDrv", VBOXWINDRVSVCFN_DELETE);
 
         VBoxWinDrvInstDestroy(hWinDrvInst);
     }
