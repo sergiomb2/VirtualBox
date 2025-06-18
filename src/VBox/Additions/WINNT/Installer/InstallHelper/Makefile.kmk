@@ -44,8 +44,9 @@ ifdef VBOX_WITH_WDDM
 endif
 if1of ($(KBUILD_TARGET_ARCH), x86)
  VBoxGuestInstallHelper_DEFS   += _WIN32_WINNT=0x0400
-else if1of ($(KBUILD_TARGET_ARCH), amd64)
- VBoxGuestInstallHelper_DEFS   += _WIN32_WINNT=0x0501
+else
+ # As we target NT4 for x86 as the lowest OS version we support, skip using stuff which uses the NT APIs.
+ VBoxGuestInstallHelper_DEFS   += VBOX_WINDRVINST_USE_NT_APIS
 endif
 VBoxGuestInstallHelper_DEPS     = $(VBOX_SVN_REV_KMK)
 VBoxGuestInstallHelper_SDKS     = ReorderCompilerIncs $(VBOX_WINPSDK_GST) $(VBOX_WINDDK_GST)

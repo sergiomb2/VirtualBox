@@ -29,7 +29,11 @@
 /*********************************************************************************************************************************
 *   Header Files                                                                                                                 *
 *********************************************************************************************************************************/
-#include <iprt/nt/nt-and-windows.h>
+#ifdef VBOX_WINDRVINST_USE_NT_APIS
+# include <iprt/nt/nt-and-windows.h>
+#else
+# include <iprt/win/windows.h>
+#endif
 #include <iprt/win/setupapi.h>
 #include <newdev.h> /* For INSTALLFLAG_XXX. */
 #include <cfgmgr32.h> /* For MAX_DEVICE_ID_LEN. */
@@ -111,9 +115,11 @@
 /*********************************************************************************************************************************
 *   Structures and Typedefs                                                                                                      *
 *********************************************************************************************************************************/
-/* ntdll.dll: */
+#ifdef VBOX_WINDRVINST_USE_NT_APIS
+/* ntdll.dll: Only for > NT4. */
 typedef NTSTATUS(WINAPI* PFNNTOPENSYMBOLICLINKOBJECT) (PHANDLE LinkHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes);
 typedef NTSTATUS(WINAPI* PFNNTQUERYSYMBOLICLINKOBJECT) (HANDLE LinkHandle, PUNICODE_STRING LinkTarget, PULONG ReturnedLength);
+#endif /* VBOX_WINDRVINST_USE_NT_APIS */
 /* newdev.dll: */
 typedef BOOL(WINAPI* PFNDIINSTALLDRIVERW) (HWND hwndParent, LPCWSTR InfPath, DWORD Flags, PBOOL NeedReboot);
 typedef BOOL(WINAPI* PFNDIUNINSTALLDRIVERW) (HWND hwndParent, LPCWSTR InfPath, DWORD Flags, PBOOL NeedReboot);
@@ -139,9 +145,11 @@ typedef int (*PFNVBOXWINDRVINST_TRYINFSECTION_CALLBACK)(HINF hInf, PCRTUTF16 pws
 /** Init once structure for run-as-user functions we need. */
 DECL_HIDDEN_DATA(RTONCE)                                 g_vboxWinDrvInstResolveOnce              = RTONCE_INITIALIZER;
 
+#ifdef VBOX_WINDRVINST_USE_NT_APIS
 /* ntdll.dll: */
 DECL_HIDDEN_DATA(PFNNTOPENSYMBOLICLINKOBJECT)            g_pfnNtOpenSymbolicLinkObject = NULL;
 DECL_HIDDEN_DATA(PFNNTQUERYSYMBOLICLINKOBJECT)           g_pfnNtQuerySymbolicLinkObject = NULL;
+#endif
 /* newdev.dll: */
 DECL_HIDDEN_DATA(PFNDIINSTALLDRIVERW)                    g_pfnDiInstallDriverW                    = NULL; /* For Vista+ .*/
 DECL_HIDDEN_DATA(PFNDIUNINSTALLDRIVERW)                  g_pfnDiUninstallDriverW                  = NULL; /* Since Win 10 version 1703. */
@@ -211,12 +219,14 @@ static int vboxWinDrvParmsDetermine(PVBOXWINDRVINSTINTERNAL pCtx, PVBOXWINDRVINS
 *   Import tables                                                                                                                *
 *********************************************************************************************************************************/
 
+#ifdef VBOX_WINDRVINST_USE_NT_APIS
 /* ntdll.dll: */
 static VBOXWINDRVINSTIMPORTSYMBOL s_aNtDllImports[] =
 {
     { "NtOpenSymbolicLinkObject",  (void **)&g_pfnNtOpenSymbolicLinkObject },
     { "NtQuerySymbolicLinkObject", (void **)&g_pfnNtQuerySymbolicLinkObject }
 };
+#endif
 
 /* setupapi.dll: */
 static VBOXWINDRVINSTIMPORTSYMBOL s_aSetupApiImports[] =
@@ -544,8 +554,10 @@ static DECLCALLBACK(int) vboxWinDrvInstResolveOnce(void *pvUser)
     /*
      * Note: Any use of Difx[app|api].dll imports is forbidden (and also marked as being deprecated since Windows 10)!
      */
+#ifdef VBOX_WINDRVINST_USE_NT_APIS
     /* rc ignored, keep going */ vboxWinDrvInstResolveMod(pCtx, "ntdll.dll",
                                                           s_aNtDllImports, RT_ELEMENTS(s_aNtDllImports));
+#endif
     /* rc ignored, keep going */ vboxWinDrvInstResolveMod(pCtx, "setupapi.dll",
                                                           s_aSetupApiImports, RT_ELEMENTS(s_aSetupApiImports));
     /* rc ignored, keep going */ vboxWinDrvInstResolveMod(pCtx, "newdev.dll",
@@ -2354,6 +2366,7 @@ int VBoxWinDrvInstUninstallExecuteInf(VBOXWINDRVINST hDrvInst, const char *pszIn
     return VBoxWinDrvInstExecuteInfWorker(hDrvInst, false /* fInstall */, pszInfFile, pszSection, fFlags);
 }
 
+#ifdef VBOX_WINDRVINST_USE_NT_APIS
 /**
  * Queries the target in the NT namespace of the given symbolic link.
  *
@@ -2401,6 +2414,7 @@ int VBoxWinDrvInstQueryNtLinkTarget(PCRTUTF16 pwszLinkNt, PRTUTF16 *ppwszLinkTar
 
     return rc;
 }
+#endif /* VBOX_WINDRVINST_USE_NT_APIS */
 
 /**
  * Controls a Windows service, internal version.
