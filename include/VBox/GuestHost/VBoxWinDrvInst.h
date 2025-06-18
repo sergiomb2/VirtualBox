@@ -46,13 +46,15 @@
 RT_C_DECLS_BEGIN
 
 /** @defgroup grp_vboxwindrvinst    Windows driver / service (un)installation and management functions.
+ * @{
+ */
 
 /** Windows driver installer handle. */
 typedef R3PTRTYPE(struct VBOXWINDRVINSTINTERNAL *) VBOXWINDRVINST;
 /** Pointer to a Windows driver installer handle. */
 typedef VBOXWINDRVINST                            *PVBOXWINDRVINST;
 /** Nil Windows driver installer handle. */
-#define NIL_VBOXWINDRVINST                      ((VBOXWINDRVINST)0)
+#define NIL_VBOXWINDRVINST                         ((VBOXWINDRVINST)0)
 
 /**
  * Enumeration for the Windows driver installation logging type.
