@@ -53,10 +53,10 @@ if defined(SVN2GIT_WITH_LAZYLOAD)
   	$$(svn2git-vbox_0_OUTDIR)/$(1)LazyLoad.asm
   svn2git-vbox_CLEAN         += \
   	$$(svn2git-vbox_0_OUTDIR)/$(1)LazyLoad.asm
-  $$$$(svn2git-vbox_0_OUTDIR)/$(1)LazyLoad.asm: $$(PATH_SUB_CURRENT)/$(1).def $(VBOX_DEF_2_LAZY_LOAD) | $$$$(dir $$@)
+  $$$$(svn2git-vbox_0_OUTDIR)/$(1)LazyLoad.asm: $$(PATH_SUB_CURRENT)/$(1).def $$(VBOX_DEF_2_LAZY_LOAD) | $$$$(dir $$@)
 	$$(call MSG_TOOL,VBoxDef2LazyLoad,$$(PATH_SUB_CURRENT)/$(1).def,$$@)
 	$$(QUIET)$$(RM) -f -- "$$@"
-	$$(VBOX_DEF_2_LAZY_LOAD) --system --library $(1)$$(SUFF_DLL) --output "$$@" $$(PATH_SUB_CURRENT)/$(1).def
+	$$(VBOX_DEF_2_LAZY_LOAD) --system --library $(1)$$(SUFF_DLL) --output "$$@" $$(filter %.def, $$^)
  endef
 
  $(evalcall2 def_svnLibToLazyLoad,libsvn_repos-1)

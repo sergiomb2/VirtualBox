@@ -2794,10 +2794,7 @@ static RTEXITCODE s2gSvnVerifyRecursiveWorker(PS2GCTX pThis, PS2GSVNREV pRev, co
 
             /* Paths containing .git are invalid as git thinks these are other repositories. */
             if (!RTStrCmp(pIt->pszName, ".git"))
-            {
-                RTMsgWarning("Skipping invalid path '%s/%s'\n", pszSvnPath, pIt->pszName);
                 continue;
-            }
 
             /* Try to find the matching entry in the git path. */
             PS2GDIRENTRY pGit = s2gFindGitEntry(&LstGitEntries, pIt->pszName);
