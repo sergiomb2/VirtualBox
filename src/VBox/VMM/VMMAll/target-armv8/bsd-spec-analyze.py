@@ -1455,6 +1455,15 @@ class ArmInstruction(ArmInstructionBase):
     def __repr__(self):
         return self.toString();
 
+    def getNamedNonFixedFieldsSortedByPosition(self):
+        """
+        Gets aoFields filtered by sName and fFixed != getMask(), sorted by iFirstBit.
+
+        Note! This is used for generating argument lists.
+        """
+        return sorted([oField for oField in self.aoFields if oField.sName and oField.fFixed != oField.getMask()],
+                      key = operator.attrgetter('iFirstBit'));
+
     def getCName(self):
         # Get rid of trailing underscore as it seems pointless.
         if self.sName[-1] != '_' or self.sName[:-1] in g_dAllArmInstructionsByName:
@@ -3386,9 +3395,7 @@ class IEMArmGenerator(object):
                 sPrevCategory = sCategory;
 
             # Emit the instruction stub.
-            asArgs  = [ # Note! Must match generateDecoderFunctions exactly.
-                oField.sName for oField in sorted(oInstr.aoFields, key = operator.attrgetter('iFirstBit')) if oField.sName
-            ];
+            asArgs  = [ oField.sName for oField in oInstr.getNamedNonFixedFieldsSortedByPosition() ];
             asLines += [
                 '',
                 '/* %s (%08x/%08x) */' % (oInstr.sAsmDisplay, oInstr.fFixedMask, oInstr.fFixedValue,),
@@ -3478,15 +3485,15 @@ class IEMArmGenerator(object):
             # Decode the fields and prepare for passing them as arguments.
             asArgs  = [];
             sLogFmt = '';
-            for oField in sorted(oInstr.aoFields, key = operator.attrgetter('iFirstBit')): # ArmEncodesetField
-                if oField.sName:
-                    asArgs.append(oField.sName);
-                    if oField.cBitsWidth < 4:
-                        sLogFmt += ' %s=%%u' % (oField.sName,)
-                    else:
-                        sLogFmt += ' %s=%%#x' % (oField.sName,)
-                    asLines.append('%s    uint32_t const %-10s = (uOpcode >> %2u) & %#010x;'
-                                   % (sIndent, oField.sName, oField.iFirstBit, (1 << oField.cBitsWidth) - 1,));
+            for oField in oInstr.getNamedNonFixedFieldsSortedByPosition(): # ArmEncodesetField
+                assert oField.sName and oField.fFixed != oField.getMask();
+                asArgs.append(oField.sName);
+                if oField.cBitsWidth < 4:
+                    sLogFmt += ' %s=%%u' % (oField.sName,)
+                else:
+                    sLogFmt += ' %s=%%#x' % (oField.sName,)
+                asLines.append('%s    uint32_t const %-10s = (uOpcode >> %2u) & %#010x;'
+                               % (sIndent, oField.sName, oField.iFirstBit, (1 << oField.cBitsWidth) - 1,));
 
             # Any additional conditions for the instructions.
             if not oInstr.oCondition.isBoolAndTrue():
@@ -4072,8 +4079,8 @@ class IEMArmGenerator(object):
         # Parse arguments.
         #
         class MyArgParser(argparse.ArgumentParser):
-            def convert_arg_line_to_args(self, sLine):
-                return sLine.split();
+            def convert_arg_line_to_args(self, arg_line):
+                return arg_line.split();
 
         oArgParser = MyArgParser(fromfile_prefix_chars = '@',
                                  formatter_class = argparse.RawDescriptionHelpFormatter,
