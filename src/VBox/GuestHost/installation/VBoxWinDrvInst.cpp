@@ -2741,7 +2741,7 @@ static int vboxWinDrvInstServiceQueryExInternal(SC_HANDLE hSCM, const char *pszS
         dwLastErr = GetLastError();
         if (dwLastErr == ERROR_INSUFFICIENT_BUFFER)
         {
-            pSvcInfo->pConfig = (LPQUERY_SERVICE_CONFIG)RTMemAlloc(dwBytesNeeded);
+            pSvcInfo->pConfig = (LPQUERY_SERVICE_CONFIGW)RTMemAlloc(dwBytesNeeded);
             if (pSvcInfo->pConfig)
             {
                 if (QueryServiceConfigW(hSvc, pSvcInfo->pConfig, dwBytesNeeded, &dwBytesNeeded))
