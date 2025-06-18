@@ -2737,14 +2737,14 @@ static int vboxWinDrvInstServiceQueryExInternal(SC_HANDLE hSCM, const char *pszS
 
     if (RT_SUCCESS(rc))
     {
-        QueryServiceConfig(hSvc, pSvcInfo->pConfig, 0, &dwBytesNeeded);
+        QueryServiceConfigW(hSvc, pSvcInfo->pConfig, 0, &dwBytesNeeded);
         dwLastErr = GetLastError();
         if (dwLastErr == ERROR_INSUFFICIENT_BUFFER)
         {
             pSvcInfo->pConfig = (LPQUERY_SERVICE_CONFIG)RTMemAlloc(dwBytesNeeded);
             if (pSvcInfo->pConfig)
             {
-                if (QueryServiceConfig(hSvc, pSvcInfo->pConfig, dwBytesNeeded, &dwBytesNeeded))
+                if (QueryServiceConfigW(hSvc, pSvcInfo->pConfig, dwBytesNeeded, &dwBytesNeeded))
                 {
 
                 }
@@ -3000,7 +3000,7 @@ int VBoxWinDrvInstFileQueryVersionEx(const char *pszPath, uint32_t *puMajor, uin
                     /* Fall back on VS_FIXEDFILEINFO */
                     UINT                 cbFileInfoIgnored = 0;
                     VS_FIXEDFILEINFO    *pFileInfo = NULL;
-                    if (VerQueryValue(pVerData, L"\\", (LPVOID *)&pFileInfo, &cbFileInfoIgnored))
+                    if (VerQueryValueW(pVerData, L"\\", (LPVOID *)&pFileInfo, &cbFileInfoIgnored))
                     {
                         *puMajor          = HIWORD(pFileInfo->dwFileVersionMS);
                         *puMinor          = LOWORD(pFileInfo->dwFileVersionMS);
