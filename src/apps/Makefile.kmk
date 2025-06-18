@@ -28,7 +28,10 @@
 SUB_DEPTH = ../..
 include $(KBUILD_PATH)/subheader.kmk
 
-include $(PATH_SUB_CURRENT)/svn2git-vbox/Makefile.kmk
+# Not on Windows for now.
+ifneq ($(KBUILD_TARGET),win)
+ include $(PATH_SUB_CURRENT)/svn2git-vbox/Makefile.kmk
+endif
 
 include $(FILE_KBUILD_SUB_FOOTER)
 
