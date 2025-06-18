@@ -29,7 +29,7 @@
 /*********************************************************************************************************************************
 *   Header Files                                                                                                                 *
 *********************************************************************************************************************************/
-#include <iprt/win/windows.h>
+#include <iprt/nt/nt-and-windows.h>
 #include <iprt/win/setupapi.h>
 #include <newdev.h> /* For INSTALLFLAG_XXX. */
 #include <cfgmgr32.h> /* For MAX_DEVICE_ID_LEN. */
@@ -42,6 +42,7 @@
 #include <iprt/buildconfig.h>
 #include <iprt/cdefs.h>
 #include <iprt/dir.h>
+#include <iprt/env.h>
 #include <iprt/ldr.h>
 #include <iprt/list.h>
 #include <iprt/mem.h>
@@ -110,6 +111,9 @@
 /*********************************************************************************************************************************
 *   Structures and Typedefs                                                                                                      *
 *********************************************************************************************************************************/
+/* ntdll.dll: */
+typedef NTSTATUS(WINAPI* PFNNTOPENSYMBOLICLINKOBJECT) (PHANDLE LinkHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes);
+typedef NTSTATUS(WINAPI* PFNNTQUERYSYMBOLICLINKOBJECT) (HANDLE LinkHandle, PUNICODE_STRING LinkTarget, PULONG ReturnedLength);
 /* newdev.dll: */
 typedef BOOL(WINAPI* PFNDIINSTALLDRIVERW) (HWND hwndParent, LPCWSTR InfPath, DWORD Flags, PBOOL NeedReboot);
 typedef BOOL(WINAPI* PFNDIUNINSTALLDRIVERW) (HWND hwndParent, LPCWSTR InfPath, DWORD Flags, PBOOL NeedReboot);
@@ -135,6 +139,9 @@ typedef int (*PFNVBOXWINDRVINST_TRYINFSECTION_CALLBACK)(HINF hInf, PCRTUTF16 pws
 /** Init once structure for run-as-user functions we need. */
 DECL_HIDDEN_DATA(RTONCE)                                 g_vboxWinDrvInstResolveOnce              = RTONCE_INITIALIZER;
 
+/* ntdll.dll: */
+DECL_HIDDEN_DATA(PFNNTOPENSYMBOLICLINKOBJECT)            g_pfnNtOpenSymbolicLinkObject = NULL;
+DECL_HIDDEN_DATA(PFNNTQUERYSYMBOLICLINKOBJECT)           g_pfnNtQuerySymbolicLinkObject = NULL;
 /* newdev.dll: */
 DECL_HIDDEN_DATA(PFNDIINSTALLDRIVERW)                    g_pfnDiInstallDriverW                    = NULL; /* For Vista+ .*/
 DECL_HIDDEN_DATA(PFNDIUNINSTALLDRIVERW)                  g_pfnDiUninstallDriverW                  = NULL; /* Since Win 10 version 1703. */
@@ -203,6 +210,13 @@ static int vboxWinDrvParmsDetermine(PVBOXWINDRVINSTINTERNAL pCtx, PVBOXWINDRVINS
 /*********************************************************************************************************************************
 *   Import tables                                                                                                                *
 *********************************************************************************************************************************/
+
+/* ntdll.dll: */
+static VBOXWINDRVINSTIMPORTSYMBOL s_aNtDllImports[] =
+{
+    { "NtOpenSymbolicLinkObject",  (void **)&g_pfnNtOpenSymbolicLinkObject },
+    { "NtQuerySymbolicLinkObject", (void **)&g_pfnNtQuerySymbolicLinkObject }
+};
 
 /* setupapi.dll: */
 static VBOXWINDRVINSTIMPORTSYMBOL s_aSetupApiImports[] =
@@ -530,7 +544,8 @@ static DECLCALLBACK(int) vboxWinDrvInstResolveOnce(void *pvUser)
     /*
      * Note: Any use of Difx[app|api].dll imports is forbidden (and also marked as being deprecated since Windows 10)!
      */
-
+    /* rc ignored, keep going */ vboxWinDrvInstResolveMod(pCtx, "ntdll.dll",
+                                                          s_aNtDllImports, RT_ELEMENTS(s_aNtDllImports));
     /* rc ignored, keep going */ vboxWinDrvInstResolveMod(pCtx, "setupapi.dll",
                                                           s_aSetupApiImports, RT_ELEMENTS(s_aSetupApiImports));
     /* rc ignored, keep going */ vboxWinDrvInstResolveMod(pCtx, "newdev.dll",
@@ -2340,6 +2355,54 @@ int VBoxWinDrvInstUninstallExecuteInf(VBOXWINDRVINST hDrvInst, const char *pszIn
 }
 
 /**
+ * Queries the target in the NT namespace of the given symbolic link.
+ *
+ * @returns VBox status code.
+ * @param   pwszLinkNt      The symbolic link to query the target for.
+ * @param   ppwszLinkTarget Where to store the link target in the NT namespace on success.
+ *                          Must be freed with RTUtf16Free().
+ */
+int VBoxWinDrvInstQueryNtLinkTarget(PCRTUTF16 pwszLinkNt, PRTUTF16 *ppwszLinkTarget)
+{
+    int                 rc    = VINF_SUCCESS;
+    HANDLE              hFile = RTNT_INVALID_HANDLE_VALUE;
+    IO_STATUS_BLOCK     Ios   = RTNT_IO_STATUS_BLOCK_INITIALIZER;
+    UNICODE_STRING      NtName;
+
+    NtName.Buffer        = (PWSTR)pwszLinkNt;
+    NtName.Length        = (USHORT)(RTUtf16Len(pwszLinkNt) * sizeof(RTUTF16));
+    NtName.MaximumLength = NtName.Length + sizeof(RTUTF16);
+
+    OBJECT_ATTRIBUTES ObjAttr;
+    InitializeObjectAttributes(&ObjAttr, &NtName, OBJ_CASE_INSENSITIVE, NULL /*hRootDir*/, NULL /*pSecDesc*/);
+
+    NTSTATUS rcNt = g_pfnNtOpenSymbolicLinkObject(&hFile, SYMBOLIC_LINK_QUERY, &ObjAttr);
+    if (NT_SUCCESS(rcNt))
+    {
+        UNICODE_STRING UniStr;
+        RTUTF16 awszBuf[1024];
+        RT_ZERO(awszBuf);
+        UniStr.Buffer = awszBuf;
+        UniStr.MaximumLength = sizeof(awszBuf);
+        rcNt = g_pfnNtQuerySymbolicLinkObject(hFile, &UniStr, NULL);
+        if (NT_SUCCESS(rcNt))
+        {
+            *ppwszLinkTarget = RTUtf16Dup((PRTUTF16)UniStr.Buffer);
+            if (!*ppwszLinkTarget)
+                rc = VERR_NO_STR_MEMORY;
+        }
+        else
+            rc = RTErrConvertFromNtStatus(rcNt);
+
+        CloseHandle(hFile);
+    }
+    else
+        rc = RTErrConvertFromNtStatus(rcNt);
+
+    return rc;
+}
+
+/**
  * Controls a Windows service, internal version.
  *
  * @returns VBox status code.
@@ -2352,7 +2415,7 @@ int VBoxWinDrvInstUninstallExecuteInf(VBOXWINDRVINST hDrvInst, const char *pszIn
  * @param   fFlags              Service control flags (of type VBOXWINDRVSVCFN_F_XXX) to use.
  * @param   msTimeout           Timeout (in ms) to use. Ignored if VBOXWINDRVSVCFN_F_WAIT is missing in \a fFlags.
  */
-static int vboxWinDrvInstControlServiceEx(PVBOXWINDRVINSTINTERNAL pCtx,
+static int vboxWinDrvInstServiceControlEx(PVBOXWINDRVINSTINTERNAL pCtx,
                                           const char *pszService, VBOXWINDRVSVCFN enmFn, uint32_t fFlags, RTMSINTERVAL msTimeout)
 {
     AssertPtrReturn(pszService, VERR_INVALID_POINTER);
@@ -2554,14 +2617,14 @@ static int vboxWinDrvInstControlServiceEx(PVBOXWINDRVINSTINTERNAL pCtx,
  * @param   fFlags              Service control flags (of type VBOXWINDRVSVCFN_F_XXX) to use.
  * @param   msTimeout           Timeout (in ms) to use. Only being used if VBOXWINDRVSVCFN_F_WAIT is specified in \a fFlags.
  */
-int VBoxWinDrvInstControlServiceEx(VBOXWINDRVINST hDrvInst,
-                                    const char *pszService, VBOXWINDRVSVCFN enmFn, uint32_t fFlags, RTMSINTERVAL msTimeout)
+int VBoxWinDrvInstServiceControlEx(VBOXWINDRVINST hDrvInst,
+                                   const char *pszService, VBOXWINDRVSVCFN enmFn, uint32_t fFlags, RTMSINTERVAL msTimeout)
 {
     PVBOXWINDRVINSTINTERNAL pCtx = hDrvInst;
     VBOXWINDRVINST_VALID_RETURN(pCtx);
 
 #define CONTROL_SERVICE(a_Fn) \
-    vboxWinDrvInstControlServiceEx(pCtx, pszService, a_Fn, fFlags, msTimeout);
+    vboxWinDrvInstServiceControlEx(pCtx, pszService, a_Fn, fFlags, msTimeout);
 
     int rc;
     if (enmFn == VBOXWINDRVSVCFN_RESTART)
@@ -2588,12 +2651,440 @@ int VBoxWinDrvInstControlServiceEx(VBOXWINDRVINST hDrvInst,
  * @note    Function waits 30s for the service to reach the desired control function.
  *          Use VBooxWinDrvInstControlServiceEx() for more flexibility.
  */
-int VBoxWinDrvInstControlService(VBOXWINDRVINST hDrvInst, const char *pszService, VBOXWINDRVSVCFN enmFn)
+int VBoxWinDrvInstServiceControl(VBOXWINDRVINST hDrvInst, const char *pszService, VBOXWINDRVSVCFN enmFn)
 {
     PVBOXWINDRVINSTINTERNAL pCtx = hDrvInst;
     VBOXWINDRVINST_VALID_RETURN(pCtx);
 
-    return VBoxWinDrvInstControlServiceEx(pCtx, pszService, enmFn, VBOXWINDRVSVCFN_F_WAIT, RT_MS_30SEC);
+    return VBoxWinDrvInstServiceControlEx(pCtx, pszService, enmFn, VBOXWINDRVSVCFN_F_WAIT, RT_MS_30SEC);
+}
+
+/**
+ * Destroys a service information structure, internal version.
+ *
+ * @param   pSvcInfo                 Service information structure to destroy.
+ */
+static void vboxWinDrvInstServiceInfoDestroy(PVBOXWINDRVSVCINFO pSvcInfo)
+{
+    if (pSvcInfo->pStatus)
+    {
+        RTMemFree(pSvcInfo->pStatus);
+        pSvcInfo->pStatus = NULL;
+    }
+
+    if (pSvcInfo->pConfig)
+    {
+        RTMemFree(pSvcInfo->pConfig);
+        pSvcInfo->pConfig = NULL;
+    }
+}
+
+/**
+ * Destroys a service information structure.
+ *
+ * @param   pSvcInfo                 Service information structure to destroy.
+ */
+void VBoxWinDrvInstServiceInfoDestroy(PVBOXWINDRVSVCINFO pSvcInfo)
+{
+    vboxWinDrvInstServiceInfoDestroy(pSvcInfo);
+}
+
+/**
+ * Queries information about a system service (or driver).
+ *
+ * @returns VBox status code.
+ * @param   hSCM                SCM handle to use.
+ * @param   pszService          Service (or driver) name to query information for.
+ * @param   pSvcInfo            Where to store the queried information on success.
+ *                              Must be destroyed with VBoxWinDrvInstServiceInfoDestroy().
+ */
+static int vboxWinDrvInstServiceQueryExInternal(SC_HANDLE hSCM, const char *pszService, PVBOXWINDRVSVCINFO pSvcInfo)
+{
+    PRTUTF16 pwszService = NULL;
+    int rc = RTStrToUtf16(pszService, &pwszService);
+    AssertRCReturn(rc, rc);
+
+    SC_HANDLE const hSvc = OpenServiceW(hSCM, pwszService, SERVICE_QUERY_CONFIG | SERVICE_QUERY_STATUS);
+
+    RTUtf16Free(pwszService);
+    pwszService = NULL;
+
+    if (hSvc == NULL)
+        return RTErrConvertFromWin32(GetLastError());
+
+    RT_BZERO(pSvcInfo, sizeof(VBOXWINDRVSVCINFO));
+
+    DWORD dwBytesNeeded;
+    QueryServiceStatusEx(hSvc, SC_STATUS_PROCESS_INFO, NULL, 0, &dwBytesNeeded);
+    DWORD dwLastErr = GetLastError();
+    if (dwLastErr == ERROR_INSUFFICIENT_BUFFER)
+    {
+        pSvcInfo->pStatus = (LPSERVICE_STATUS_PROCESS)RTMemAlloc(dwBytesNeeded);
+        if (pSvcInfo->pStatus)
+        {
+            if (QueryServiceStatusEx(hSvc, SC_STATUS_PROCESS_INFO, (LPBYTE)pSvcInfo->pStatus, dwBytesNeeded, &dwBytesNeeded))
+            {
+
+            }
+            else
+                rc = RTErrConvertFromWin32(dwLastErr);
+        }
+        else
+            rc = VERR_NO_MEMORY;
+    }
+    else
+        rc = RTErrConvertFromWin32(dwLastErr);
+
+    if (RT_SUCCESS(rc))
+    {
+        QueryServiceConfig(hSvc, pSvcInfo->pConfig, 0, &dwBytesNeeded);
+        dwLastErr = GetLastError();
+        if (dwLastErr == ERROR_INSUFFICIENT_BUFFER)
+        {
+            pSvcInfo->pConfig = (LPQUERY_SERVICE_CONFIG)RTMemAlloc(dwBytesNeeded);
+            if (pSvcInfo->pConfig)
+            {
+                if (QueryServiceConfig(hSvc, pSvcInfo->pConfig, dwBytesNeeded, &dwBytesNeeded))
+                {
+
+                }
+                else
+                    rc = RTErrConvertFromWin32(dwLastErr);
+            }
+            else
+                rc = VERR_NO_MEMORY;
+        }
+        else
+           rc = RTErrConvertFromWin32(dwLastErr);
+    }
+
+    int rc2 = VBoxWinDrvInstFileQueryVersionUtf16(pSvcInfo->pConfig->lpBinaryPathName, pSvcInfo->szVer, sizeof(pSvcInfo->szVer));
+    if (RT_SUCCESS(rc))
+        rc = rc2;
+
+    if (RT_FAILURE(rc))
+        vboxWinDrvInstServiceInfoDestroy(pSvcInfo);
+
+    CloseServiceHandle(hSvc);
+    return rc;
+}
+
+/**
+ * Queries information about a system service (or driver).
+ *
+ * @returns VBox status code.
+ * @param   pszService          Service (or driver) name to query information for.
+ * @param   pSvcInfo            Where to store the queried information on success.
+ *                              Must be destroyed with VBoxWinDrvInstServiceInfoDestroy().
+ */
+int VBoxWinDrvInstServiceQuery(const char *pszService, PVBOXWINDRVSVCINFO pSvcInfo)
+{
+    int rc;
+
+    SC_HANDLE const hSCM = OpenSCManager(NULL, NULL, SC_MANAGER_ENUMERATE_SERVICE);
+    if (hSCM != NULL)
+    {
+        rc = vboxWinDrvInstServiceQueryExInternal(hSCM, pszService, pSvcInfo);
+        CloseServiceHandle(hSCM);
+    }
+    else
+        rc = RTErrConvertFromWin32(GetLastError());
+
+    return rc;
+}
+
+/**
+ * Replaces all occurrences of a given pattern set within a string.
+ *
+ * @returns VBox status code.
+ * @param   pszInput            Input string to replace patterns in.
+ * @param   paPatterns          Array of patterns to process.
+ * @param   cPatterns           Number of patterns in \a paPatterns.
+ * @param   ppszOutput          Where to return the ouptut string on success.
+ *                              Must be free'd with RTStrFree().
+ */
+int VBoxWinDrvPatternReplace(const char *pszInput, const PVBOXWINDRVSTRPATTERN paPatterns, size_t cPatterns, char **ppszOutput)
+{
+    size_t cchSrc = strlen(pszInput);
+    size_t cchDst = cchSrc + 1;
+
+    for (size_t i = 0; i < cPatterns; i++)
+    {
+        size_t const cchPattern = strlen(paPatterns[i].psz);
+        AssertReturn(cchPattern, VERR_INVALID_PARAMETER);
+
+        size_t cFound = 0;
+        const char *psz = pszInput;
+        while ((psz = strstr(psz, paPatterns[i].psz)) != NULL)
+        {
+            cFound++;
+            psz += cchPattern;
+        }
+
+        if (cFound)
+        {
+            paPatterns[i].rep = paPatterns[i].pfn(paPatterns[i].psz, paPatterns[i].pvUser);
+            size_t cchDiff = strlen(paPatterns[i].rep) > strlen(paPatterns[i].psz)
+                           ? strlen(paPatterns[i].rep) - strlen(paPatterns[i].psz) : 0;
+            cchDst += cFound * cchDiff;
+        }
+    }
+
+    int rc;
+
+    char *pszOutput = (char *)RTStrAlloc(cchDst);
+    if (pszOutput)
+    {
+        size_t idxDst = 0;
+        size_t idxSrc = 0;
+        while (idxSrc < cchSrc)
+        {
+            size_t cReplaced = 0;
+            for (size_t p = 0; p < cPatterns; p++)
+            {
+                size_t const cchPattern = strlen(paPatterns[p].psz);
+                if (   cchPattern
+                    && strncmp(&pszInput[idxSrc], paPatterns[p].psz, cchPattern) == 0)
+                {
+                    size_t const cchRep = strlen(paPatterns[p].rep);
+                    memcpy(pszOutput + idxDst, paPatterns[p].rep, cchRep);
+                    idxDst += cchRep;
+                    idxSrc += cchPattern;
+                    cReplaced = 1;
+                    break;
+                }
+            }
+            if (!cReplaced)
+                pszOutput[idxDst++] = pszInput[idxSrc++];
+        }
+
+        pszOutput[idxDst] = '\0';
+        rc = VINF_SUCCESS;
+    }
+    else
+        rc = VERR_NO_STR_MEMORY;
+
+    for (size_t i = 0; i < cPatterns; i++)
+    {
+        RTStrFree(paPatterns[i].rep);
+        paPatterns[i].rep = NULL;
+    }
+
+    *ppszOutput = pszOutput;
+    return rc;
+}
+
+/**
+ * Callback function for resolving patterns to environment variables.
+ *
+ * @sa FNVBOXWINDRVSTRPATTERN
+ */
+DECLCALLBACK(char *) vboxWinDrvInstPatternToEnvCallback(const char *pszPattern, void *pvUser)
+{
+    RT_NOREF(pszPattern, pvUser);
+
+    char szVal[RTPATH_MAX];
+    int rc = RTEnvGetEx(RTENV_DEFAULT, "SystemRoot", szVal, sizeof(szVal), NULL);
+    if (RT_SUCCESS(rc))
+        return RTStrDup(szVal);
+
+    return NULL;
+}
+
+/**
+ * Resolves a registry path.
+ *
+ * @returns VBox status code.
+ * @param   pszPath             Path to resolve.
+ * @param   ppszResolved        Where to return the resolved path on success.
+ *                              Must be free'd using RTStrFree().
+ */
+int vboxWinDrvInstRegResolveRegPath(const char *pszPath, char **ppszResolved)
+{
+    static VBOXWINDRVSTRPATTERN s_aPatterns[] =
+    {
+        { "\\SystemRoot", vboxWinDrvInstPatternToEnvCallback, NULL, NULL },
+        { "\\??\\", vboxWinDrvInstPatternToEnvCallback, NULL, NULL }
+    };
+
+    return VBoxWinDrvPatternReplace(pszPath, s_aPatterns, RT_ELEMENTS(s_aPatterns), ppszResolved);
+}
+
+/**
+ * Helper for vboxDrvInstFileQueryVersionEx and attempts to read and parse
+ * FileVersion.
+ *
+ * @returns Success indicator.
+ */
+static bool vboxWinDrvInstFileQueryVersionOwn(LPCTSTR pVerData, uint32_t *puMajor, uint32_t *puMinor,
+                                              uint32_t *puBuildNumber, uint32_t *puRevisionNumber)
+{
+    UINT    cchStrValue = 0;
+    LPTSTR  pStrValue   = NULL;
+    if (!VerQueryValueA(pVerData, "\\StringFileInfo\\040904b0\\FileVersion", (LPVOID *)&pStrValue, &cchStrValue))
+        return false;
+
+    char *pszNext = (char *)pStrValue;
+    int rc = RTStrToUInt32Ex(pszNext, &pszNext, 0, puMajor);
+    AssertReturn(rc == VWRN_TRAILING_CHARS, false);
+    AssertReturn(*pszNext == '.', false);
+
+    rc = RTStrToUInt32Ex(pszNext + 1, &pszNext, 0, puMinor);
+    AssertReturn(rc == VWRN_TRAILING_CHARS, false);
+    AssertReturn(*pszNext == '.', false);
+
+    rc = RTStrToUInt32Ex(pszNext + 1, &pszNext, 0, puBuildNumber);
+    AssertReturn(rc == VWRN_TRAILING_CHARS, false);
+    AssertReturn(*pszNext == '.', false);
+
+    rc = RTStrToUInt32Ex(pszNext + 1, &pszNext, 0, puRevisionNumber);
+    AssertReturn(rc == VINF_SUCCESS || rc == VWRN_TRAILING_CHARS /*??*/, false);
+
+    return true;
+}
+
+/**
+ * Worker for vboxDrvInstQueryFileVersion.
+ *
+ * @returns VBox status code.
+ * @param   pszPath             ASCII & ANSI & UTF-8 compliant name.
+ * @param   puMajor             Where to return the major version number.
+ * @param   puMinor             Where to return the minor version number.
+ * @param   puBuildNumber       Where to return the build number.
+ * @param   puRevisionNumber    Where to return the revision number.
+ *
+ * @note    Copied from vgsvcUtilGetFileVersion(). Merge this?
+ */
+int VBoxWinDrvInstFileQueryVersionEx(const char *pszPath, uint32_t *puMajor, uint32_t *puMinor, uint32_t *puBuildNumber,
+                                     uint32_t *puRevisionNumber)
+{
+    int rc;
+
+    *puMajor = *puMinor = *puBuildNumber = *puRevisionNumber = 0;
+
+    char *pszPathTmp = RTStrDup(pszPath);
+    AssertPtrReturn(pszPathTmp, VERR_NO_TMP_MEMORY);
+
+    /* Remove quotes (if any). */
+    char *pszSrc = pszPathTmp;
+    char *pszDst = pszPathTmp;
+    while (*pszSrc)
+    {
+        if (*pszSrc != '"')
+            *pszDst++ = *pszSrc;
+        pszSrc++;
+    }
+    *pszDst = L'\0';
+
+    /*
+     * Get the file version info.
+     */
+    DWORD dwHandleIgnored;
+    DWORD cbVerData = GetFileVersionInfoSizeA(pszPathTmp, &dwHandleIgnored);
+    if (cbVerData)
+    {
+        LPTSTR pVerData = (LPTSTR)RTMemTmpAllocZ(cbVerData);
+        if (pVerData)
+        {
+            if (GetFileVersionInfoA(pszPathTmp, dwHandleIgnored, cbVerData, pVerData))
+            {
+                /*
+                 * Try query and parse the FileVersion string our selves first
+                 * since this will give us the correct revision number when
+                 * it goes beyond the range of an uint16_t / WORD.
+                 */
+                if (vboxWinDrvInstFileQueryVersionOwn(pVerData, puMajor, puMinor, puBuildNumber, puRevisionNumber))
+                    rc = VINF_SUCCESS;
+                else
+                {
+                    /* Fall back on VS_FIXEDFILEINFO */
+                    UINT                 cbFileInfoIgnored = 0;
+                    VS_FIXEDFILEINFO    *pFileInfo = NULL;
+                    if (VerQueryValue(pVerData, L"\\", (LPVOID *)&pFileInfo, &cbFileInfoIgnored))
+                    {
+                        *puMajor          = HIWORD(pFileInfo->dwFileVersionMS);
+                        *puMinor          = LOWORD(pFileInfo->dwFileVersionMS);
+                        *puBuildNumber    = HIWORD(pFileInfo->dwFileVersionLS);
+                        *puRevisionNumber = LOWORD(pFileInfo->dwFileVersionLS);
+                        rc = VINF_SUCCESS;
+                    }
+                    else
+                        rc = RTErrConvertFromWin32(GetLastError());
+                }
+            }
+            else
+                rc = RTErrConvertFromWin32(GetLastError());
+
+            RTMemTmpFree(pVerData);
+        }
+        else
+            rc = VERR_NO_TMP_MEMORY;
+    }
+    else
+        rc = RTErrConvertFromWin32(GetLastError());
+
+    RTStrFree(pszPathTmp);
+    return rc;
+}
+
+/**
+ * Gets a re-formatted version string from the VS_FIXEDFILEINFO table.
+ *
+ * @returns VBox status code.  The output buffer is always valid and the status
+ *          code can safely be ignored.
+ *
+ * @param   pszPath         Absolute path to the file to query.
+ * @param   pszVersion      Where to return the version string.
+ * @param   cbVersion       The size of the version string buffer. This MUST be
+ *                          at least 2 bytes!
+ *
+ * @note    Copied from VGSvcUtilWinGetFileVersionString(). Merge this?
+ */
+int VBoxWinDrvInstFileQueryVersion(const char *pszPath, char *pszVersion, size_t cbVersion)
+{
+    /*
+     * We will ALWAYS return with a valid output buffer.
+     */
+    AssertReturn(cbVersion >= 2, VERR_BUFFER_OVERFLOW);
+    pszVersion[0] = '-';
+    pszVersion[1] = '\0';
+
+    char *pszTarget;
+    int rc = vboxWinDrvInstRegResolveRegPath(pszPath, &pszTarget);
+    if (RT_SUCCESS(rc))
+    {
+        uint32_t uMajor, uMinor, uBuild, uRev;
+        rc = VBoxWinDrvInstFileQueryVersionEx(pszTarget, &uMajor, &uMinor, &uBuild, &uRev);
+        if (RT_SUCCESS(rc))
+            RTStrPrintf(pszVersion, cbVersion, "%u.%u.%ur%u", uMajor, uMinor, uBuild, uRev);
+
+        RTStrFree(pszTarget);
+    }
+    return rc;
+}
+
+/**
+ * Gets a re-formatted version string from the VS_FIXEDFILEINFO table, UTF-16 version.
+ *
+ * @returns VBox status code.  The output buffer is always valid and the status
+ *          code can safely be ignored.
+ *
+ * @param   pszwPath        Absolute path to the file to query.
+ * @param   pszVersion      Where to return the version string.
+ * @param   cbVersion       The size of the version string buffer. This MUST be
+ *                          at least 2 bytes!
+ */
+int VBoxWinDrvInstFileQueryVersionUtf16(PCRTUTF16 pwszPath, char *pszVersion, size_t cbVersion)
+{
+    char *pszPath;
+    int rc = RTUtf16ToUtf8(pwszPath, &pszPath);
+    if (RT_SUCCESS(rc))
+    {
+        rc = VBoxWinDrvInstFileQueryVersion(pszPath, pszVersion, cbVersion);
+        RTStrFree(pszPath);
+    }
+
+    return rc;
 }
 
 #ifdef TESTCASE

@@ -38,7 +38,7 @@ ifndef VBOX_ONLY_ADDITIONS
  #
  PROGRAMS.win += VBoxDrvInstHost
  VBoxDrvInstHost_TEMPLATE    = VBoxR3Exe
- VBoxDrvInstHost_DEFS        = _WIN32_WINNT=0x0400 _UNICODE UNICODE VBOX_SVN_REV=$(VBOX_SVN_REV)
+ VBoxDrvInstHost_DEFS        = _UNICODE UNICODE VBOX_SVN_REV=$(VBOX_SVN_REV)
  VBoxDrvInstHost_INST       := $(INST_BIN)
  VBoxDrvInstHost_NAME       := VBoxDrvInst
  VBoxDrvInstHost_SOURCES     = \
