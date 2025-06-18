@@ -1398,7 +1398,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegEip32RelativeJumpS16FlatAndFinishNoFlags(P
 DECL_FORCE_INLINE(VBOXSTRICTRC)
 iemRegPcA64RelativeJumpS32AndFinishClearingFlags(PVMCPUCC pVCpu, int32_t offNextInstr, int rcNormal = VINF_SUCCESS) RT_NOEXCEPT
 {
-    /** @todo set branch type. */
+    /** @todo set branch type / tracing. */
     iemRegPcA64Add(pVCpu, offNextInstr);
     return iemRegFinishClearingFlags(pVCpu, rcNormal);
 }
@@ -1916,6 +1916,31 @@ DECLINLINE(VBOXSTRICTRC) iemRegRipJumpU64AndFinishClearingRF(PVMCPUCC pVCpu, uin
 #endif
     return iemRegFinishClearingFlags(pVCpu, VINF_SUCCESS);
 }
+
+#endif
+
+
+
+/**
+ * Implements a 32-bit relative call.
+ *
+ * @param   pVCpu               The cross context virtual CPU structure of the calling thread.
+ * @param   offNextInstr        The 32-bit displacement.
+ * @param   rcNormal            VINF_SUCCESS to continue TB.
+ *                              VINF_IEM_REEXEC_BREAK to force TB exit when
+ *                              taking the wrong conditional branhc.
+ */
+DECL_FORCE_INLINE(VBOXSTRICTRC)
+iemRegPcA64RelativeCallS32AndFinishClearingFlags(PVMCPUCC pVCpu, int32_t offNextInstr, int rcNormal = VINF_SUCCESS) RT_NOEXCEPT
+{
+    /** @todo set branch type / tracing. */
+    pVCpu->cpum.GstCtx.aGRegs[ARMV8_A64_REG_LR].x = pVCpu->cpum.GstCtx.Pc.u64 + 4;
+    iemRegPcA64Add(pVCpu, offNextInstr);
+    return iemRegFinishClearingFlags(pVCpu, rcNormal);
+}
+
+
+#if 0 /* later */
 
 
 /**
@@ -2658,6 +2683,7 @@ iemRegRipNearReturnAndFinishNoFlags(PVMCPUCC pVCpu, uint8_t cbInstr, uint16_t cb
 /* Mappings for A64 execution: */
 # define iemRegPcIncAndFinishClearingFlags                  iemRegPcA64IncAndFinishingClearingFlags
 # define iemRegPcRelativeJumpS32AndFinishClearingFlags      iemRegPcA64RelativeJumpS32AndFinishClearingFlags
+# define iemRegPcRelativeCallS32AndFinishClearingFlags      iemRegPcA64RelativeCallS32AndFinishClearingFlags
 
 #elif 0
 /* Mappings for A32 execution: */
