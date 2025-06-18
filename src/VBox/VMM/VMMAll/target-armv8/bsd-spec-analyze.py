@@ -2663,6 +2663,13 @@ def LoadArmOpenSourceSpecification(oOptions):
 # Decoder structure helpers.
 #
 
+## Populated by --decoder-hint0
+g_dDecoderFilterDepth0 = { };
+
+## Populated by --decoder-hint1
+g_ddDecoderFilterDepth1 = { };
+
+
 class MaskZipper(object):
     """
     This is mainly a class for putting static methods relating to mask
@@ -3054,6 +3061,18 @@ class DecoderNode(object):
         # 0x00011c00 & 0xfffee000  = 0x0 (0)
 
         #
+        # HACK ALERT! For level 0 and 1 we offer ways to insert hints to reduce
+        #             the runtime, since it's tedious to wait for 30 min for
+        #             each code tweak...  See --decoder-hint0 and --decoder-hint1.
+        #
+        dSpeedupFilter = None;
+        if uDepth <= 1:
+            if uDepth == 1:
+                dSpeedupFilter = g_ddDecoderFilterDepth1.get('%x/%x' % (self.fCheckedMask, self.fCheckedValue), None);
+            elif g_dDecoderFilterDepth0:
+                dSpeedupFilter = g_dDecoderFilterDepth0;
+
+        #
         # Whether to bother compiling the mask zip/unzip functions.
         #
         # The goal here is to keep the {built-in method builtins.eval} line far
@@ -3109,6 +3128,10 @@ class DecoderNode(object):
                     #    self.dprint(uDepth, '1>> fMask=%#010x cMaskBits=%s aaiMaskToIdxAlgo=%s...'
                     #                         % (fMask, cMaskBits, aaiMaskToIdxAlgo));
                     #assert cMaskBits <= cMaxTableSizeInBits;
+
+                    # HACK ALERT! Skip the mask if we have a selection filter and it isn't in it.
+                    if dSpeedupFilter and fMask not in dSpeedupFilter:
+                        continue;
 
                     # Calculate base cost and check it against uCostBest before continuing.
                     uCostTmp    = 256;                                                  # 256 = kCostIndirectCall
@@ -3686,7 +3709,12 @@ class IEMArmGenerator(object):
                     int(round(cLeafEntries         * 100.0 / cTabEntries)), cLeafEntries,
                     int(round(cMultiIfEntries      * 100.0 / cTabEntries)), cMultiIfEntries,
                     int(round(cReusedCode          * 100.0 / cTabEntries)), cReusedCode, );
-        sMatches = '%08x/%08x level %u' % (oNode.fCheckedMask, oNode.fCheckedValue, uDepth,);
+        if uDepth == 0:
+            sMatches = '--decoder-hint0 %#x' % (oNode.fChildMask,);
+        elif uDepth == 1 and len(oNode.aoInstructions) >= self.oOptions.iDecoderL1Threshold:
+            sMatches = '--decoder-hint1 %#x/%#x/%#x' % (oNode.fCheckedMask, oNode.fCheckedValue, oNode.fChildMask);
+        else:
+            sMatches = '%08x/%08x level %u' % (oNode.fCheckedMask, oNode.fCheckedValue, uDepth,);
 
         #
         # Code for extracting the index from uOpcode.
@@ -4043,7 +4071,16 @@ class IEMArmGenerator(object):
         #
         # Parse arguments.
         #
-        oArgParser = argparse.ArgumentParser(add_help = False);
+        class MyArgParser(argparse.ArgumentParser):
+            def convert_arg_line_to_args(self, sLine):
+                return sLine.split();
+
+        oArgParser = MyArgParser(fromfile_prefix_chars = '@',
+                                 formatter_class = argparse.RawDescriptionHelpFormatter,
+                                 epilog = '''
+Hints can be extracted from existing code with the following sed command:
+    kmk_sed -e "/--decoder-hint/!d" -e "s/^...//" IEMAllIntprA64Tables-armv8.cpp > hints.rsp
+Then add @hints.rsp to the command line to make use of them.''');
         oArgParser.add_argument('--tar',
                                 metavar = 'AARCHMRS_BSD_A_profile-2024-12.tar.gz',
                                 dest    = 'sTarFile',
@@ -4125,9 +4162,56 @@ class IEMArmGenerator(object):
                                 action  = 'store_true',
                                 default = False,
                                 help    = 'List the 10 top fixed bit masks.');
+        # Hacks
+        oArgParser.add_argument('--decoder-hint0',
+                                metavar = 'mask-to-use',
+                                dest    = 'asDecoderHintsL0',
+                                action  = 'append',
+                                default = [],
+                                help    = 'Top level decoder hints used to shorten the runtime. Format: <mask-to-use>');
+        oArgParser.add_argument('--decoder-hint1',
+                                metavar = 'matched-mask/value/mask-to-use',
+                                dest    = 'asDecoderHintsL1',
+                                action  = 'append',
+                                default = [],
+                                help    = 'Level 1 decoder hints. Format: <matched-mask>/<matched-value/<mask-to-use>');
+        oArgParser.add_argument('--decoder-hint1-threshold',
+                                metavar = 'count',
+                                dest    = 'iDecoderL1Threshold',
+                                type    = int,
+                                action  = 'store',
+                                default = 20,
+                                help    = 'The instruction threshold count for emitting --decoder-hint1 in the generated code.');
+
         # Do it!
         oOptions = oArgParser.parse_args(asArgs[1:]);
         self.oOptions = oOptions;
+
+        # Process the decoder hints.
+        for sValue in oOptions.asDecoderHintsL0:
+            try:
+                fTmp = int(sValue, 16);
+                if fTmp <= 0 or fTmp >= 0x100000000 or fTmp.bit_count() <= 4 or fTmp.bit_count() >= 16:# pylint: disable=no-member
+                    raise Exception();
+            except:
+                print('syntax error: Invalid --decoder-hint0 value: %s' % (sValue,))
+                return 2;
+            g_dDecoderFilterDepth0[fTmp] = True;
+
+        for sValue in oOptions.asDecoderHintsL1:
+            try:
+                afVals = [int(sSub, 16) for sSub in sValue.split('/')];
+                for iVal, fTmp in enumerate(afVals):
+                    if fTmp < 0 or fTmp >= 0x100000000 or (fTmp == 0 and iVal != 1): raise Exception();
+                if (afVals[0] & afVals[1]) != afVals[1] or (afVals[0] & afVals[2]) != 0: raise Exception();
+            except:
+                print('syntax error: Invalid --decoder-hint1 value: %s' % (sValue,))
+                return 2;
+            sKey = '%x/%x' % (afVals[0], afVals[1]);
+            if sKey not in g_ddDecoderFilterDepth1:
+                g_ddDecoderFilterDepth1[sKey] = {afVals[2]: True,};
+            else:
+                g_ddDecoderFilterDepth1[sKey][afVals[2]] = True;
 
         #
         # Load the specification.
