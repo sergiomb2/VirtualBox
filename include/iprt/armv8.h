@@ -963,9 +963,9 @@ typedef const ARMV8SPSREL2 *PCXARMV8SPSREL2;
 #define ARMV8_SPSR_EL2_AARCH64_D                    RT_BIT_64(9)
 #define ARMV8_SPSR_EL2_AARCH64_D_BIT                9
 /** Bit 10 - 11 - BTYPE - Branch Type indicator. */
-#define ARMV8_SPSR_EL2_AARCH64_BYTPE                (RT_BIT_64(10) | RT_BIT_64(11))
-#define ARMV8_SPSR_EL2_AARCH64_BYTPE_SHIFT          10
-#define ARMV8_SPSR_EL2_AARCH64_GET_BYTPE(a_Spsr)    (((a_Spsr) >> ARMV8_SPSR_EL2_AARCH64_BYTPE_SHIFT) & 3)
+#define ARMV8_SPSR_EL2_AARCH64_BTYPE                (RT_BIT_64(10) | RT_BIT_64(11))
+#define ARMV8_SPSR_EL2_AARCH64_BTYPE_SHIFT          10
+#define ARMV8_SPSR_EL2_AARCH64_GET_BTYPE(a_Spsr)    (((a_Spsr) >> ARMV8_SPSR_EL2_AARCH64_BTYPE_SHIFT) & 3)
 /** Bit 12 - SSBS - Speculative Store Bypass. */
 #define ARMV8_SPSR_EL2_AARCH64_SSBS                 RT_BIT_64(12)
 #define ARMV8_SPSR_EL2_AARCH64_SSBS_BIT             12

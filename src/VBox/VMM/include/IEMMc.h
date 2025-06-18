@@ -1578,7 +1578,7 @@
 #ifdef VBOX_VMM_TARGET_X86
 # include "VMMAll/target-x86/IEMMc-x86.h"
 #elif defined(VBOX_VMM_TARGET_ARMV8)
-//# include "VMMAll/target-armv8/IEMMc-armv8.h"
+# include "VMMAll/target-armv8/IEMMc-armv8.h"
 #else
 # error "port me"
 #endif

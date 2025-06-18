@@ -337,6 +337,7 @@ DECLINLINE(a_RetType) iemOpcodeFetchBytesJmp(PVMCPUCC pVCpu) IEM_NOEXCEPT_MAY_LO
         pVCpu->iem.s.uInstrBufPc      = GCPtrFirst & ~(RTGCPTR)GUEST_MIN_PAGE_OFFSET_MASK;
         pVCpu->iem.s.GCPhysInstrBuf   = pTlbe->GCPhys & IEMTLBE_GCPHYS_F_PHYS_MASK;
         pVCpu->iem.s.pbInstrBuf       = pTlbe->pbMappingR3;
+/** @todo Need to record GuardedPage bit for the current page! */
         if RT_CONSTEXPR_IF(a_fTlbLoad)
             return 0;
         return *(a_RetType const *)&pTlbe->pbMappingR3[offPg];
@@ -379,6 +380,7 @@ DECLINLINE(a_RetType) iemOpcodeFetchBytesJmp(PVMCPUCC pVCpu) IEM_NOEXCEPT_MAY_LO
     pVCpu->iem.s.uInstrBufPc      = GCPtrFirst & ~(RTGCPTR)GUEST_MIN_PAGE_OFFSET_MASK;
     pVCpu->iem.s.GCPhysInstrBuf   = pTlbe->GCPhys & IEMTLBE_GCPHYS_F_PHYS_MASK;
     pVCpu->iem.s.pbInstrBuf       = NULL;
+/** @todo Need to record GuardedPage bit for the current page! */
 
     return uRetValue;
 

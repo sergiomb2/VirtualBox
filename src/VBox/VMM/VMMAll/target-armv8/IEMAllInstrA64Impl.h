@@ -3307,7 +3307,12 @@
 
 
 /* RET{  <Xn>} (fffffc1f/d65f0000) */
-//#define IEM_INSTR_IMPL_A64__RET_64R_branch_reg(Rn)
+#define IEM_INSTR_IMPL_A64__RET_64R_branch_reg(Rn) \
+    IEM_MC_BEGIN(0, IEM_CIMPL_F_BRANCH_INDIRECT); \
+    IEM_MC_LOCAL(uint64_t, uRetAddr); \
+    IEM_MC_FETCH_GREG_U64(uRetAddr, Rn); \
+    IEM_MC_BRANCH_TO_WITH_BTYPE_AND_FINISH(uRetAddr, 0 /*BType*/); \
+    IEM_MC_END()
 
 
 /* RETAASPPCR  <Xm> (ffffffe0/d65f0be0) */

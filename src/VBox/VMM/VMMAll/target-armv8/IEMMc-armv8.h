@@ -36,6 +36,11 @@
  * @{
  */
 
+ /** Set 64-bit PC to uAddr (local) and PSTATE.BTYPE to a_uBType (constant). */
+#define IEM_MC_BRANCH_TO_WITH_BTYPE_AND_FINISH(a_uNewPc, a_uBType); \
+    return iemRegPcA64BranchToAndFinishClearingFlags((pVCpu), (a_uNewPc), (a_uBType))
+
+
 
 /** @}  */
 

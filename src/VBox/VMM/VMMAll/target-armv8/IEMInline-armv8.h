@@ -391,7 +391,7 @@ DECL_FORCE_INLINE(uint32_t) iemGRegFetchU32(PVMCPUCC pVCpu, uint8_t iReg, bool f
  * @param   iReg    The register.
  * @param   fSp     Set if register 31 is SP, otherwise it's zero.
  */
-DECL_FORCE_INLINE(uint64_t) iemGRegFetchU64(PVMCPUCC pVCpu, uint8_t iReg, bool fSp) RT_NOEXCEPT
+DECL_FORCE_INLINE(uint64_t) iemGRegFetchU64(PVMCPUCC pVCpu, uint8_t iReg, bool fSp = false) RT_NOEXCEPT
 {
     Assert(iReg < 32);
     return iReg < 31 ? pVCpu->cpum.GstCtx.aGRegs[iReg].x
@@ -669,7 +669,7 @@ static VBOXSTRICTRC iemFinishInstructionWithSoftwareStep(PVMCPUCC pVCpu, int rcN
  * @param   pVCpu               The cross context virtual CPU structure of the calling thread.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegFinishClearingFlags(PVMCPUCC pVCpu, int rcNormal) RT_NOEXCEPT
 {
@@ -692,7 +692,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegFinishClearingFlags(PVMCPUCC pVCpu, int rc
  * @param   pVCpu               The cross context virtual CPU structure of the calling thread.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC)
 iemRegPcIncAndFinishClearingFlagsEx(PVMCPUCC pVCpu, bool f32Bit = true, int rcNormal = VINF_SUCCESS) RT_NOEXCEPT
@@ -709,7 +709,7 @@ iemRegPcIncAndFinishClearingFlagsEx(PVMCPUCC pVCpu, bool f32Bit = true, int rcNo
  * @param   pVCpu               The cross context virtual CPU structure of the calling thread.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcA64IncAndFinishingClearingFlags(PVMCPUCC pVCpu, int rcNormal = VINF_SUCCESS) RT_NOEXCEPT
 {
@@ -725,7 +725,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcA64IncAndFinishingClearingFlags(PVMCPUCC
  * @param   pVCpu               The cross context virtual CPU structure of the calling thread.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcA32IncAndFinishingClearingFlags(PVMCPUCC pVCpu, int rcNormal = VINF_SUCCESS) RT_NOEXCEPT
 {
@@ -742,7 +742,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcA32IncAndFinishingClearingFlags(PVMCPUCC
  * @param   f32Bit              Set if it's a 32-bit wide instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcT32IncAndFinishingClearingFlags(PVMCPUCC pVCpu, bool f32Bit = false,
                                                                         int rcNormal = VINF_SUCCESS) RT_NOEXCEPT
@@ -759,7 +759,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcT32IncAndFinishingClearingFlags(PVMCPUCC
  * @param   pVCpu               The cross context virtual CPU structure of the calling thread.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegFinishNoFlags(PVMCPUCC pVCpu, int rcNormal) RT_NOEXCEPT
 {
@@ -778,7 +778,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegFinishNoFlags(PVMCPUCC pVCpu, int rcNormal
  * @param   pVCpu               The cross context virtual CPU structure of the calling thread.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcA64IncAndFinishingNoFlags(PVMCPUCC pVCpu, int rcNormal) RT_NOEXCEPT
 {
@@ -794,7 +794,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcA64IncAndFinishingNoFlags(PVMCPUCC pVCpu
  * @param   pVCpu               The cross context virtual CPU structure of the calling thread.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcA32IncAndFinishingNoFlags(PVMCPUCC pVCpu, int rcNormal) RT_NOEXCEPT
 {
@@ -811,7 +811,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcA32IncAndFinishingNoFlags(PVMCPUCC pVCpu
  * @param   f32Bit              Set if it's a 32-bit wide instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcT32IncAndFinishingNoFlags(PVMCPUCC pVCpu, bool f32Bit, int rcNormal) RT_NOEXCEPT
 {
@@ -834,7 +834,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegPcT32IncAndFinishingNoFlags(PVMCPUCC pVCpu
  * @param   enmEffOpSize        Effective operand size.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegRip64RelativeJumpS8AndFinishClearingRF(PVMCPUCC pVCpu, uint8_t cbInstr, int8_t offNextInstr,
                                                                              IEMMODE enmEffOpSize, int rcNormal) RT_NOEXCEPT
@@ -875,7 +875,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegRip64RelativeJumpS8AndFinishClearingRF(PVM
  * @param   enmEffOpSize        Effective operand size.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC)
 iemRegRip64RelativeJumpS8IntraPgAndFinishClearingRF(PVMCPUCC pVCpu, uint8_t cbInstr, int8_t offNextInstr,
@@ -912,7 +912,7 @@ iemRegRip64RelativeJumpS8IntraPgAndFinishClearingRF(PVMCPUCC pVCpu, uint8_t cbIn
  * @param   enmEffOpSize        Effective operand size.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegEip32RelativeJumpS8AndFinishClearingRF(PVMCPUCC pVCpu, uint8_t cbInstr, int8_t offNextInstr,
                                                                              IEMMODE enmEffOpSize, int rcNormal) RT_NOEXCEPT
@@ -952,7 +952,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegEip32RelativeJumpS8AndFinishClearingRF(PVM
  * @param   enmEffOpSize        Effective operand size.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC)
  iemRegEip32RelativeJumpS8FlatAndFinishClearingRF(PVMCPUCC pVCpu, uint8_t cbInstr, int8_t offNextInstr,
@@ -988,7 +988,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC)
  * @param   offNextInstr        The offset of the next instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegIp16RelativeJumpS8AndFinishClearingRF(PVMCPUCC pVCpu, uint8_t cbInstr,
                                                                             int8_t offNextInstr, int rcNormal) RT_NOEXCEPT
@@ -1025,7 +1025,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegIp16RelativeJumpS8AndFinishClearingRF(PVMC
  * @param   enmEffOpSize        Effective operand size.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegRip64RelativeJumpS8AndFinishNoFlags(PVMCPUCC pVCpu, uint8_t cbInstr, int8_t offNextInstr,
                                                                           IEMMODE enmEffOpSize, int rcNormal) RT_NOEXCEPT
@@ -1062,7 +1062,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegRip64RelativeJumpS8AndFinishNoFlags(PVMCPU
  * @param   enmEffOpSize        Effective operand size.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC)
 iemRegRip64RelativeJumpS8IntraPgAndFinishNoFlags(PVMCPUCC pVCpu, uint8_t cbInstr, int8_t offNextInstr,
@@ -1095,7 +1095,7 @@ iemRegRip64RelativeJumpS8IntraPgAndFinishNoFlags(PVMCPUCC pVCpu, uint8_t cbInstr
  * @param   enmEffOpSize        Effective operand size.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegEip32RelativeJumpS8AndFinishNoFlags(PVMCPUCC pVCpu, uint8_t cbInstr, int8_t offNextInstr,
                                                                           IEMMODE enmEffOpSize, int rcNormal) RT_NOEXCEPT
@@ -1131,7 +1131,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegEip32RelativeJumpS8AndFinishNoFlags(PVMCPU
  * @param   enmEffOpSize        Effective operand size.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC)
 iemRegEip32RelativeJumpS8FlatAndFinishNoFlags(PVMCPUCC pVCpu, uint8_t cbInstr, int8_t offNextInstr,
@@ -1164,7 +1164,7 @@ iemRegEip32RelativeJumpS8FlatAndFinishNoFlags(PVMCPUCC pVCpu, uint8_t cbInstr, i
  * @param   offNextInstr        The offset of the next instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegIp16RelativeJumpS8AndFinishNoFlags(PVMCPUCC pVCpu, uint8_t cbInstr,
                                                                          int8_t offNextInstr, int rcNormal) RT_NOEXCEPT
@@ -1193,7 +1193,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegIp16RelativeJumpS8AndFinishNoFlags(PVMCPUC
  * @param   offNextInstr        The offset of the next instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegRip64RelativeJumpS16AndFinishClearingRF(PVMCPUCC pVCpu, uint8_t cbInstr,
                                                                               int16_t offNextInstr, int rcNormal) RT_NOEXCEPT
@@ -1225,7 +1225,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegRip64RelativeJumpS16AndFinishClearingRF(PV
  * @param   offNextInstr        The offset of the next instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  *
  * @note    This is also used by 16-bit code in pre-386 mode, as the code is
  *          identical.
@@ -1264,7 +1264,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegEip32RelativeJumpS16AndFinishClearingRF(PV
  * @param   offNextInstr        The offset of the next instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  *
  * @note    This is also used by 16-bit code in pre-386 mode, as the code is
  *          identical.
@@ -1298,7 +1298,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegEip32RelativeJumpS16FlatAndFinishClearingR
  * @param   offNextInstr        The offset of the next instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegRip64RelativeJumpS16AndFinishNoFlags(PVMCPUCC pVCpu, uint8_t cbInstr,
                                                                            int16_t offNextInstr, int rcNormal) RT_NOEXCEPT
@@ -1327,7 +1327,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegRip64RelativeJumpS16AndFinishNoFlags(PVMCP
  * @param   offNextInstr        The offset of the next instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  *
  * @note    This is also used by 16-bit code in pre-386 mode, as the code is
  *          identical.
@@ -1363,7 +1363,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegEip32RelativeJumpS16AndFinishNoFlags(PVMCP
  * @param   offNextInstr        The offset of the next instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  *
  * @note    This is also used by 16-bit code in pre-386 mode, as the code is
  *          identical.
@@ -1393,7 +1393,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegEip32RelativeJumpS16FlatAndFinishNoFlags(P
  * @param   offNextInstr        The offset of the next instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC)
 iemRegPcA64RelativeJumpS32AndFinishClearingFlags(PVMCPUCC pVCpu, int32_t offNextInstr, int rcNormal = VINF_SUCCESS) RT_NOEXCEPT
@@ -1421,7 +1421,7 @@ iemRegPcA64RelativeJumpS32AndFinishClearingFlags(PVMCPUCC pVCpu, int32_t offNext
  * @param   offNextInstr        The offset of the next instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegRip64RelativeJumpS32AndFinishClearingRF(PVMCPUCC pVCpu, uint8_t cbInstr,
                                                                               int32_t offNextInstr, int rcNormal) RT_NOEXCEPT
@@ -1462,7 +1462,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegRip64RelativeJumpS32AndFinishClearingRF(PV
  * @param   offNextInstr        The offset of the next instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC)
 iemRegRip64RelativeJumpS32IntraPgAndFinishClearingRF(PVMCPUCC pVCpu, uint8_t cbInstr,
@@ -1501,7 +1501,7 @@ iemRegRip64RelativeJumpS32IntraPgAndFinishClearingRF(PVMCPUCC pVCpu, uint8_t cbI
  * @param   offNextInstr        The offset of the next instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegEip32RelativeJumpS32AndFinishClearingRF(PVMCPUCC pVCpu, uint8_t cbInstr,
                                                                               int32_t offNextInstr, int rcNormal) RT_NOEXCEPT
@@ -1542,7 +1542,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegEip32RelativeJumpS32AndFinishClearingRF(PV
  * @param   offNextInstr        The offset of the next instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegEip32RelativeJumpS32FlatAndFinishClearingRF(PVMCPUCC pVCpu, uint8_t cbInstr,
                                                                                   int32_t offNextInstr, int rcNormal) RT_NOEXCEPT
@@ -1582,7 +1582,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegEip32RelativeJumpS32FlatAndFinishClearingR
  * @param   offNextInstr        The offset of the next instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegRip64RelativeJumpS32AndFinishNoFlags(PVMCPUCC pVCpu, uint8_t cbInstr,
                                                                            int32_t offNextInstr, int rcNormal) RT_NOEXCEPT
@@ -1619,7 +1619,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegRip64RelativeJumpS32AndFinishNoFlags(PVMCP
  * @param   offNextInstr        The offset of the next instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC)
 iemRegRip64RelativeJumpS32IntraPgAndFinishNoFlags(PVMCPUCC pVCpu, uint8_t cbInstr, int32_t offNextInstr, int rcNormal) RT_NOEXCEPT
@@ -1654,7 +1654,7 @@ iemRegRip64RelativeJumpS32IntraPgAndFinishNoFlags(PVMCPUCC pVCpu, uint8_t cbInst
  * @param   offNextInstr        The offset of the next instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegEip32RelativeJumpS32AndFinishNoFlags(PVMCPUCC pVCpu, uint8_t cbInstr,
                                                                            int32_t offNextInstr, int rcNormal) RT_NOEXCEPT
@@ -1692,7 +1692,7 @@ DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegEip32RelativeJumpS32AndFinishNoFlags(PVMCP
  * @param   offNextInstr        The offset of the next instruction.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC) iemRegEip32RelativeJumpS32FlatAndFinishNoFlags(PVMCPUCC pVCpu, uint8_t cbInstr,
                                                                                int32_t offNextInstr, int rcNormal) RT_NOEXCEPT
@@ -1928,17 +1928,42 @@ DECLINLINE(VBOXSTRICTRC) iemRegRipJumpU64AndFinishClearingRF(PVMCPUCC pVCpu, uin
  * @param   offNextInstr        The 32-bit displacement.
  * @param   rcNormal            VINF_SUCCESS to continue TB.
  *                              VINF_IEM_REEXEC_BREAK to force TB exit when
- *                              taking the wrong conditional branhc.
+ *                              taking the wrong conditional branch.
  */
 DECL_FORCE_INLINE(VBOXSTRICTRC)
 iemRegPcA64RelativeCallS32AndFinishClearingFlags(PVMCPUCC pVCpu, int32_t offNextInstr, int rcNormal = VINF_SUCCESS) RT_NOEXCEPT
 {
-    /** @todo set branch type / tracing. */
+    /** @todo tracing. */
     pVCpu->cpum.GstCtx.aGRegs[ARMV8_A64_REG_LR].x = pVCpu->cpum.GstCtx.Pc.u64 + 4;
     iemRegPcA64Add(pVCpu, offNextInstr);
     return iemRegFinishClearingFlags(pVCpu, rcNormal);
 }
 
+
+/**
+ * Implements a 64-bit indirect call.
+ *
+ * @param   pVCpu               The cross context virtual CPU structure of the calling thread.
+ * @param   uNewPc              The new PC value.
+ * @param   uBType              The new PSTATE.BTYPE value.
+ * @param   rcNormal            VINF_SUCCESS to continue TB.
+ *                              VINF_IEM_REEXEC_BREAK to force TB exit when
+ *                              taking the wrong conditional branch.
+ */
+DECL_FORCE_INLINE(VBOXSTRICTRC)
+iemRegPcA64BranchToAndFinishClearingFlags(PVMCPUCC pVCpu, uint64_t uNewPc, uint8_t uBType,
+                                          int rcNormal = VINF_SUCCESS) RT_NOEXCEPT
+{
+    Assert(uBType < 4);
+    /** @todo tracing. */
+
+    pVCpu->cpum.GstCtx.Pc.u64 = uNewPc;
+    if (pVCpu->pVMR3->cpum.ro.GuestFeatures.fBti)
+        pVCpu->cpum.GstCtx.fPState = (pVCpu->cpum.GstCtx.fPState & ~ARMV8_SPSR_EL2_AARCH64_BTYPE)
+                                   | ((uint64_t)uBType << ARMV8_SPSR_EL2_AARCH64_BTYPE_SHIFT);
+
+    return iemRegFinishClearingFlags(pVCpu, rcNormal);
+}
 
 #if 0 /* later */
 
