@@ -57,7 +57,7 @@ VBOX_PATH_GH_INSTALLATION_SRC := $(PATH_ROOT)/src/VBox/GuestHost/installation
 
 PROGRAMS.win += VBoxDrvInstGuest
 VBoxDrvInstGuest_TEMPLATE = VBoxGuestR3Exe
-VBoxDrvInstGuest_DEFS     = _WIN32_WINNT=0x0400 _UNICODE UNICODE VBOX_SVN_REV=$(VBOX_SVN_REV)
+VBoxDrvInstGuest_DEFS     = _UNICODE UNICODE VBOX_SVN_REV=$(VBOX_SVN_REV)
 VBoxDrvInstGuest_NAME    := VBoxDrvInst
 VBoxDrvInstGuest_SOURCES  = \
 	$(VBOX_PATH_GH_INSTALLATION_SRC)/VBoxWinDrvCommon.cpp \
