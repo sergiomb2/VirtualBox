@@ -467,7 +467,7 @@ void UIWizardImportAppPageExpert::sltRetranslateUI()
     /* Translate additional option check-box: */
     if (m_pCheckboxImportHDsAsVDI)
     {
-        m_pCheckboxImportHDsAsVDI->setText(UIWizardImportApp::tr("&Import hard drives as VDI"));
+        m_pCheckboxImportHDsAsVDI->setText(UIWizardImportApp::tr("&Import Hard Drives as VDI"));
         m_pCheckboxImportHDsAsVDI->setToolTip(UIWizardImportApp::tr("When checked, all the hard drives that belong to this "
                                                                     "appliance will be imported in VDI format."));
     }
