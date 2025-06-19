@@ -98,7 +98,7 @@ UIWizardNewCloudVM *UIWizardNewCloudVMPageProperties::wizard() const
 void UIWizardNewCloudVMPageProperties::sltRetranslateUI()
 {
     /* Translate page: */
-    setTitle(UIWizardNewCloudVM::tr("Cloud Virtual Machine settings"));
+    setTitle(UIWizardNewCloudVM::tr("Cloud virtual machine settings"));
 
     /* Translate description label: */
     if (m_pLabel)

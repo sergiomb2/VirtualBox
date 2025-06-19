@@ -258,7 +258,7 @@ void UIWizardNewCloudVMPageExpert::sltRetranslateUI()
 
     /* Translate cloud VM properties table: */
     if (m_pLabelOptions)
-        m_pLabelOptions->setText(UIWizardNewCloudVM::tr("&Options:"));
+        m_pLabelOptions->setText(UIWizardNewCloudVM::tr("&Settings:"));
     if (m_pFormEditor)
         m_pFormEditor->setWhatsThis(UIWizardNewCloudVM::tr("Lists all the cloud VM properties."));
 }
