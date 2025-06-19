@@ -243,6 +243,7 @@ typedef struct VBOXWINDRVINSTIMPORTSYMBOL
 *   Prototypes                                                                                                                   *
 *********************************************************************************************************************************/
 static int vboxWinDrvParmsDetermine(PVBOXWINDRVINSTINTERNAL pCtx, PVBOXWINDRVINSTPARMS pParms, bool fForce);
+static int vboxWinDrvInstSetupAPILog(PVBOXWINDRVINSTINTERNAL pCtx, unsigned cLastSections);
 
 
 /*********************************************************************************************************************************
@@ -1524,6 +1525,10 @@ static int vboxWinDrvInstallPerform(PVBOXWINDRVINSTINTERNAL pCtx, PVBOXWINDRVINS
             break;
     }
 
+    if (   pCtx->cErrors
+        && !(pParms->fFlags & VBOX_WIN_DRIVERINSTALL_F_DRYRUN))
+        /* ignore rc */ vboxWinDrvInstSetupAPILog(pCtx, pCtx->uVerbosity <= 1 ? 1 : 3 /* Last sections */);
+
     return rc;
 }
 
@@ -2106,6 +2111,10 @@ static int vboxWinDrvUninstallPerform(PVBOXWINDRVINSTINTERNAL pCtx, PVBOXWINDRVI
             break;
     }
 
+    if (   pCtx->cErrors
+        && !(pParms->fFlags & VBOX_WIN_DRIVERINSTALL_F_DRYRUN))
+        /* ignore rc */ vboxWinDrvInstSetupAPILog(pCtx, pCtx->uVerbosity <= 1 ? 1 : 3 /* Last sections */);
+
     return rc;
 }
 
@@ -2173,11 +2182,6 @@ static int vboxWinDrvInstMain(PVBOXWINDRVINSTINTERNAL pCtx, PVBOXWINDRVINSTPARMS
     else if (pCtx->cWarnings)
         vboxWinDrvInstLogEx(pCtx, VBOXWINDRIVERLOGTYPE_WARN, "%sstalling driver(s) succeeded with %u warnings",
                             fInstall ? "In" : "Unin", pCtx->cWarnings);
-
-    if (   pCtx->cErrors
-        || pCtx->uVerbosity)
-        /* ignore rc */ vboxWinDrvInstSetupAPILog(pCtx, pCtx->uVerbosity <= 1 ? 1 : 3 /* Last sections */);
-
     return rc;
 }
 
