@@ -2707,6 +2707,7 @@ void VBoxWinDrvInstServiceInfoDestroy(PVBOXWINDRVSVCINFO pSvcInfo)
  * Queries information about a system service (or driver).
  *
  * @returns VBox status code.
+ * @retval  VERR_NOT_SUPPORTED if querying for system services is not supported (NT4).
  * @param   hSCM                SCM handle to use.
  * @param   pszService          Service (or driver) name to query information for.
  * @param   pSvcInfo            Where to store the queried information on success.
@@ -2714,6 +2715,9 @@ void VBoxWinDrvInstServiceInfoDestroy(PVBOXWINDRVSVCINFO pSvcInfo)
  */
 static int vboxWinDrvInstServiceQueryExInternal(SC_HANDLE hSCM, const char *pszService, PVBOXWINDRVSVCINFO pSvcInfo)
 {
+    if (!g_pfnQueryServiceStatusEx)
+        return VERR_NOT_SUPPORTED;
+
     PRTUTF16 pwszService = NULL;
     int rc = RTStrToUtf16(pszService, &pwszService);
     AssertRCReturn(rc, rc);
@@ -2729,14 +2733,14 @@ static int vboxWinDrvInstServiceQueryExInternal(SC_HANDLE hSCM, const char *pszS
     RT_BZERO(pSvcInfo, sizeof(VBOXWINDRVSVCINFO));
 
     DWORD dwBytesNeeded;
-    QueryServiceStatusEx(hSvc, SC_STATUS_PROCESS_INFO, NULL, 0, &dwBytesNeeded);
+    g_pfnQueryServiceStatusEx(hSvc, SC_STATUS_PROCESS_INFO, NULL, 0, &dwBytesNeeded);
     DWORD dwLastErr = GetLastError();
     if (dwLastErr == ERROR_INSUFFICIENT_BUFFER)
     {
         pSvcInfo->pStatus = (LPSERVICE_STATUS_PROCESS)RTMemAlloc(dwBytesNeeded);
         if (pSvcInfo->pStatus)
         {
-            if (QueryServiceStatusEx(hSvc, SC_STATUS_PROCESS_INFO, (LPBYTE)pSvcInfo->pStatus, dwBytesNeeded, &dwBytesNeeded))
+            if (g_pfnQueryServiceStatusEx(hSvc, SC_STATUS_PROCESS_INFO, (LPBYTE)pSvcInfo->pStatus, dwBytesNeeded, &dwBytesNeeded))
             {
 
             }
