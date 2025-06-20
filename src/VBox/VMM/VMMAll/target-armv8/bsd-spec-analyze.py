@@ -709,7 +709,7 @@ class ArmAstBinaryOp(ArmAstBase):
     kOpTypeArithmetical = 'arit';
     kOpTypeSet          = 'set';
     kOpTypeConstraints  = 'constraints';
-    kOpTypeTodo         = 'todo';
+    kOpTypeBitwise      = 'bitwise';
     kdOps = {
         '||':  kOpTypeLogical,
         '&&':  kOpTypeLogical,
@@ -724,10 +724,29 @@ class ArmAstBinaryOp(ArmAstBase):
         '-':   kOpTypeArithmetical,
         'MOD': kOpTypeArithmetical,
         '*':   kOpTypeArithmetical,
+        'AND': kOpTypeBitwise,
+        'OR':  kOpTypeBitwise,
         '-->': kOpTypeConstraints,    # implies that the right hand side is true when left hand side is.
         '<->': kOpTypeConstraints,    # bidirectional version of -->, i.e. it follows strictly in both directions.
-        'AND': kOpTypeTodo,
-        'OR':  kOpTypeTodo,
+    };
+    kdOpsToC = {
+        '||':  '||',
+        '&&':  '&&',
+        '==':  '==',
+        '!=':  '!=',
+        '>':   '>',
+        '<':   '<',
+        '>=':  '>=',
+        '<=':  '<=',
+        #'IN':  'IN',
+        '+':   '+',
+        '-':   '-',
+        'MOD': '%',
+        '*':   '*',
+        'AND': '&',
+        'OR':  '|',
+        #'-->': kOpTypeConstraints,
+        #'<->': kOpTypeConstraints,
     };
 
     def __init__(self, oLeft, sOp, oRight, fConstraints = False):
@@ -776,11 +795,11 @@ class ArmAstBinaryOp(ArmAstBase):
         return '%s %s %s' % (sLeft, self.sOp, sRight);
 
     def toCExpr(self, oHelper):
-        if ArmAstBinaryOp.kdOps[self.sOp] == ArmAstBinaryOp.kOpTypeTodo:
-            raise Exception('Not implemented: %s' % (self.sOp,));
-
-        # Logical and compare operations are straight forward.
-        if ArmAstBinaryOp.kdOps[self.sOp] in (ArmAstBinaryOp.kOpTypeLogical, ArmAstBinaryOp.kOpTypeCompare):
+        # Logical, compare, arithmetical & bitwise operations are straight forward.
+        if ArmAstBinaryOp.kdOps[self.sOp] in (ArmAstBinaryOp.kOpTypeLogical,
+                                              ArmAstBinaryOp.kOpTypeCompare,
+                                              ArmAstBinaryOp.kOpTypeArithmetical,
+                                              ArmAstBinaryOp.kOpTypeBitwise):
             sLeft = self.oLeft.toCExpr(oHelper);
             if ArmAstBinaryOp.needParentheses(self.oLeft, self.sOp):
                 sLeft = '(%s)' % (sLeft);
@@ -788,7 +807,7 @@ class ArmAstBinaryOp(ArmAstBase):
             sRight = self.oRight.toCExpr(oHelper);
             if ArmAstBinaryOp.needParentheses(self.oRight, self.sOp):
                 sRight = '(%s)' % (sRight);
-            return '%s %s %s' % (sLeft, self.sOp if self.sOp != 'MOD' else '%', sRight);
+            return '%s %s %s' % (sLeft, ArmAstBinaryOp.kdOpsToC[self.sOp], sRight);
 
         # 'x IN (y,z,...)' needs rewriting.
         if self.sOp == 'IN':
@@ -862,10 +881,14 @@ class ArmAstBinaryOp(ArmAstBase):
 
 class ArmAstUnaryOp(ArmAstBase):
     kOpTypeLogical      = 'log';
-    kOpTypeTodo         = 'todo';
+    kOpTypeBitwise      = 'bitwise';
     kdOps = {
         '!':   kOpTypeLogical,
-        'NOT': kOpTypeTodo,
+        'NOT': kOpTypeBitwise,
+    };
+    kdOpsToC = {
+        '!':   '!',
+        'NOT': '~',
     };
 
     def __init__(self, sOp, oExpr):
@@ -894,18 +917,14 @@ class ArmAstUnaryOp(ArmAstBase):
         return '%s%s' % (self.sOp, self.oExpr.toString(),);
 
     def toCExpr(self, oHelper):
-        if self.kdOps[self.sOp] == self.kOpTypeTodo:
-            raise Exception('Not implemented');
         if ArmAstUnaryOp.needParentheses(self.oExpr):
-            return '%s(%s)' % (self.sOp, self.oExpr.toCExpr(oHelper));
-        return '%s%s' % (self.sOp, self.oExpr.toCExpr(oHelper));
+            return '%s(%s)' % (ArmAstUnaryOp.kdOpsToC[self.sOp], self.oExpr.toCExpr(oHelper));
+        return '%s%s' % (ArmAstUnaryOp.kdOpsToC[self.sOp], self.oExpr.toCExpr(oHelper));
 
     def getWidth(self, oHelper):
-        _ = oHelper;
-        if self.kdOps[self.sOp] == self.kOpTypeTodo:
-            raise Exception('Not implemented');
-        assert self.sOp == '!';
-        return 1;
+        if self.kdOps[self.sOp] == self.kOpTypeLogical:
+            return 1; # boolean result.
+        return self.oExpr.getWidth(oHelper);
 
 
 class ArmAstSlice(ArmAstBase):
@@ -2443,7 +2462,8 @@ class ArmAccessorPermissionBase(object):
 
     kAttribSetMemory = frozenset(['_type', 'access', 'condition',]);
     @staticmethod
-    def fromJsonMemory(dJson):
+    def fromJsonMemory(dJson, fNested):
+        _ = fNested;
         assert dJson['_type'] == 'Accessors.Permission.MemoryAccess';
         ArmAccessorPermissionBase.assertAttribsInSet(dJson, ArmAccessorPermissionBase.kAttribSetMemory);
         oCondition = ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints)
@@ -2452,7 +2472,7 @@ class ArmAccessorPermissionBase(object):
         # Accessors.Permission.AccessTypes.Memory.ImplementationDefined.
         oJsonAccess = dJson['access'];
         if isinstance(oJsonAccess, list):
-            aoAccesses = [ArmAccessorPermissionBase.fromJsonMemory(dJsonSub) for dJsonSub in oJsonAccess]
+            aoAccesses = [ArmAccessorPermissionBase.fromJsonMemory(dJsonSub, True) for dJsonSub in oJsonAccess]
             return ArmAccessorPermissionMemoryAccessList(oCondition, aoAccesses);
 
         if oJsonAccess['_type'] == 'Accessors.Permission.AccessTypes.Memory.ReadWriteAccess':
@@ -2467,7 +2487,7 @@ class ArmAccessorPermissionBase(object):
 
     kAttribSetSystem = frozenset(['_type', 'access', 'condition',]);
     @staticmethod
-    def fromJsonSystem(dJson):
+    def fromJsonSystem(dJson, fNested):
         assert dJson['_type'] == 'Accessors.Permission.SystemAccess';
         ArmAccessorPermissionBase.assertAttribsInSet(dJson, ArmAccessorPermissionBase.kAttribSetSystem);
         oCondition = ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeAccessorCond)
@@ -2475,9 +2495,12 @@ class ArmAccessorPermissionBase(object):
         # and one that has a AST tree as the 'access' attribute.  The former is typically the
         # top level one and the latter makes up the element in the list.
         if isinstance(dJson['access'], list):
-            aoAccesses = [ArmAccessorPermissionBase.fromJsonSystem(dJsonSub) for dJsonSub in dJson['access']]
+            aoAccesses = [ArmAccessorPermissionBase.fromJsonSystem(dJsonSub, True) for dJsonSub in dJson['access']]
+            #if not fNested or len(aoAccesses) != 1: # Eliminate unnecessary nested lists.
             return ArmAccessorPermissionSystemAccessList(oCondition, aoAccesses);
-        oAccess = ArmAstBase.fromJson(dJson['access'], ArmAstBase.ksModeAccessor)
+            #oAccess = aoAccesses[0];
+        else:
+            oAccess = ArmAstBase.fromJson(dJson['access'], ArmAstBase.ksModeAccessor);
         return ArmAccessorPermissionSystemAccess(oCondition, oAccess);
 
 
@@ -2487,9 +2510,9 @@ class ArmAccessorPermissionBase(object):
     };
 
     @staticmethod
-    def fromJson(dJson):
+    def fromJson(dJson, fNested = False):
         """ Decodes a register accessor object. """
-        return ArmAccessorPermissionBase.kfnTypeMap[dJson['_type']](dJson);
+        return ArmAccessorPermissionBase.kfnTypeMap[dJson['_type']](dJson, fNested);
 
 
 class ArmAccessorPermissionMemReadWriteAccess(object):
@@ -2540,6 +2563,27 @@ class ArmAccessorPermissionSystemAccessList(ArmAccessorPermissionBase):
     def __init__(self, oCondition, aoAccesses):
         ArmAccessorPermissionBase.__init__(self, oCondition);
         self.aoAccesses = aoAccesses;
+
+    def toStringList(self, sIndent = ''):
+        asLines = [];
+        if self.oCondition and not self.oCondition.isBoolAndTrue():
+            asLines.append(sIndent + 'if (%s)' % (self.oCondition.toString(),));
+            sIndent += '    ';
+        for i, oChild in enumerate(self.aoAccesses):
+            sExtraIndent = '    ';
+            if oChild.oCondition and not oChild.oCondition.isBoolAndTrue():
+                asLines.append(sIndent + '%sif (%s)' % ('else ' if i > 0 else '', oChild.oCondition.toString(),));
+            elif i > 0:
+                asLines.append(sIndent + 'else');
+            else:
+                assert len(self.aoAccesses) == 1;
+                sExtraIndent = '';
+            if isinstance(oChild, ArmAccessorPermissionSystemAccessList):
+                asLines.extend(oChild.toStringList(sIndent + sExtraIndent));
+            else:
+                asLines.append(sIndent + sExtraIndent + oChild.oAccess.toString());
+        return asLines;
+
 
 
 class ArmAccessorBase(object):
@@ -2654,7 +2698,7 @@ class ArmAccessorSystem(ArmAccessorBase):
         ArmAccessorBase.__init__(self, dJson, oCondition);
         self.sName     = sName;
         self.oEncoding = oEncoding;
-        self.oAccess   = oAccess;   # Can be None!
+        self.oAccess   = oAccess    # Type: ArmAccessorPermissionSystemAccessList # Can be None!
 
 
 class ArmAccessorSystemArray(ArmAccessorSystem):
@@ -3365,14 +3409,16 @@ def PrintSpecs(oOptions):
             if oReg.sState != 'AArch64': continue; # temp
             print('   %s.%s' % (oReg.sState, oReg.sName, ));
             print('       Condition: %s' % (oReg.oCondition.toString(),));
-            if oReg.aoFieldsets:
-                for oFieldset in oReg.aoFieldsets: # type: ArmFieldset
-                    print('       Fieldsset: %s' % (oFieldset.toString(),));
+            for oFieldset in oReg.aoFieldsets: # type: ArmFieldset
+                print('       Fieldsset: %s' % (oFieldset.toString(),));
             for i, oAccessor in enumerate(oReg.aoAccessors): # type: int, ArmAccessorBase
                 if isinstance(oAccessor, ArmAccessorSystem):
                     print('       Accessors[%u]: encoding=%s' % (i, oAccessor.oEncoding.toString(),));
                     if not ArmAstBool.isBoolAndTrue(oAccessor.oCondition):
                         print('                     condition=%s' % (oAccessor.oCondition.toString(),));
+                    if oAccessor.oAccess: # ArmAccessorPermissionSystemAccessList
+                        asLines = oAccessor.oAccess.toStringList('                         ');
+                        print('\n'.join(asLines));
                 else:
                     print('       Accessors[%u]: %s' % (i, oAccessor,));
 
