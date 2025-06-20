@@ -1954,6 +1954,21 @@ static int vboxWinDrvInstSetupAPILog(PVBOXWINDRVINSTINTERNAL pCtx, unsigned cLas
 }
 
 /**
+ * Logs the setupapi(.dev).log file to the installation logging instance.
+ *
+ * @returns VBox status code.
+ * @param   hDrvInst            Windows driver installer handle to use.
+ * @param   cLastSections       Number of installation sections to log (i.e. tail).
+ */
+int VBoxWinDrvInstLogSetupAPI(VBOXWINDRVINST hDrvInst, unsigned cLastSections)
+{
+    PVBOXWINDRVINSTINTERNAL pCtx = hDrvInst;
+    VBOXWINDRVINST_VALID_RETURN(pCtx);
+
+    return vboxWinDrvInstSetupAPILog(pCtx, cLastSections);
+}
+
+/**
  * Callback implementation for invoking a section for uninstallation.
  *
  * @returns VBox status code.

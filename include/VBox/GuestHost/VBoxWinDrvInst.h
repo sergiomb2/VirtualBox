@@ -226,6 +226,12 @@ int VBoxWinDrvInstFileQueryVersion(const char *pszPath, char *pszVersion, size_t
 int VBoxWinDrvInstFileQueryVersionUtf16(PCRTUTF16 pwszPath, char *pszVersion, size_t cbVersion);
 /** @} */
 
+/** @name Log functions
+ * @{
+ */
+int VBoxWinDrvInstLogSetupAPI(VBOXWINDRVINST hDrvInst, unsigned cLastSections);
+/** @} */
+
 /** @} */
 
 RT_C_DECLS_END
