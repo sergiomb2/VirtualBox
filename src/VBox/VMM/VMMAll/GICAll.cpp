@@ -588,6 +588,7 @@ static uint16_t gicReDistGetHighestPriorityPendingIntr(PCGICCPU pGicCpu, uint32_
     uint16_t idxIntr   = UINT16_MAX;
     uint16_t uIntId    = GIC_INTID_RANGE_SPECIAL_NO_INTERRUPT;
     uint8_t  bPriority = GIC_IDLE_PRIORITY;
+    uint32_t fIntrGrp  = 0;
 
     uint32_t bmReDistIntrs[RT_ELEMENTS(pGicCpu->bmIntrPending)];
     AssertCompile(sizeof(pGicCpu->bmIntrPending) == sizeof(bmReDistIntrs));
@@ -598,13 +599,14 @@ static uint16_t gicReDistGetHighestPriorityPendingIntr(PCGICCPU pGicCpu, uint32_
         bmReDistIntrs[i] = (bmIntrPending & pGicCpu->bmIntrEnabled[i]) & ~pGicCpu->bmIntrActive[i];
 
         /* Discard interrupts if the group they belong to is not requested. */
-        if (fIntrGroupMask & GIC_INTR_GROUP_0)
-            bmReDistIntrs[i] &= ~pGicCpu->bmIntrGroup[i];
-        if (fIntrGroupMask & (GIC_INTR_GROUP_1NS | GIC_INTR_GROUP_1S))
+        if (!(fIntrGroupMask & GIC_INTR_GROUP_0))
             bmReDistIntrs[i] &= pGicCpu->bmIntrGroup[i];
+        if (!(fIntrGroupMask & (GIC_INTR_GROUP_1NS | GIC_INTR_GROUP_1S)))
+            bmReDistIntrs[i] &= ~pGicCpu->bmIntrGroup[i];
     }
 
     /* Among the collected interrupts, pick the one with the highest, non-idle priority. */
+    /** @todo r=aeichner Can we merge this into the above loop?. */
     {
         uint16_t       idxHighest = UINT16_MAX;
         const void    *pvIntrs    = &bmReDistIntrs[0];
@@ -616,8 +618,13 @@ static uint16_t gicReDistGetHighestPriorityPendingIntr(PCGICCPU pGicCpu, uint32_
             {
                 if (pGicCpu->abIntrPriority[idxPending] < bPriority)
                 {
+                    uint16_t const cIntrPerElement = sizeof(pGicCpu->bmIntrGroup[0]) * 8;
                     idxHighest = (uint16_t)idxPending;
                     bPriority  = pGicCpu->abIntrPriority[idxPending];
+                    fIntrGrp   =   RT_BOOL(  pGicCpu->bmIntrGroup[idxHighest / cIntrPerElement]
+                                           & RT_BIT_64(idxHighest % cIntrPerElement))
+                                 ? (GIC_INTR_GROUP_1NS | GIC_INTR_GROUP_1S)
+                                 : GIC_INTR_GROUP_0;
                 }
                 idxPending = ASMBitNextSet(pvIntrs, cIntrs, idxPending);
             } while (idxPending != -1);
@@ -641,7 +648,7 @@ static uint16_t gicReDistGetHighestPriorityPendingIntr(PCGICCPU pGicCpu, uint32_
     if (pIntr)
     {
         RT_BZERO(pIntr, sizeof(*pIntr));
-        pIntr->fIntrGroupMask = fIntrGroupMask;
+        pIntr->fIntrGroupMask = fIntrGrp;
         pIntr->uIntId         = uIntId;
         pIntr->idxIntr        = idxIntr;
         pIntr->bPriority      = bPriority;
@@ -665,9 +672,12 @@ static uint16_t gicReDistGetHighestPriorityPendingIntr(PCGICCPU pGicCpu, uint32_
  */
 static uint16_t gicDistGetHighestPriorityPendingIntr(PCGICDEV pGicDev, PCVMCPUCC pVCpu, uint32_t fIntrGroupMask, PGICINTR pIntr)
 {
+    Assert(fIntrGroupMask);
+
     uint16_t idxIntr   = UINT16_MAX;
     uint16_t uIntId    = GIC_INTID_RANGE_SPECIAL_NO_INTERRUPT;
     uint8_t  bPriority = GIC_IDLE_PRIORITY;
+    uint32_t fIntrGrp  = 0;
 
     uint32_t bmDistIntrs[RT_ELEMENTS(pGicDev->bmIntrPending)];
     AssertCompile(sizeof(pGicDev->bmIntrPending) == sizeof(bmDistIntrs));
@@ -678,13 +688,14 @@ static uint16_t gicDistGetHighestPriorityPendingIntr(PCGICDEV pGicDev, PCVMCPUCC
         bmDistIntrs[i] = (bmIntrPending & pGicDev->bmIntrEnabled[i]) & ~pGicDev->bmIntrActive[i];
 
         /* Discard interrupts if the group they belong to is not requested. */
-        if (fIntrGroupMask & GIC_INTR_GROUP_0)
-            bmDistIntrs[i] &= ~pGicDev->bmIntrGroup[i];
-        if (fIntrGroupMask & (GIC_INTR_GROUP_1NS | GIC_INTR_GROUP_1S))
+        if (!(fIntrGroupMask & GIC_INTR_GROUP_0))
             bmDistIntrs[i] &= pGicDev->bmIntrGroup[i];
+        if (!(fIntrGroupMask & (GIC_INTR_GROUP_1NS | GIC_INTR_GROUP_1S)))
+            bmDistIntrs[i] &= ~pGicDev->bmIntrGroup[i];
     }
 
     /* Among the collected interrupts, pick the one with the highest, non-idle priority. */
+    /** @todo r=aeichner Can we merge this into the above loop? */
     {
         uint16_t       idxHighest = UINT16_MAX;
         const void    *pvIntrs    = &bmDistIntrs[0];
@@ -698,8 +709,13 @@ static uint16_t gicDistGetHighestPriorityPendingIntr(PCGICDEV pGicDev, PCVMCPUCC
                 if (   pGicDev->abIntrPriority[idxPending] < bPriority
                     && pGicDev->au32IntrRouting[idxPending] == pVCpu->idCpu)
                 {
+                    uint16_t const cIntrPerElement = sizeof(pGicDev->bmIntrGroup[0]) * 8;
                     idxHighest = (uint16_t)idxPending;
                     bPriority  = pGicDev->abIntrPriority[idxPending];
+                    fIntrGrp   =   RT_BOOL(  pGicDev->bmIntrGroup[idxHighest / cIntrPerElement]
+                                           & RT_BIT_64(idxHighest % cIntrPerElement))
+                                 ? (GIC_INTR_GROUP_1NS | GIC_INTR_GROUP_1S)
+                                 : GIC_INTR_GROUP_0;
                 }
                 idxPending = ASMBitNextSet(pvIntrs, cIntrs, idxPending);
             } while (idxPending != -1);
@@ -723,7 +739,7 @@ static uint16_t gicDistGetHighestPriorityPendingIntr(PCGICDEV pGicDev, PCVMCPUCC
     if (pIntr)
     {
         RT_BZERO(pIntr, sizeof(*pIntr));
-        pIntr->fIntrGroupMask = fIntrGroupMask;
+        pIntr->fIntrGroupMask = fIntrGrp;
         pIntr->uIntId         = uIntId;
         pIntr->idxIntr        = idxIntr;
         pIntr->bPriority      = bPriority;
@@ -744,6 +760,9 @@ static uint16_t gicDistGetHighestPriorityPendingIntr(PCGICDEV pGicDev, PCVMCPUCC
  */
 static void gicReDistHasIrqPending(PCGICCPU pGicCpu, bool *pfIrq, bool *pfFiq)
 {
+    /** @todo r=aeichner Why have these separate booleans and not have the fIntrGroupMask directly as a
+     * GICDEV/GICCPU member which is updated during register writes? Would save us a few conditionals below
+     * in a hot code path. */
     bool const fIsGroup1Enabled = pGicCpu->fIntrGroup1Enabled;
     bool const fIsGroup0Enabled = pGicCpu->fIntrGroup0Enabled;
     Assert(!fIsGroup0Enabled);
@@ -757,17 +776,20 @@ static void gicReDistHasIrqPending(PCGICCPU pGicCpu, bool *pfIrq, bool *pfFiq)
         GICINTR Intr;
         uint32_t const fIntrGroupMask = (fIsGroup0Enabled ? GIC_INTR_GROUP_0 : 0)
                                       | (fIsGroup1Enabled ? GIC_INTR_GROUP_1S | GIC_INTR_GROUP_1NS : 0);
-        gicReDistGetHighestPriorityPendingIntr(pGicCpu, fIntrGroupMask, &Intr);
-        if (Intr.uIntId != GIC_INTID_RANGE_SPECIAL_NO_INTERRUPT)
+        if (fIntrGroupMask)
         {
-            /* Check if it has sufficient priority to be signalled to the PE. */
-            bool const fGroup0 = RT_BOOL(fIntrGroupMask & GIC_INTR_GROUP_0);
-            bool const fSufficientPriority = gicReDistIsSufficientPriority(pGicCpu, Intr.bPriority, fGroup0);
-            if (fSufficientPriority)
+            gicReDistGetHighestPriorityPendingIntr(pGicCpu, fIntrGroupMask, &Intr);
+            if (Intr.uIntId != GIC_INTID_RANGE_SPECIAL_NO_INTERRUPT)
             {
-                *pfFiq = fIsGroup0Enabled && RT_BOOL(Intr.fIntrGroupMask & GIC_INTR_GROUP_0);
-                *pfIrq = fIsGroup1Enabled && RT_BOOL(Intr.fIntrGroupMask & (GIC_INTR_GROUP_1S | GIC_INTR_GROUP_1NS));
-                return;
+                /* Check if it has sufficient priority to be signalled to the PE. */
+                bool const fGroup0 = RT_BOOL(fIntrGroupMask & GIC_INTR_GROUP_0);
+                bool const fSufficientPriority = gicReDistIsSufficientPriority(pGicCpu, Intr.bPriority, fGroup0);
+                if (fSufficientPriority)
+                {
+                    *pfFiq = fIsGroup0Enabled && RT_BOOL(Intr.fIntrGroupMask & GIC_INTR_GROUP_0);
+                    *pfIrq = fIsGroup1Enabled && RT_BOOL(Intr.fIntrGroupMask & (GIC_INTR_GROUP_1S | GIC_INTR_GROUP_1NS));
+                    return;
+                }
             }
         }
     }
@@ -788,6 +810,9 @@ static void gicReDistHasIrqPending(PCGICCPU pGicCpu, bool *pfIrq, bool *pfFiq)
  */
 static void gicDistHasIrqPendingForVCpu(PCGICDEV pGicDev, PCVMCPUCC pVCpu, bool *pfIrq, bool *pfFiq)
 {
+    /** @todo r=aeichner Why have these separate booleans and not have the fIntrGroupMask directly as a
+     * GICDEV/GICCPU member which is updated during register writes? Would save us a few conditionals below
+     * in a hot code path. */
     bool const fIsGroup1Enabled = pGicDev->fIntrGroup1Enabled;
     bool const fIsGroup0Enabled = pGicDev->fIntrGroup0Enabled;
     LogFlowFunc(("fIsGroup1Enabled=%RTbool fIsGroup0Enabled=%RTbool\n", fIsGroup1Enabled, fIsGroup0Enabled));
@@ -801,17 +826,20 @@ static void gicDistHasIrqPendingForVCpu(PCGICDEV pGicDev, PCVMCPUCC pVCpu, bool 
         GICINTR Intr;
         uint32_t const fIntrGroupMask = (fIsGroup0Enabled ? GIC_INTR_GROUP_0 : 0)
                                       | (fIsGroup1Enabled ? (GIC_INTR_GROUP_1S | GIC_INTR_GROUP_1NS) : 0);
-        gicDistGetHighestPriorityPendingIntr(pGicDev, pVCpu, fIntrGroupMask, &Intr);
-        if (Intr.uIntId != GIC_INTID_RANGE_SPECIAL_NO_INTERRUPT)
+        if (fIntrGroupMask)
         {
-            /* Check if it has sufficient priority to be signalled to the PE. */
-            bool const fGroup0 = RT_BOOL(fIntrGroupMask & GIC_INTR_GROUP_0);
-            bool const fSufficientPriority = gicReDistIsSufficientPriority(pGicCpu, Intr.bPriority, fGroup0);
-            if (fSufficientPriority)
+            gicDistGetHighestPriorityPendingIntr(pGicDev, pVCpu, fIntrGroupMask, &Intr);
+            if (Intr.uIntId != GIC_INTID_RANGE_SPECIAL_NO_INTERRUPT)
             {
-                *pfFiq = fIsGroup0Enabled && RT_BOOL(Intr.fIntrGroupMask & GIC_INTR_GROUP_0);
-                *pfIrq = fIsGroup1Enabled && RT_BOOL(Intr.fIntrGroupMask & (GIC_INTR_GROUP_1S | GIC_INTR_GROUP_1NS));
-                return;
+                /* Check if it has sufficient priority to be signalled to the PE. */
+                bool const fGroup0 = RT_BOOL(fIntrGroupMask & GIC_INTR_GROUP_0);
+                bool const fSufficientPriority = gicReDistIsSufficientPriority(pGicCpu, Intr.bPriority, fGroup0);
+                if (fSufficientPriority)
+                {
+                    *pfFiq = fIsGroup0Enabled && RT_BOOL(Intr.fIntrGroupMask & GIC_INTR_GROUP_0);
+                    *pfIrq = fIsGroup1Enabled && RT_BOOL(Intr.fIntrGroupMask & (GIC_INTR_GROUP_1S | GIC_INTR_GROUP_1NS));
+                    return;
+                }
             }
         }
     }
@@ -1792,7 +1820,8 @@ static uint16_t gicGetHighestPriorityPendingIntr(PCGICDEV pGicDev, PCVMCPUCC pVC
     /* Quick bailout if all interrupts are fully masked or if the active interrupt is at the highest priority. */
     uint16_t uIntId;
     if (   pGicCpu->bIntrPriorityMask
-        && pGicCpu->abRunningPriorities[pGicCpu->idxRunningPriority])
+        && pGicCpu->abRunningPriorities[pGicCpu->idxRunningPriority]
+        && fIntrGroupMask)
     {
         GICINTR IntrRedist;
         gicReDistGetHighestPriorityPendingIntr(pGicCpu, fIntrGroupMask, &IntrRedist);

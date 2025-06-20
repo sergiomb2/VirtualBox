@@ -151,6 +151,8 @@ typedef struct GICDEV
     /** @name Distributor register state.
      * @{
      */
+    /** @todo r=aeichner This could be made uint64_t so we have fewer loop iterations
+     *                   in gicDistGetHighestPriorityPendingIntr() etc. */
     /** Interrupt group bitmap. */
     uint32_t                    bmIntrGroup[64];
     /** Interrupt config bitmap (edge-triggered vs level-sensitive). */
