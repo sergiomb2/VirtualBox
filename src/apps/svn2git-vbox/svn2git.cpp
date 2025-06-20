@@ -245,7 +245,27 @@ typedef const S2GCTX *PCS2GCTX;
 *********************************************************************************************************************************/
 /** Verbosity level. */
 static int        g_cVerbosity = 0;
+/** Working directory. */
+static const char *g_pszWorkingDir = NULL;
+/** Temporary storage for a path. */
+static char       g_szPath[RTPATH_MAX + 1];
 
+
+static void s2gFilenameToPath(const char **ppszPath, const char *pszFilename)
+{
+    if (   RTPathStartsWithRoot(pszFilename)
+        || !g_pszWorkingDir)
+        RTStrCopy(g_szPath, sizeof(g_szPath), pszFilename);
+    else
+    {
+        /* Build the complete path. */
+        RTStrCopy(g_szPath, sizeof(g_szPath), g_pszWorkingDir);
+        RTStrCat(g_szPath, sizeof(g_szPath), RTPATH_SLASH_STR);
+        RTStrCat(g_szPath, sizeof(g_szPath), pszFilename);
+    }
+
+    *ppszPath = &g_szPath[0];
+}
 
 
 /**
@@ -260,6 +280,7 @@ static RTEXITCODE s2gUsage(const char *argv0)
               "Operations and Options (processed in place):\n"
               "  --verbose                                Noisier.\n"
               "  --quiet                                  Quiet execution.\n"
+              "  --working-directory <path>               The base directory to work from, all relative paths are prepended with this when opening files.\n"
               "  --rev-start <revision>                   The revision to start conversion at\n"
               "  --rev-end   <revision>                   The last revision to convert (default is last repository revision)\n"
               "  --dump-file <file path>                  File to dump the fast-import stream to\n"
@@ -326,6 +347,7 @@ static RTEXITCODE s2gParseArguments(PS2GCTX pThis, int argc, char **argv)
     {
         { "--config",                           'c', RTGETOPT_REQ_STRING  },
         { "--verbose",                          'v', RTGETOPT_REQ_NOTHING },
+        { "--working-directory",                'w', RTGETOPT_REQ_STRING  },
         { "--rev-start",                        's', RTGETOPT_REQ_UINT32  },
         { "--rev-end",                          'e', RTGETOPT_REQ_UINT32  },
         { "--dump-file",                        'd', RTGETOPT_REQ_STRING  },
@@ -355,6 +377,10 @@ static RTEXITCODE s2gParseArguments(PS2GCTX pThis, int argc, char **argv)
 
             case 'v':
                 g_cVerbosity++;
+                break;
+
+            case 'w':
+                g_pszWorkingDir = ValueUnion.psz;
                 break;
 
             case 's':
@@ -528,7 +554,10 @@ static RTEXITCODE s2gLoadConfigExternalMap(PS2GCTX pThis, const char *pszName, c
     RTJSONVAL hRoot = NIL_RTJSONVAL;
     RTERRINFOSTATIC ErrInfo;
     RTErrInfoInitStatic(&ErrInfo);
-    int rc = RTJsonParseFromFile(&hRoot, RTJSON_PARSE_F_JSON5, pszFilename, &ErrInfo.Core);
+
+    const char *pszPath = NULL;
+    s2gFilenameToPath(&pszPath, pszFilename);
+    int rc = RTJsonParseFromFile(&hRoot, RTJSON_PARSE_F_JSON5, pszPath, &ErrInfo.Core);
     if (RT_SUCCESS(rc))
     {
         RTEXITCODE rcExit = RTEXITCODE_SUCCESS;
@@ -2236,7 +2265,10 @@ static RTEXITCODE s2gSvnFindMatchingRevision(PS2GCTX pThis, uint32_t idRevIntern
 static RTEXITCODE s2gGitInit(PS2GCTX pThis)
 {
     uint32_t idRevLast = 0;
-    int rc = s2gGitRepositoryCreate(&pThis->hGitRepo, pThis->pszGitRepoPath, pThis->pszGitDefBranch,
+
+    const char *pszGitPath = NULL;
+    s2gFilenameToPath(&pszGitPath, pThis->pszGitRepoPath);
+    int rc = s2gGitRepositoryCreate(&pThis->hGitRepo, pszGitPath, pThis->pszGitDefBranch,
                                     pThis->pszDumpFilename, &idRevLast);
     if (RT_SUCCESS(rc))
     {
