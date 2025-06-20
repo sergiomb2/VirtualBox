@@ -207,6 +207,8 @@ typedef struct S2GCTX
     char            *pszGitRepoPath;
     /** The default git branch. */
     const char      *pszGitDefBranch;
+    /** The push origin of the git repository if configured. */
+    char            *pszGitPushOrigin;
 
     /** Path to the temporary directory in verification mode. */
     const char      *pszVerifyTmpPath;
@@ -317,6 +319,7 @@ static void s2gCtxInit(PS2GCTX pThis)
     pThis->pszSvnRepo                       = NULL;
     pThis->pszGitRepoPath                   = NULL;
     pThis->pszGitDefBranch                  = "main";
+    pThis->pszGitPushOrigin                 = NULL;
     pThis->pszDumpFilename                  = NULL;
     pThis->pszVerifyTmpPath                 = NULL;
     pThis->pszRevisionMapPath               = NULL;
@@ -895,7 +898,13 @@ static RTEXITCODE s2gLoadConfig(PS2GCTX pThis)
                 {
                     rc = RTJsonValueQueryStringByName(hRoot, "DefaultSvnAuthor", &pThis->pszAuthorDefault);
                     if (RT_SUCCESS(rc) || rc == VERR_NOT_FOUND)
-                        rc = VINF_SUCCESS;
+                    {
+                        rc = RTJsonValueQueryStringByName(hRoot, "GitPushOrigin", &pThis->pszGitPushOrigin);
+                        if (RT_SUCCESS(rc) || rc == VERR_NOT_FOUND)
+                            rc = VINF_SUCCESS;
+                        else
+                            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query \"GitPushOrigin\" from '%s': %Rrc", pThis->pszCfgFilename, rc);
+                    }
                     else
                         rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query \"DefaultSvnAuthor\" from '%s': %Rrc", pThis->pszCfgFilename, rc);
                 }
@@ -2404,7 +2413,7 @@ static RTEXITCODE s2gGitInit(PS2GCTX pThis)
     const char *pszGitPath = NULL;
     s2gFilenameToPath(&pszGitPath, pThis->pszGitRepoPath);
     int rc = s2gGitRepositoryCreate(&pThis->hGitRepo, pszGitPath, pThis->pszGitDefBranch,
-                                    pThis->pszDumpFilename, &idRevLast);
+                                    pThis->pszGitPushOrigin, pThis->pszDumpFilename, &idRevLast);
     if (RT_SUCCESS(rc))
     {
         if (pThis->idRevStart == UINT32_MAX)
@@ -3155,6 +3164,14 @@ int main(int argc, char *argv[])
                     if (!This.pszVerifyTmpPath)
                     {
                         rcExit = s2gSvnExport(&This);
+                        if (   rcExit == RTEXITCODE_SUCCESS
+                            && This.pszGitPushOrigin)
+                        {
+                            rc = s2gGitRepositoryPush(This.hGitRepo);
+                            if (RT_FAILURE(rc))
+                                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to push git repository '%s' to '%s': %Rrc",
+                                                        This.pszGitRepoPath, This.pszGitPushOrigin, rc);
+                        }
                         if (   rcExit == RTEXITCODE_SUCCESS
                             && This.pszRevisionMapPath)
                             rcExit = s2gExportRevisionMap(&This);

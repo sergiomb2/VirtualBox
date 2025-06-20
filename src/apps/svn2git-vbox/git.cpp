@@ -100,6 +100,8 @@ typedef struct S2GREPOSITORYGITINT
 
     /** The git repository path. */
     char            *pszGitRepoPath;
+    /** Flag whether this is an incremental update. */
+    bool            fIncremental;
 
     /* The dump file handle. */
     RTFILE          hFileDump;
@@ -380,7 +382,7 @@ static int s2gGitRepositoryMapCommitToSvnRev(const char *pszGitRepoPath, const c
 }
 
 DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *pszGitRepoPath, const char *pszDefaultBranch,
-                                       const char *pszDumpFilename, uint32_t *pidRevLast)
+                                       const char *pszGitPushOrigin, const char *pszDumpFilename, uint32_t *pidRevLast)
 {
     int rc = VINF_SUCCESS;
     bool fIncremental = RTPathExists(pszGitRepoPath);
@@ -400,11 +402,20 @@ DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *
                 rc = s2gGitExecWrapper(GIT_BINARY, pszGitRepoPath, &apszArgsCfg[0]);
                 if (RT_SUCCESS(rc))
                 {
-                    PS2GBRANCH pBranch = s2gGitBranchCreateWorker(pszDefaultBranch, strlen(pszDefaultBranch));
-                    if (pBranch)
-                        RTListAppend(&LstBranches, &pBranch->NdBranches);
-                    else
-                        rc = VERR_NO_MEMORY;
+                    if (pszGitPushOrigin)
+                    {
+                        const char *apszArgsRemote[] = { GIT_BINARY, "remote", "add", "origin", pszGitPushOrigin, NULL };
+                        rc = s2gGitExecWrapper(GIT_BINARY, pszGitRepoPath, &apszArgsRemote[0]);
+                    }
+
+                    if (RT_SUCCESS(rc))
+                    {
+                        PS2GBRANCH pBranch = s2gGitBranchCreateWorker(pszDefaultBranch, strlen(pszDefaultBranch));
+                        if (pBranch)
+                            RTListAppend(&LstBranches, &pBranch->NdBranches);
+                        else
+                            rc = VERR_NO_MEMORY;
+                    }
                 }
             }
         }
@@ -445,6 +456,7 @@ DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *
             {
                 s2gScratchBufInit(&pThis->BufModifiedFiles);
                 s2gScratchBufInit(&pThis->BufScratch);
+                pThis->fIncremental = fIncremental;
                 pThis->idCommitMark = 1;
                 pThis->hFileDump    = NIL_RTFILE;
                 RTListMove(&pThis->LstBranches, &LstBranches);
@@ -552,6 +564,30 @@ DECLHIDDEN(int) s2gGitRepositoryDone(S2GREPOSITORYGIT hGitRepo)
     {
         RTFileClose(pThis->hFileDump);
         pThis->hFileDump = NIL_RTFILE;
+    }
+
+    return rc;
+}
+
+
+DECLHIDDEN(int) s2gGitRepositoryPush(S2GREPOSITORYGIT hGitRepo)
+{
+    PS2GREPOSITORYGITINT pThis = hGitRepo;
+
+    if (pThis->fIncremental)
+    {
+        const char *apszArgsPush[] = { GIT_BINARY, "push", "--all", "origin", NULL };
+        return s2gGitExecWrapper(GIT_BINARY, pThis->pszGitRepoPath, &apszArgsPush[0]);
+    }
+
+    /* Do a possibly lenghty repack first. */
+    const char *apszArgsRepack[] = { GIT_BINARY, "repack", "-adf", NULL };
+    int rc = s2gGitExecWrapper(GIT_BINARY, pThis->pszGitRepoPath, &apszArgsRepack[0]);
+    if (RT_SUCCESS(rc))
+    {
+        /* Do the push now. */
+        const char *apszArgsRepack[] = { GIT_BINARY, "push", "--force", "--all", "origin", NULL };
+        rc = s2gGitExecWrapper(GIT_BINARY, pThis->pszGitRepoPath, &apszArgsRepack[0]);
     }
 
     return rc;
