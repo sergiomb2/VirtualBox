@@ -29,7 +29,7 @@ SUB_DEPTH = ../../..
 include $(KBUILD_PATH)/subheader.kmk
 
 # Lazy load the subversion libraries required for operation
-#SVN2GIT_WITH_LAZYLOAD := 1
+SVN2GIT_WITH_LAZYLOAD := 1
 
 PROGRAMS += svn2git-vbox
 
