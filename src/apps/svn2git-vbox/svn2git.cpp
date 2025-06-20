@@ -42,6 +42,7 @@
 #include <iprt/sha.h>
 #include <iprt/string.h>
 #include <iprt/stdarg.h>
+#include <iprt/stream.h>
 #include <iprt/time.h>
 
 #include "libsvn.h"
@@ -176,6 +177,9 @@ typedef struct S2GSVNREV
     /** List of changes in that revision, sorted by the path. */
     RTLISTANCHOR    LstChanges;
 
+    /** The string revision number (for use as svn:sync-xref-src-repo-rev
+     * in the commit message if the source repository doesn't has the property). */
+    char            szRev[32];
 } S2GSVNREV;
 /** Pointer to the SVN revision state. */
 typedef S2GSVNREV *PS2GSVNREV;
@@ -206,6 +210,16 @@ typedef struct S2GCTX
 
     /** Path to the temporary directory in verification mode. */
     const char      *pszVerifyTmpPath;
+    /** Path to the revision map to export in export mode, optional. */
+    const char      *pszRevisionMapPath;
+
+    /** Default author if the svn commit has none set. */
+    char            *pszAuthorDefault;
+    /** Flag whether the svn:sync-xref-src-repo-rev in the
+     * source repository is available for being used in the commit message. */
+    bool            fSvnSyncXrefSrcRepoRevAvail;
+    /** Flag whether to ignore non existing branch mappings. */
+    bool            fIgnoreNonExistingBranchMappings;
 
     /** @name Subversion related members.
      * @{ */
@@ -286,6 +300,7 @@ static RTEXITCODE s2gUsage(const char *argv0)
               "  --dump-file <file path>                  File to dump the fast-import stream to\n"
               "  --verify-result <tmp path>               Verify SVN and git repository for the given revisions,\n"
               "                                           takes a path to temporarily create a worktree for the git repository\n"
+              "  --export-revision-map <path>             Exports the SVN revision to commit hash map for the repository\n"
               , argv0);
     return RTEXITCODE_SUCCESS;
 }
@@ -296,14 +311,18 @@ static RTEXITCODE s2gUsage(const char *argv0)
  */
 static void s2gCtxInit(PS2GCTX pThis)
 {
-    pThis->idRevStart       = UINT32_MAX;
-    pThis->idRevEnd         = UINT32_MAX;
-    pThis->pszCfgFilename   = NULL;
-    pThis->pszSvnRepo       = NULL;
-    pThis->pszGitRepoPath   = NULL;
-    pThis->pszGitDefBranch  = "main";
-    pThis->pszDumpFilename  = NULL;
-    pThis->pszVerifyTmpPath = NULL;
+    pThis->idRevStart                       = UINT32_MAX;
+    pThis->idRevEnd                         = UINT32_MAX;
+    pThis->pszCfgFilename                   = NULL;
+    pThis->pszSvnRepo                       = NULL;
+    pThis->pszGitRepoPath                   = NULL;
+    pThis->pszGitDefBranch                  = "main";
+    pThis->pszDumpFilename                  = NULL;
+    pThis->pszVerifyTmpPath                 = NULL;
+    pThis->pszRevisionMapPath               = NULL;
+    pThis->pszAuthorDefault                 = NULL;
+    pThis->fSvnSyncXrefSrcRepoRevAvail      = false;
+    pThis->fIgnoreNonExistingBranchMappings = false;
 
     pThis->pPoolDefault     = NULL;
     pThis->pPoolScratch     = NULL;
@@ -352,6 +371,7 @@ static RTEXITCODE s2gParseArguments(PS2GCTX pThis, int argc, char **argv)
         { "--rev-end",                          'e', RTGETOPT_REQ_UINT32  },
         { "--dump-file",                        'd', RTGETOPT_REQ_STRING  },
         { "--verify-result",                    'y', RTGETOPT_REQ_STRING  },
+        { "--export-revision-map",              'm', RTGETOPT_REQ_STRING  },
     };
 
     RTGETOPTUNION   ValueUnion;
@@ -397,6 +417,10 @@ static RTEXITCODE s2gParseArguments(PS2GCTX pThis, int argc, char **argv)
 
             case 'y':
                 pThis->pszVerifyTmpPath = ValueUnion.psz;
+                break;
+
+            case 'm':
+                pThis->pszRevisionMapPath = ValueUnion.psz;
                 break;
 
             case 'V':
@@ -863,44 +887,65 @@ static RTEXITCODE s2gLoadConfig(PS2GCTX pThis)
         rc = RTJsonValueQueryStringByName(hRoot, "GitRepoPath", &pThis->pszGitRepoPath);
         if (RT_SUCCESS(rc))
         {
-            RTJSONVAL hAuthorMap = NIL_RTJSONVAL;
-            rc = RTJsonValueQueryByName(hRoot, "AuthorMap", &hAuthorMap);
+            rc = RTJsonValueQueryBooleanByName(hRoot, "IgnoreNonExistingBranchMappings", &pThis->fIgnoreNonExistingBranchMappings);
+            if (RT_SUCCESS(rc) || rc == VERR_NOT_FOUND)
+            {
+                rc = RTJsonValueQueryBooleanByName(hRoot, "SvnSyncXrefSrcRepoRevAvail", &pThis->fSvnSyncXrefSrcRepoRevAvail);
+                if (RT_SUCCESS(rc) || rc == VERR_NOT_FOUND)
+                {
+                    rc = RTJsonValueQueryStringByName(hRoot, "DefaultSvnAuthor", &pThis->pszAuthorDefault);
+                    if (RT_SUCCESS(rc) || rc == VERR_NOT_FOUND)
+                        rc = VINF_SUCCESS;
+                    else
+                        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query \"DefaultSvnAuthor\" from '%s': %Rrc", pThis->pszCfgFilename, rc);
+                }
+                else
+                    rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query \"SvnSyncXrefSrcRepoRevAvail\" from '%s': %Rrc", pThis->pszCfgFilename, rc);
+            }
+            else
+                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query \"IgnoreNonExistingBranchMappings\" from '%s': %Rrc", pThis->pszCfgFilename, rc);
+
             if (RT_SUCCESS(rc))
             {
-                rcExit = s2gLoadConfigAuthorMap(pThis, hAuthorMap);
-                RTJsonValueRelease(hAuthorMap);
-                if (rcExit == RTEXITCODE_SUCCESS)
+                RTJSONVAL hAuthorMap = NIL_RTJSONVAL;
+                rc = RTJsonValueQueryByName(hRoot, "AuthorMap", &hAuthorMap);
+                if (RT_SUCCESS(rc))
                 {
-                    RTJSONVAL hExternalsMap = NIL_RTJSONVAL;
-                    rc = RTJsonValueQueryByName(hRoot, "ExternalsMap", &hExternalsMap);
-                    if (RT_SUCCESS(rc))
+                    rcExit = s2gLoadConfigAuthorMap(pThis, hAuthorMap);
+                    RTJsonValueRelease(hAuthorMap);
+                    if (rcExit == RTEXITCODE_SUCCESS)
                     {
-                        rcExit = s2gLoadConfigExternals(pThis, hExternalsMap);
-                        RTJsonValueRelease(hExternalsMap);
-                    }
-                    else if (rc != VERR_NOT_FOUND)
-                        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query ExternalsMap from '%s': %Rrc",
-                                                pThis->pszCfgFilename, rc);
-                    else
-                        rc = VINF_SUCCESS;
-
-                    if (RT_SUCCESS(rc))
-                    {
-                        RTJSONVAL hBranchMap = NIL_RTJSONVAL;
-                        rc = RTJsonValueQueryByName(hRoot, "BranchMap", &hBranchMap);
+                        RTJSONVAL hExternalsMap = NIL_RTJSONVAL;
+                        rc = RTJsonValueQueryByName(hRoot, "ExternalsMap", &hExternalsMap);
                         if (RT_SUCCESS(rc))
                         {
-                            rcExit = s2gLoadConfigBranches(pThis, hBranchMap);
-                            RTJsonValueRelease(hBranchMap);
+                            rcExit = s2gLoadConfigExternals(pThis, hExternalsMap);
+                            RTJsonValueRelease(hExternalsMap);
                         }
-                        else
-                            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query BranchMap from '%s': %Rrc",
+                        else if (rc != VERR_NOT_FOUND)
+                            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query ExternalsMap from '%s': %Rrc",
                                                     pThis->pszCfgFilename, rc);
+                        else
+                            rc = VINF_SUCCESS;
+
+                        if (RT_SUCCESS(rc))
+                        {
+                            RTJSONVAL hBranchMap = NIL_RTJSONVAL;
+                            rc = RTJsonValueQueryByName(hRoot, "BranchMap", &hBranchMap);
+                            if (RT_SUCCESS(rc))
+                            {
+                                rcExit = s2gLoadConfigBranches(pThis, hBranchMap);
+                                RTJsonValueRelease(hBranchMap);
+                            }
+                            else
+                                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query BranchMap from '%s': %Rrc",
+                                                        pThis->pszCfgFilename, rc);
+                        }
                     }
                 }
+                else if (rc != VERR_NOT_FOUND)
+                    rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query AuthorMap from '%s': %Rrc", pThis->pszCfgFilename, rc);
             }
-            else if (rc != VERR_NOT_FOUND)
-                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query AuthorMap from '%s': %Rrc", pThis->pszCfgFilename, rc);
         }
         else
             rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query GitRepoPath from '%s': %Rrc", pThis->pszCfgFilename, rc);
@@ -1895,7 +1940,8 @@ static RTEXITCODE s2gSvnRevisionExportPaths(PS2GCTX pThis, PS2GSVNREV pRev)
             svn_fs_path_change2_t *pChange = (svn_fs_path_change2_t *)value;
 
             /* Ignore /branches */
-            if (!RTStrCmp(pszPath, "/branches"))
+            if (   !RTStrCmp(pszPath, "/branches")
+                || !RTStrCmp(pszPath, "/tags"))
                 continue;
 
             /* Paths containing .git are invalid as git thinks these are other repositories. */
@@ -1940,7 +1986,12 @@ static RTEXITCODE s2gSvnRevisionExportPaths(PS2GCTX pThis, PS2GSVNREV pRev)
         {
             pRev->pBranch = s2gBranchGetFromPath(pThis, pFirst->pszPath);
             if (!pRev->pBranch)
+            {
+                if (pThis->fIgnoreNonExistingBranchMappings)
+                    return RTEXITCODE_SUCCESS;
+
                 return RTMsgErrorExit(RTEXITCODE_FAILURE, "No branch mapping for path '%s'", pFirst->pszPath);
+            }
 
             /* Work on the changes. */
             PS2GSVNREVCHANGE pIt;
@@ -2039,38 +2090,52 @@ static RTEXITCODE s2gSvnInitRevision(PS2GCTX pThis, uint32_t idRev, PS2GSVNREV p
             svn_string_t *pSvnAuthor = (svn_string_t *)apr_hash_get(pRevPros, "svn:author",                 APR_HASH_KEY_STRING);
             svn_string_t *pSvnDate   = (svn_string_t *)apr_hash_get(pRevPros, "svn:date",                   APR_HASH_KEY_STRING);
             svn_string_t *pSvnLog    = (svn_string_t *)apr_hash_get(pRevPros, "svn:log",                    APR_HASH_KEY_STRING);
-            svn_string_t *pSvnXRef   = (svn_string_t *)apr_hash_get(pRevPros, "svn:sync-xref-src-repo-rev", APR_HASH_KEY_STRING);
 
-            AssertRelease(pSvnAuthor && pSvnDate && pSvnLog);
-            pSvnErr = svn_time_from_cstring(&pRev->AprTime, pSvnDate->data, pRev->pPoolRev);
-            if (!pSvnErr)
+            if (pThis->fSvnSyncXrefSrcRepoRevAvail)
             {
-                pRev->pszSvnAuthor = pSvnAuthor->data;
-                pRev->pszSvnLog    = pSvnLog->data;
-                pRev->pszSvnXref   = pSvnXRef ? pSvnXRef->data : NULL;
-
-                PCS2GAUTHOR pAuthor = (PCS2GAUTHOR)RTStrSpaceGet(&pThis->StrSpaceAuthors, pRev->pszSvnAuthor);
-                if (pAuthor)
-                {
-                    pRev->pszGitAuthor      = pAuthor->pszGitAuthor;
-                    pRev->pszGitAuthorEmail = pAuthor->pszGitEmail;
-
-                    RTTIMESPEC Tm;
-                    RTTimeSpecFromString(&Tm, pSvnDate->data);
-                    pRev->cEpochSecs = RTTimeSpecGetSeconds(&Tm);
-                    if (g_cVerbosity)
-                        RTMsgInfo("    %s %s %s\n", pRev->pszSvnAuthor, pSvnDate->data, pRev->pszSvnXref ? pRev->pszSvnXref : "");
-
-                    return RTEXITCODE_SUCCESS;
-                }
-                else
-                    rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Author '%s' is not known", pRev->pszSvnAuthor);
+                svn_string_t *pSvnXRef = (svn_string_t *)apr_hash_get(pRevPros, "svn:sync-xref-src-repo-rev", APR_HASH_KEY_STRING);
+                pRev->pszSvnXref = pSvnXRef ? pSvnXRef->data : NULL;
             }
             else
             {
-                svn_error_trace(pSvnErr);
-                rcExit = RTEXITCODE_FAILURE;
+                RTStrPrintf2(pRev->szRev, sizeof(pRev->szRev), "%u", idRev);
+                pRev->pszSvnXref = pRev->szRev;
             }
+
+            AssertRelease(pSvnDate && pSvnLog);
+            if (pSvnAuthor || pThis->pszAuthorDefault)
+            {
+                pSvnErr = svn_time_from_cstring(&pRev->AprTime, pSvnDate->data, pRev->pPoolRev);
+                if (!pSvnErr)
+                {
+                    pRev->pszSvnAuthor = pSvnAuthor ? pSvnAuthor->data : pThis->pszAuthorDefault;
+                    pRev->pszSvnLog    = pSvnLog->data;
+
+                    PCS2GAUTHOR pAuthor = (PCS2GAUTHOR)RTStrSpaceGet(&pThis->StrSpaceAuthors, pRev->pszSvnAuthor);
+                    if (pAuthor)
+                    {
+                        pRev->pszGitAuthor      = pAuthor->pszGitAuthor;
+                        pRev->pszGitAuthorEmail = pAuthor->pszGitEmail;
+
+                        RTTIMESPEC Tm;
+                        RTTimeSpecFromString(&Tm, pSvnDate->data);
+                        pRev->cEpochSecs = RTTimeSpecGetSeconds(&Tm);
+                        if (g_cVerbosity)
+                            RTMsgInfo("    %s %s %s\n", pRev->pszSvnAuthor, pSvnDate->data, pRev->pszSvnXref ? pRev->pszSvnXref : "");
+
+                        return RTEXITCODE_SUCCESS;
+                    }
+                    else
+                        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Author '%s' is not known", pRev->pszSvnAuthor);
+                }
+                else
+                {
+                    svn_error_trace(pSvnErr);
+                    rcExit = RTEXITCODE_FAILURE;
+                }
+            }
+            else
+                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "r%u has no author set but no default author is configured", idRev);
         }
         else
         {
@@ -2118,60 +2183,74 @@ static RTEXITCODE s2gSvnExportRevision(PS2GCTX pThis, uint32_t idRev)
             svn_string_t *pSvnAuthor = (svn_string_t *)apr_hash_get(pRevPros, "svn:author",                 APR_HASH_KEY_STRING);
             svn_string_t *pSvnDate   = (svn_string_t *)apr_hash_get(pRevPros, "svn:date",                   APR_HASH_KEY_STRING);
             svn_string_t *pSvnLog    = (svn_string_t *)apr_hash_get(pRevPros, "svn:log",                    APR_HASH_KEY_STRING);
-            svn_string_t *pSvnXRef   = (svn_string_t *)apr_hash_get(pRevPros, "svn:sync-xref-src-repo-rev", APR_HASH_KEY_STRING);
 
-            AssertRelease(pSvnAuthor && pSvnDate && pSvnLog);
-            pSvnErr = svn_time_from_cstring(&Rev.AprTime, pSvnDate->data, Rev.pPoolRev);
-            if (!pSvnErr)
+            if (pThis->fSvnSyncXrefSrcRepoRevAvail)
             {
-                Rev.pszSvnAuthor = pSvnAuthor->data;
-                Rev.pszSvnLog    = pSvnLog->data;
-                Rev.pszSvnXref   = pSvnXRef ? pSvnXRef->data : NULL;
-
-                PCS2GAUTHOR pAuthor = (PCS2GAUTHOR)RTStrSpaceGet(&pThis->StrSpaceAuthors, Rev.pszSvnAuthor);
-                if (pAuthor)
-                {
-                    Rev.pszGitAuthor      = pAuthor->pszGitAuthor;
-                    Rev.pszGitAuthorEmail = pAuthor->pszGitEmail;
-
-                    RTTIMESPEC Tm;
-                    RTTimeSpecFromString(&Tm, pSvnDate->data);
-                    Rev.cEpochSecs = RTTimeSpecGetSeconds(&Tm);
-                    if (g_cVerbosity)
-                        RTMsgInfo("    %s %s %s\n", Rev.pszSvnAuthor, pSvnDate->data, Rev.pszSvnXref ? Rev.pszSvnXref : "");
-
-                    int rc = s2gGitTransactionStart(pThis->hGitRepo);
-                    if (RT_SUCCESS(rc))
-                    {
-                        rcExit = s2gSvnRevisionExportPaths(pThis, &Rev);
-                        if (   rcExit == RTEXITCODE_SUCCESS
-                            && Rev.pBranch)
-                        {
-                            size_t cchRevLog = strlen(Rev.pszSvnLog);
-
-                            s2gScratchBufReset(&pThis->BufScratch);
-                            rc = s2gScratchBufPrintf(&pThis->BufScratch, "%s%s\nsvn:sync-xref-src-repo-rev: r%s\n",
-                                                     Rev.pszSvnLog, Rev.pszSvnLog[cchRevLog] == '\n' ? "" : "\n",
-                                                     Rev.pszSvnXref);
-                            if (RT_SUCCESS(rc))
-                                rc = s2gGitTransactionCommit(pThis->hGitRepo, Rev.pszGitAuthor, Rev.pszGitAuthorEmail,
-                                                             pThis->BufScratch.pbBuf, Rev.cEpochSecs, Rev.pBranch->pszGitBranch,
-                                                             Rev.idRev);
-                            if (RT_FAILURE(rc))
-                                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to commit git transaction with: %Rrc", rc);
-                        }
-                    }
-                    else
-                        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to start new git transaction with: %Rrc", rc);
-                }
-                else
-                    rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Author '%s' is not known", Rev.pszSvnAuthor);
+                svn_string_t *pSvnXRef = (svn_string_t *)apr_hash_get(pRevPros, "svn:sync-xref-src-repo-rev", APR_HASH_KEY_STRING);
+                Rev.pszSvnXref = pSvnXRef ? pSvnXRef->data : NULL;
             }
             else
             {
-                svn_error_trace(pSvnErr);
-                rcExit = RTEXITCODE_FAILURE;
+                RTStrPrintf2(Rev.szRev, sizeof(Rev.szRev), "%u", idRev);
+                Rev.pszSvnXref = Rev.szRev;
             }
+
+            AssertRelease(pSvnDate && pSvnLog);
+            if (pSvnAuthor || pThis->pszAuthorDefault)
+            {
+                pSvnErr = svn_time_from_cstring(&Rev.AprTime, pSvnDate->data, Rev.pPoolRev);
+                if (!pSvnErr)
+                {
+                    Rev.pszSvnAuthor = pSvnAuthor ? pSvnAuthor->data : pThis->pszAuthorDefault;
+                    Rev.pszSvnLog    = pSvnLog->data;
+
+                    PCS2GAUTHOR pAuthor = (PCS2GAUTHOR)RTStrSpaceGet(&pThis->StrSpaceAuthors, Rev.pszSvnAuthor);
+                    if (pAuthor)
+                    {
+                        Rev.pszGitAuthor      = pAuthor->pszGitAuthor;
+                        Rev.pszGitAuthorEmail = pAuthor->pszGitEmail;
+
+                        RTTIMESPEC Tm;
+                        RTTimeSpecFromString(&Tm, pSvnDate->data);
+                        Rev.cEpochSecs = RTTimeSpecGetSeconds(&Tm);
+                        if (g_cVerbosity)
+                            RTMsgInfo("    %s %s %s\n", Rev.pszSvnAuthor, pSvnDate->data, Rev.pszSvnXref ? Rev.pszSvnXref : "");
+
+                        int rc = s2gGitTransactionStart(pThis->hGitRepo);
+                        if (RT_SUCCESS(rc))
+                        {
+                            rcExit = s2gSvnRevisionExportPaths(pThis, &Rev);
+                            if (   rcExit == RTEXITCODE_SUCCESS
+                                && Rev.pBranch)
+                            {
+                                size_t cchRevLog = strlen(Rev.pszSvnLog);
+
+                                s2gScratchBufReset(&pThis->BufScratch);
+                                rc = s2gScratchBufPrintf(&pThis->BufScratch, "%s%s\nsvn:sync-xref-src-repo-rev: r%s\n",
+                                                         Rev.pszSvnLog, Rev.pszSvnLog[cchRevLog] == '\n' ? "" : "\n",
+                                                         Rev.pszSvnXref);
+                                if (RT_SUCCESS(rc))
+                                    rc = s2gGitTransactionCommit(pThis->hGitRepo, Rev.pszGitAuthor, Rev.pszGitAuthorEmail,
+                                                                 pThis->BufScratch.pbBuf, Rev.cEpochSecs, Rev.pBranch->pszGitBranch,
+                                                                 Rev.idRev);
+                                if (RT_FAILURE(rc))
+                                    rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to commit git transaction with: %Rrc", rc);
+                            }
+                        }
+                        else
+                            rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to start new git transaction with: %Rrc", rc);
+                    }
+                    else
+                        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Author '%s' is not known", Rev.pszSvnAuthor);
+                }
+                else
+                {
+                    svn_error_trace(pSvnErr);
+                    rcExit = RTEXITCODE_FAILURE;
+                }
+            }
+            else
+                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "r%u has no author set but no default author is configured", idRev);
         }
         else
         {
@@ -2199,7 +2278,63 @@ static RTEXITCODE s2gSvnExport(PS2GCTX pThis)
             return rcExit;
     }
 
+    int rc = s2gGitRepositoryDone(pThis->hGitRepo);
+    if (RT_FAILURE(rc))
+        return RTMsgErrorExit(RTEXITCODE_FAILURE, "Flushing git repository '%s' failed: %Rrc",
+                              pThis->pszGitRepoPath, rc);
+
     return RTEXITCODE_SUCCESS;
+}
+
+
+static RTEXITCODE s2gExportRevisionMap(PS2GCTX pThis)
+{
+    PS2GGITCOMMIT2SVNREV paCommits = NULL;
+    uint32_t cCommits = 0;
+    int rc = s2gGitRepositoryQueryCommits(pThis->hGitRepo, &paCommits, &cCommits);
+    if (RT_FAILURE(rc))
+        return RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to query commit list from git repository '%s': %Rrc",
+                              pThis->pszGitRepoPath, rc);
+
+    const char *pszPath = NULL;
+    s2gFilenameToPath(&pszPath, pThis->pszRevisionMapPath);
+
+    PRTSTREAM pStream = NULL;
+    rc = RTStrmOpen(pszPath, "wt", &pStream);
+    if (RT_FAILURE(rc))
+    {
+        RTMemFree(paCommits);
+        return RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to create revision map '%s': %Rrc",
+                              pszPath, rc);
+    }
+
+    RTEXITCODE rcExit = RTEXITCODE_SUCCESS;
+    int cch = RTStrmPrintf(pStream, "{\n");
+    if (cch == 2)
+    {
+        for (uint32_t i = 0; i < cCommits; i++)
+        {
+            cch = RTStrmPrintf(pStream, "%s: %u,\n", paCommits[i].szCommitHash, paCommits[i].idSvnRev);
+            if (cch < RTSHA1_DIGEST_LEN + 4 + 1)
+            {
+                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to write revision map '%s'", pszPath);
+                break;
+            }
+        }
+
+        if (rcExit == RTEXITCODE_SUCCESS)
+        {
+            cch = RTStrmPrintf(pStream, "}\n");
+            if (cch != 2)
+                rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to write revision map '%s'", pszPath);
+        }
+    }
+    else
+        rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "Failed to write revision map '%s'", pszPath);
+
+    RTMemFree(paCommits);
+    RTStrmClose(pStream);
+    return rcExit;
 }
 
 
@@ -2719,14 +2854,6 @@ static RTEXITCODE s2gSvnVerifyIgnores(PS2GCTX pThis, PS2GSVNREV pRev, const char
                     else
                         rcExit = RTMsgErrorExit(RTEXITCODE_FAILURE, "'%s' and '%s' differ in size (%RU64 vs %zu)",
                                                 pszSvnPath, szGitPath, pThis->BufScratch.offBuf, cbGitFile);
-                    if (rcExit == RTEXITCODE_FAILURE)
-                    {
-                        AssertFailed();
-                        RTFILE hFile;
-                        RTFileOpen(&hFile, "/tmp/out", RTFILE_O_WRITE | RTFILE_O_CREATE_REPLACE | RTFILE_O_DENY_NONE);
-                        RTFileWrite(hFile, pThis->BufScratch.pbBuf, pThis->BufScratch.offBuf, NULL);
-                        RTFileClose(hFile);
-                    }
                     RTFileReadAllFree(pvFile, cbGitFile);
                 }
                 else
@@ -3026,7 +3153,12 @@ int main(int argc, char *argv[])
                     }
 
                     if (!This.pszVerifyTmpPath)
+                    {
                         rcExit = s2gSvnExport(&This);
+                        if (   rcExit == RTEXITCODE_SUCCESS
+                            && This.pszRevisionMapPath)
+                            rcExit = s2gExportRevisionMap(&This);
+                    }
                     else
                         rcExit = s2gSvnVerify(&This);
                 }

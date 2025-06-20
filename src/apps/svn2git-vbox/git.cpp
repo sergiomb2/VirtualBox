@@ -392,7 +392,7 @@ DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *
         rc = RTDirCreate(pszGitRepoPath, 0700, RTDIRCREATE_FLAGS_NO_SYMLINKS);
         if (RT_SUCCESS(rc))
         {
-            const char *apszArgs[] = { GIT_BINARY, "--bare", "init", NULL };
+            const char *apszArgs[] = { GIT_BINARY, "--bare", "init", "--initial-branch", pszDefaultBranch, NULL };
             rc = s2gGitExecWrapper(GIT_BINARY, pszGitRepoPath, &apszArgs[0]);
             if (RT_SUCCESS(rc))
             {
@@ -520,23 +520,55 @@ DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *
 }
 
 
-DECLHIDDEN(int) s2gGitRepositoryClose(S2GREPOSITORYGIT hGitRepo)
+DECLHIDDEN(int) s2gGitRepositoryFlush(S2GREPOSITORYGIT hGitRepo)
 {
     PS2GREPOSITORYGITINT pThis = hGitRepo;
-    s2gGitWrite(pThis, "checkpoint\n", sizeof("checkpoint\n") - 1);
+    return s2gGitWrite(pThis, "checkpoint\n", sizeof("checkpoint\n") - 1);
+}
+
+
+DECLHIDDEN(int) s2gGitRepositoryDone(S2GREPOSITORYGIT hGitRepo)
+{
+    PS2GREPOSITORYGITINT pThis = hGitRepo;
+
+    int rc = s2gGitRepositoryFlush(hGitRepo);
+    if (RT_FAILURE(rc))
+        return rc;
+
     RTPipeClose(pThis->hPipeWrite);
+    pThis->hPipeWrite = NIL_RTPIPE;
 
     RTPROCSTATUS Sts;
-    int rc = RTProcWait(pThis->hProcFastImport, RTPROCWAIT_FLAGS_BLOCK, &Sts);
+    rc = RTProcWait(pThis->hProcFastImport, RTPROCWAIT_FLAGS_BLOCK, &Sts);
     if (RT_SUCCESS(rc))
     {
         if (   Sts.enmReason != RTPROCEXITREASON_NORMAL
             || Sts.iStatus != 0)
             rc = VERR_INVALID_HANDLE; /** @todo */
+        pThis->hProcFastImport = NIL_RTPROCESS;
     }
 
     if (pThis->hFileDump != NIL_RTFILE)
+    {
         RTFileClose(pThis->hFileDump);
+        pThis->hFileDump = NIL_RTFILE;
+    }
+
+    return rc;
+}
+
+
+DECLHIDDEN(int) s2gGitRepositoryClose(S2GREPOSITORYGIT hGitRepo)
+{
+    PS2GREPOSITORYGITINT pThis = hGitRepo;
+
+    int rc = VINF_SUCCESS;
+    if (pThis->hPipeWrite != NIL_RTPIPE)
+    {
+        rc = s2gGitRepositoryDone(hGitRepo);
+        if (RT_FAILURE(rc))
+            return rc;
+    }
 
     s2gScratchBufFree(&pThis->BufModifiedFiles);
     s2gScratchBufFree(&pThis->BufScratch);

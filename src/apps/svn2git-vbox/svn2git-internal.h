@@ -165,6 +165,8 @@ typedef const S2GGITCOMMIT2SVNREV *PCS2GGITCOMMIT2SVNREV;
 
 DECLHIDDEN(int) s2gGitRepositoryCreate(PS2GREPOSITORYGIT phGitRepo, const char *pszGitRepoPath, const char *pszDefaultBranch,
                                        const char *pszDumpFilename, uint32_t *pidRevLast);
+DECLHIDDEN(int) s2gGitRepositoryFlush(S2GREPOSITORYGIT hGitRepo);
+DECLHIDDEN(int) s2gGitRepositoryDone(S2GREPOSITORYGIT hGitRepo);
 DECLHIDDEN(int) s2gGitRepositoryClose(S2GREPOSITORYGIT hGitRepo);
 DECLHIDDEN(int) s2gGitRepositoryClone(S2GREPOSITORYGIT hGitRepo, const char *pszWorktree);
 DECLHIDDEN(int) s2gGitRepositoryCheckout(const char *pszWorktree, const char *pszCommitHash);
