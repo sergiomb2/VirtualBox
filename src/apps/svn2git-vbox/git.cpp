@@ -586,8 +586,8 @@ DECLHIDDEN(int) s2gGitRepositoryPush(S2GREPOSITORYGIT hGitRepo)
     if (RT_SUCCESS(rc))
     {
         /* Do the push now. */
-        const char *apszArgsRepack[] = { GIT_BINARY, "push", "--force", "--all", "origin", NULL };
-        rc = s2gGitExecWrapper(GIT_BINARY, pThis->pszGitRepoPath, &apszArgsRepack[0]);
+        const char *apszArgsPush[] = { GIT_BINARY, "push", "--force", "--all", "origin", NULL };
+        rc = s2gGitExecWrapper(GIT_BINARY, pThis->pszGitRepoPath, &apszArgsPush[0]);
     }
 
     return rc;
