@@ -720,6 +720,7 @@ HRESULT PlatformProperties::getSupportedGfxControllerTypes(std::vector<GraphicsC
                 GraphicsControllerType_Null,
                 GraphicsControllerType_QemuRamFB
 #ifdef VBOX_WITH_VMSVGA
+              , GraphicsControllerType_VBoxSVGA
               , GraphicsControllerType_VMSVGA
 #endif
             };
