@@ -304,11 +304,13 @@ static NTSTATUS svgaHwStart(VBOXWDDM_EXT_VMSVGA *pSvga)
     pSvga->u32MaxTextureLevels = ASMBitLastSetU32(RT_MAX(pSvga->u32MaxTextureWidth, pSvga->u32MaxTextureHeight));
 
     NTSTATUS Status = STATUS_SUCCESS;
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     if (!pSvga->fMMIO)
     {
         Status = SvgaFifoInit(pSvga);
         AssertReturn(NT_SUCCESS(Status), Status);
     }
+#endif
 
     SVGARegWrite(pSvga, SVGA_REG_TRACES, 0);
     SVGARegWrite(pSvga, SVGA_REG_CONFIG_DONE, 1);
@@ -324,7 +326,7 @@ static NTSTATUS svgaHwStart(VBOXWDDM_EXT_VMSVGA *pSvga)
 
     if (pSvga->pCBState)
     {
-        svgaCBContextEnable(pSvga, SVGA_CB_CONTEXT_0, true);
+        Status = svgaCBContextEnable(pSvga, SVGA_CB_CONTEXT_0, true);
         AssertReturn(NT_SUCCESS(Status), Status);
     }
 

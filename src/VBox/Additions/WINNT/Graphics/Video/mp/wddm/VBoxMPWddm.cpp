@@ -26,10 +26,14 @@
  */
 
 #include "VBoxMPWddm.h"
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
 #include "common/VBoxMPCommon.h"
 #include "common/VBoxMPHGSMI.h"
+#endif
 #include "VBoxMPVidPn.h"
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
 #include "VBoxMPLegacy.h"
+#endif
 
 #include <iprt/alloc.h>
 #include <iprt/asm.h>
@@ -56,6 +60,11 @@ DWORD g_VBoxLogUm = VBOXWDDM_CFG_LOG_UM_BACKDOOR;
 DWORD g_VBoxLogUm = 0;
 #endif
 DWORD g_RefreshRate = 0;
+#if !(defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86))
+/* Assigned in DriverEntry */
+bool g_f3DSupported = FALSE;
+int g_cDisplays = 1;
+#endif
 
 /* Whether the driver is display-only (no 3D) for Windows 8 or newer guests. */
 DWORD g_VBoxDisplayOnly = 0;
@@ -192,6 +201,7 @@ DECLINLINE(PVBOXWDDM_ALLOCATION) vboxWddmGetAllocationFromHandle(PVBOXMP_DEVEXT 
     return (PVBOXWDDM_ALLOCATION)pDevExt->u.primary.DxgkInterface.DxgkCbGetHandleData(&GhData);
 }
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
 int vboxWddmGhDisplayPostInfoScreen(PVBOXMP_DEVEXT pDevExt, const VBOXWDDM_ALLOC_DATA *pAllocData, const POINT * pVScreenPos, uint16_t fFlags)
 {
     VBVAINFOSCREEN RT_UNTRUSTED_VOLATILE_HOST *pScreen =
@@ -318,6 +328,7 @@ NTSTATUS vboxWddmGhDisplaySetMode(PVBOXMP_DEVEXT pDevExt, const VBOXWDDM_ALLOC_D
 
     return STATUS_SUCCESS;
 }
+#endif /* defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86) */
 
 static uint16_t vboxWddmCalcScreenFlags(PVBOXMP_DEVEXT pDevExt, bool fValidAlloc, bool fPowerOff, bool fDisabled)
 {
@@ -344,6 +355,7 @@ static uint16_t vboxWddmCalcScreenFlags(PVBOXMP_DEVEXT pDevExt, bool fValidAlloc
     return u16Flags;
 }
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
 NTSTATUS vboxWddmGhDisplaySetInfoLegacy(PVBOXMP_DEVEXT pDevExt, const VBOXWDDM_ALLOC_DATA *pAllocData, const POINT * pVScreenPos, uint8_t u8CurCyncState, bool fPowerOff, bool fDisabled)
 {
     RT_NOREF(u8CurCyncState);
@@ -631,6 +643,7 @@ PVBOXSHGSMI vboxWddmHgsmiGetHeapFromCmdOffset(PVBOXMP_DEVEXT pDevExt, HGSMIOFFSE
         return &VBoxCommonFromDeviceExt(pDevExt)->guestCtx.heapCtx;
     return NULL;
 }
+#endif /* defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86) */
 
 NTSTATUS vboxWddmPickResources(PVBOXMP_DEVEXT pDevExt, PDXGK_DEVICE_INFO pDeviceInfo, PVBOXWDDM_HWRESOURCES pHwResources)
 {
@@ -646,6 +659,7 @@ NTSTATUS vboxWddmPickResources(PVBOXMP_DEVEXT pDevExt, PDXGK_DEVICE_INFO pDevice
     memset(pHwResources, 0, sizeof (*pHwResources));
     pHwResources->cbVRAM = VBE_DISPI_TOTAL_VIDEO_MEMORY_BYTES;
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     VBVO_PORT_WRITE_U16(VBE_DISPI_IOPORT_INDEX, VBE_DISPI_INDEX_ID);
     VBVO_PORT_WRITE_U16(VBE_DISPI_IOPORT_DATA, VBE_DISPI_ID2);
     DispiId = VBVO_PORT_READ_U16(VBE_DISPI_IOPORT_DATA);
@@ -664,6 +678,10 @@ NTSTATUS vboxWddmPickResources(PVBOXMP_DEVEXT pDevExt, PDXGK_DEVICE_INFO pDevice
        pHwResources->cbVRAM = VBVO_PORT_READ_U32(VBE_DISPI_IOPORT_DATA);
        if (VBoxHGSMIIsSupported ())
        {
+#else
+    /* Only VMSVGA3 based VBoxSVGA is supported on ARM. */
+    RT_NOREF(DispiId);
+#endif
            /* Fetch as many resources as needed and ignore any additional resources for forward compatibility. */
            int cMemoryResources = 0;
            int cPortResources = 0;
@@ -714,10 +732,16 @@ NTSTATUS vboxWddmPickResources(PVBOXMP_DEVEXT pDevExt, PDXGK_DEVICE_INFO pDevice
            if (cMemoryResources == 1)
            {
                /* Legacy VBoxVGA */
+#if !(defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86))
+               pDevExt->enmHwType = VBOXVIDEO_HWTYPE_VBOX;
+#endif
            }
            else if (cMemoryResources == 2 && cPortResources == 1)
            {
                /* VBoxSVGA */
+#if !(defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86))
+               pDevExt->enmHwType = VBOXVIDEO_HWTYPE_VMSVGA;
+#endif
            }
            else if (cMemoryResources == 2 && cPortResources == 0)
            {
@@ -727,12 +751,17 @@ NTSTATUS vboxWddmPickResources(PVBOXMP_DEVEXT pDevExt, PDXGK_DEVICE_INFO pDevice
                pHwResources->cbIO = pHwResources->cbFIFO;
                pHwResources->phFIFO.QuadPart = 0;
                pHwResources->cbFIFO = 0;
+#if !(defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86))
+               pHwResources->cbVRAM = pHwResources->ulApertureSize;
+               pDevExt->enmHwType = VBOXVIDEO_HWTYPE_VMSVGA;
+#endif
            }
            else
            {
                LOGREL(("WDDM: Unexpected: cMemoryResources %d, cPortResources %d\n", cMemoryResources, cPortResources));
                Status = STATUS_UNSUCCESSFUL;
            }
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
        }
        else
        {
@@ -746,6 +775,7 @@ NTSTATUS vboxWddmPickResources(PVBOXMP_DEVEXT pDevExt, PDXGK_DEVICE_INFO pDevice
         LOGREL(("VBE card not found, returning err"));
         Status = STATUS_UNSUCCESSFUL;
     }
+#endif
 
 
     return Status;
@@ -762,6 +792,7 @@ static void vboxWddmDevExtZeroinit(PVBOXMP_DEVEXT pDevExt, CONST PDEVICE_OBJECT 
 
     VBoxVidPnTargetsInit(pDevExt->aTargets, RT_ELEMENTS(pDevExt->aTargets), 0);
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     BOOLEAN f3DSupported = FALSE;
     uint32_t u32 = 0;
     if (VBoxVGACfgAvailable())
@@ -788,8 +819,13 @@ static void vboxWddmDevExtZeroinit(PVBOXMP_DEVEXT pDevExt, CONST PDEVICE_OBJECT 
         pDevExt->enmHwType = VBOXVIDEO_HWTYPE_VBOX;
         pDevExt->f3DEnabled = FALSE;
     }
+#else
+    /* Hw type is inferred in PickResources. */
+    pDevExt->f3DEnabled = g_f3DSupported;
+#endif
 }
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
 static void vboxWddmSetupDisplaysLegacy(PVBOXMP_DEVEXT pDevExt)
 {
     /* For WDDM, we simply store the number of monitors as we will deal with
@@ -886,11 +922,62 @@ static void vboxWddmSetupDisplaysLegacy(PVBOXMP_DEVEXT pDevExt)
             VBoxCommonFromDeviceExt(pDevExt)->bHGSMI = FALSE;
     }
 }
+#endif /* defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86) */
+
+static NTSTATUS vboxWddmMapAdapterMemory(PVBOXMP_COMMON pCommon, void **ppv, uint32_t ulOffset, uint32_t ulSize)
+{
+    PVBOXMP_DEVEXT pPEXT = VBoxCommonToPrimaryExt(pCommon);
+
+    LOGF(("0x%08X[0x%X]", ulOffset, ulSize));
+
+    if (!ulSize)
+    {
+        WARN(("Illegal length 0!"));
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    PHYSICAL_ADDRESS FrameBuffer;
+    FrameBuffer.QuadPart = VBoxCommonFromDeviceExt(pPEXT)->phVRAM.QuadPart + ulOffset;
+
+    PVOID VideoRamBase = NULL;
+    ULONG VideoRamLength = ulSize;
+    NTSTATUS ntStatus = pPEXT->u.primary.DxgkInterface.DxgkCbMapMemory(pPEXT->u.primary.DxgkInterface.DeviceHandle,
+            FrameBuffer,
+            VideoRamLength,
+            FALSE, /* IN BOOLEAN InIoSpace */
+            FALSE, /* IN BOOLEAN MapToUserMode */
+            MmNonCached, /* IN MEMORY_CACHING_TYPE CacheType */
+            &VideoRamBase /*OUT PVOID *VirtualAddress*/
+            );
+    Assert(ntStatus == STATUS_SUCCESS);
+    if (ntStatus == STATUS_SUCCESS)
+        *ppv = VideoRamBase;
+
+    LOGF(("Status = %x", ntStatus));
+    return ntStatus;
+}
+
+static void vboxWddmUnmapAdapterMemory(PVBOXMP_COMMON pCommon, void **ppv)
+{
+    PVBOXMP_DEVEXT pPEXT = VBoxCommonToPrimaryExt(pCommon);
+
+    if (*ppv)
+    {
+        NTSTATUS ntStatus;
+        ntStatus = pPEXT->u.primary.DxgkInterface.DxgkCbUnmapMemory(pPEXT->u.primary.DxgkInterface.DeviceHandle, *ppv);
+        Assert(ntStatus == STATUS_SUCCESS);
+    }
+
+    *ppv = NULL;
+}
+
 
 static NTSTATUS vboxWddmSetupDisplaysNew(PVBOXMP_DEVEXT pDevExt)
 {
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     if (!VBoxCommonFromDeviceExt(pDevExt)->bHGSMI)
         return STATUS_UNSUCCESSFUL;
+#endif
 
     ULONG cbAvailable = VBoxCommonFromDeviceExt(pDevExt)->cbVRAM
                             - VBoxCommonFromDeviceExt(pDevExt)->cbMiniportHeap
@@ -899,15 +986,10 @@ static NTSTATUS vboxWddmSetupDisplaysNew(PVBOXMP_DEVEXT pDevExt)
     /* vboxWddmVramCpuVisibleSize uses this value */
     pDevExt->cbVRAMCpuVisible = cbAvailable;
 
-    int rc = VBoxMPCmnMapAdapterMemory(VBoxCommonFromDeviceExt(pDevExt), (void**)&pDevExt->pvVisibleVram,
-                                   0, vboxWddmVramCpuVisibleSize(pDevExt));
-    if (RT_FAILURE(rc))
-    {
-        WARN(("VBoxMPCmnMapAdapterMemory failed, rc %d", rc));
-        return STATUS_UNSUCCESSFUL;
-    }
-
-    return STATUS_SUCCESS;
+    NTSTATUS Status = vboxWddmMapAdapterMemory(VBoxCommonFromDeviceExt(pDevExt), (void**)&pDevExt->pvVisibleVram,
+                                               0, vboxWddmVramCpuVisibleSize(pDevExt));
+    Assert(NT_SUCCESS(Status));
+    return Status;
 }
 
 static NTSTATUS vboxWddmSetupDisplays(PVBOXMP_DEVEXT pDevExt)
@@ -920,8 +1002,12 @@ static NTSTATUS vboxWddmSetupDisplays(PVBOXMP_DEVEXT pDevExt)
         return Status;
     }
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     vboxWddmSetupDisplaysLegacy(pDevExt);
     return VBoxCommonFromDeviceExt(pDevExt)->bHGSMI ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL;
+#else
+    AssertFailedReturn(STATUS_UNSUCCESSFUL);
+#endif /* defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86) */
 }
 
 static int vboxWddmFreeDisplays(PVBOXMP_DEVEXT pDevExt)
@@ -930,8 +1016,9 @@ static int vboxWddmFreeDisplays(PVBOXMP_DEVEXT pDevExt)
 
     Assert(pDevExt->pvVisibleVram);
     if (pDevExt->pvVisibleVram)
-        VBoxMPCmnUnmapAdapterMemory(VBoxCommonFromDeviceExt(pDevExt), (void**)&pDevExt->pvVisibleVram);
+        vboxWddmUnmapAdapterMemory(VBoxCommonFromDeviceExt(pDevExt), (void**)&pDevExt->pvVisibleVram);
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     if (!pDevExt->fCmdVbvaEnabled)
     {
         for (int i = VBoxCommonFromDeviceExt(pDevExt)->cDisplays-1; i >= 0; --i)
@@ -959,6 +1046,7 @@ static int vboxWddmFreeDisplays(PVBOXMP_DEVEXT pDevExt)
             AssertRC(rc);
         }
     }
+#endif /* defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86) */
 
     return rc;
 }
@@ -1082,6 +1170,7 @@ NTSTATUS DxgkDdiStartDevice(
                  * The host will however support both old and new interface to keep compatibility
                  * with old guest additions.
                  */
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
                 VBoxSetupDisplaysHGSMI(VBoxCommonFromDeviceExt(pDevExt),
                                        pDevExt->HwResources.phVRAM, pDevExt->HwResources.ulApertureSize, pDevExt->HwResources.cbVRAM,
                                        VBVACAPS_COMPLETEGCMD_BY_IOREAD | VBVACAPS_IRQ);
@@ -1092,13 +1181,28 @@ NTSTATUS DxgkDdiStartDevice(
                         VBoxFreeDisplaysHGSMI(VBoxCommonFromDeviceExt(pDevExt));
                 }
                 if (VBoxCommonFromDeviceExt(pDevExt)->bHGSMI)
+#else
+                /* Setup displays. */
+                VBoxCommonFromDeviceExt(pDevExt)->cDisplays = g_cDisplays;
+                VBoxCommonFromDeviceExt(pDevExt)->cbVRAM = pDevExt->HwResources.cbVRAM;
+                VBoxCommonFromDeviceExt(pDevExt)->phVRAM = pDevExt->HwResources.phVRAM;
+                VBoxCommonFromDeviceExt(pDevExt)->ulApertureSize = pDevExt->HwResources.ulApertureSize;
+                VBoxCommonFromDeviceExt(pDevExt)->u16SupportedScreenFlags = VBVA_SCREEN_F_ACTIVE
+                                                                          | VBVA_SCREEN_F_DISABLED
+                                                                          | VBVA_SCREEN_F_BLANK
+                                                                          | VBVA_SCREEN_F_BLANK2;
+
+                vboxWddmSetupDisplaysNew(pDevExt);
+#endif /* !(defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)) */
                 {
                     LOGREL(("using HGSMI"));
                     *NumberOfVideoPresentSources = VBoxCommonFromDeviceExt(pDevExt)->cDisplays;
                     *NumberOfChildren = VBoxCommonFromDeviceExt(pDevExt)->cDisplays;
                     LOG(("sources(%d), children(%d)", *NumberOfVideoPresentSources, *NumberOfChildren));
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
                     vboxVdmaDdiNodesInit(pDevExt);
+#endif
                     vboxVideoCmInit(&pDevExt->CmMgr);
                     vboxVideoCmInit(&pDevExt->SeamlessCtxMgr);
                     pDevExt->cContexts3D = 0;
@@ -1109,7 +1213,11 @@ NTSTATUS DxgkDdiStartDevice(
                     VBOXWDDM_CTXLOCK_INIT(pDevExt);
                     KeInitializeSpinLock(&pDevExt->SynchLock);
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
                     VBoxCommonFromDeviceExt(pDevExt)->fAnyX = VBoxVideoAnyWidthAllowed();
+#else
+                    VBoxCommonFromDeviceExt(pDevExt)->fAnyX = true;
+#endif
 #if 0
                     vboxShRcTreeInit(pDevExt);
 #endif
@@ -1237,6 +1345,7 @@ NTSTATUS DxgkDdiStartDevice(
                     }
 #endif
                 }
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
                 else
                 {
                     LOGREL(("HGSMI failed to initialize, returning err"));
@@ -1244,6 +1353,7 @@ NTSTATUS DxgkDdiStartDevice(
                     /** @todo report a better status */
                     Status = STATUS_UNSUCCESSFUL;
                 }
+#endif
             }
             else
             {
@@ -1300,8 +1410,10 @@ NTSTATUS DxgkDdiStopDevice(
 #endif
 
     int rc = vboxWddmFreeDisplays(pDevExt);
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     if (RT_SUCCESS(rc))
         VBoxFreeDisplaysHGSMI(VBoxCommonFromDeviceExt(pDevExt));
+#endif
     AssertRC(rc);
     if (RT_SUCCESS(rc))
     {
@@ -1680,7 +1792,7 @@ NTSTATUS APIENTRY DxgkDdiQueryAdapterInfo(
             memset(pCaps, 0, pQueryAdapterInfo->OutputDataSize);
 
             pCaps->HighestAcceptableAddress.LowPart = ~0UL;
-#ifdef RT_ARCH_AMD64
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_ARM64)
             /* driver talks to host in terms of page numbers when reffering to RAM
              * we use uint32_t field to pass page index to host, so max would be (~0UL) << PAGE_OFFSET,
              * which seems quite enough */
@@ -1919,6 +2031,12 @@ NTSTATUS APIENTRY DxgkDdiQueryAdapterInfo(
             LOGREL(("DXGKQAITYPE_QUERYSEGMENT3 treating as unsupported!"));
             Status = STATUS_NOT_SUPPORTED;
             break;
+
+#if defined(RT_ARCH_ARM64) || defined(RT_ARCH_ARM32)
+        case DXGKQAITYPE_64BITONLYCAPS:
+            memset(pQueryAdapterInfo->pOutputData, 0, pQueryAdapterInfo->OutputDataSize);
+            break;
+#endif
 
         default:
             WARN(("unsupported Type (%d)", pQueryAdapterInfo->Type));
@@ -2661,7 +2779,11 @@ static BOOLEAN vboxWddmCallIsrCb(PVOID Context)
 #endif
         return FALSE;
     }
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     return DxgkDdiInterruptRoutineLegacy(pDevExt, pdc->MessageNumber);
+#else
+    return FALSE;
+#endif
 }
 
 NTSTATUS vboxWddmCallIsr(PVBOXMP_DEVEXT pDevExt)
@@ -3079,6 +3201,7 @@ bool vboxWddmUpdatePointerShape(PVBOXMP_DEVEXT pDevExt, PVIDEO_POINTER_ATTRIBUTE
             }
         }
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
         /** @todo Hack: Use the legacy interface to handle visibility.
          * Eventually the VMSVGA WDDM driver should use the SVGA_FIFO_CURSOR_* interface.
          */
@@ -3089,13 +3212,21 @@ bool vboxWddmUpdatePointerShape(PVBOXMP_DEVEXT pDevExt, PVIDEO_POINTER_ATTRIBUTE
         {
             Status = STATUS_INVALID_PARAMETER;
         }
+#else
+        /// @todo VMSVGA cursor interface
+#endif
 
         return Status == STATUS_SUCCESS;
     }
-#endif
+#endif /* VBOX_WITH_VMSVGA */
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     /* VBOXVIDEO_HWTYPE_VBOX */
     return VBoxMPCmnUpdatePointerShape(VBoxCommonFromDeviceExt(pDevExt), pAttrs, cbLength);
+#else
+    RT_NOREF(cbLength);
+    return FALSE;
+#endif
 }
 
 static void vboxWddmHostPointerEnable(PVBOXMP_DEVEXT pDevExt, BOOLEAN fEnable)
@@ -3119,12 +3250,18 @@ static void vboxWddmHostPointerEnable(PVBOXMP_DEVEXT pDevExt, BOOLEAN fEnable)
  */
 static int vboxWddmReportCursorPosition(PVBOXMP_DEVEXT pDevExt, uint32_t xPos, uint32_t yPos)
 {
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     VIDEO_POINTER_POSITION Pos;
     RT_ZERO(Pos);
     Pos.Column = xPos;
     Pos.Row    = yPos;
 
     return VBoxMPCmnReportCursorPosition(VBoxCommonFromDeviceExt(pDevExt), &Pos);
+#else
+    /// @todo VMSVGA cursor interface
+    RT_NOREF(pDevExt, xPos, yPos);
+    return VINF_SUCCESS;
+#endif
 }
 
 NTSTATUS
@@ -3606,7 +3743,10 @@ DxgkDdiEscape(
                         pSource->AllocData.hostID = pAlloc->AllocData.hostID;
                         pSource->u8SyncState &= ~VBOXWDDM_HGSYNC_F_SYNCED_LOCATION;
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
+                        /* Unused for VBOXVIDEO_HWTYPE_VMSVGA. */
                         vboxWddmGhDisplayCheckSetInfo(pDevExt2);
+#endif
                     }
                 }
 
@@ -3749,7 +3889,11 @@ DxgkDdiEscape(
                     }
 #endif
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
                     vboxWddmDisplaySettingsCheckPos(pDevExt, i);
+#else
+                    AssertFailed();
+#endif
                 }
                 Status = STATUS_SUCCESS;
                 break;
@@ -3912,10 +4056,12 @@ DxgkDdiSetVidPnSourceAddress(
         return STATUS_INVALID_PARAMETER;
     }
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
 #ifdef VBOX_WITH_VMSVGA
     if (pDevExt->enmHwType != VBOXVIDEO_HWTYPE_VMSVGA)
 #endif
     vboxWddmDisplaySettingsCheckPos(pDevExt, pSetVidPnSourceAddress->VidPnSourceId);
+#endif /* defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86) */
 
     NTSTATUS Status = STATUS_SUCCESS;
     PVBOXWDDM_SOURCE pSource = &pDevExt->aSources[pSetVidPnSourceAddress->VidPnSourceId];
@@ -3971,7 +4117,11 @@ DxgkDdiSetVidPnSourceAddress(
     }
 #endif
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     vboxWddmGhDisplayCheckSetInfoFromSource(pDevExt, pSource);
+#else
+    AssertFailed();
+#endif
 
     LOGF(("LEAVE, status(0x%x), context(0x%x)", Status, hAdapter));
 
@@ -4000,10 +4150,12 @@ DxgkDdiSetVidPnSourceVisibility(
         return STATUS_INVALID_PARAMETER;
     }
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
 #ifdef VBOX_WITH_VMSVGA
     if (pDevExt->enmHwType != VBOXVIDEO_HWTYPE_VMSVGA)
 #endif
     vboxWddmDisplaySettingsCheckPos(pDevExt, pSetVidPnSourceVisibility->VidPnSourceId);
+#endif /* defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86) */
 
     NTSTATUS Status = STATUS_SUCCESS;
     PVBOXWDDM_SOURCE pSource = &pDevExt->aSources[pSetVidPnSourceVisibility->VidPnSourceId];
@@ -4156,7 +4308,11 @@ DxgkDdiCommitVidPn(
             break;
         }
 #endif
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
         vboxWddmGhDisplayCheckSetInfo(pDevExt);
+#else
+        AssertFailed();
+#endif
     } while (0);
 
     RTMemFree(paSources);
@@ -4585,6 +4741,7 @@ DxgkDdiCreateContext(
             Assert(pCreateContext->Flags.Value <= 2); /* 2 is a GDI context in Win7 */
             pContext->enmType = VBOXWDDM_CONTEXT_TYPE_SYSTEM;
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
             if (pDevExt->enmHwType == VBOXVIDEO_HWTYPE_VBOX)
             {
                 for (int i = 0; i < VBoxCommonFromDeviceExt(pDevExt)->cDisplays; ++i)
@@ -4592,6 +4749,7 @@ DxgkDdiCreateContext(
                     vboxWddmDisplaySettingsCheckPos(pDevExt, i);
                 }
             }
+#endif
             Status = STATUS_SUCCESS;
         }
         else
@@ -4693,7 +4851,12 @@ DxgkDdiDestroyContext(
                 if (pDevExt->fDisableTargetUpdate)
                 {
                     pDevExt->fDisableTargetUpdate = FALSE;
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
+                    /** @todo The function should not be used for VBOXVIDEO_HWTYPE_VMSVGA (and therefore for ARM).
+                     *        Probably the corresponding code in DxgkDdiCommitVidPn should be used here.
+                     */
                     vboxWddmGhDisplayCheckSetInfoEx(pDevExt, true);
+#endif
                 }
             }
             break;
@@ -4816,6 +4979,7 @@ static NTSTATUS APIENTRY DxgkDdiPresentDisplayOnly(
         return GaDxgkDdiPresentDisplayOnly(hAdapter, pPresentDisplayOnly);
     }
 #endif
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     PVBOXWDDM_SOURCE pSource = &pDevExt->aSources[pPresentDisplayOnly->VidPnSourceId];
     Assert(pSource->AllocData.Addr.SegmentId == 1);
     VBOXWDDM_ALLOC_DATA SrcAllocData;
@@ -4894,6 +5058,9 @@ static NTSTATUS APIENTRY DxgkDdiPresentDisplayOnly(
 
     LOGF(("LEAVE, hAdapter(0x%x)", hAdapter));
     return STATUS_SUCCESS;
+#else
+    AssertFailedReturn(STATUS_UNSUCCESSFUL);
+#endif /* !defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86) */
 }
 
 static NTSTATUS DxgkDdiStopDeviceAndReleasePostDisplayOwnership(
@@ -5012,8 +5179,12 @@ static BOOLEAN DxgkDdiInterruptRoutine(const PVOID MiniportDeviceContext,
     BOOLEAN const fVMSVGA = FALSE;
 #endif
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     BOOLEAN const fHGSMI = DxgkDdiInterruptRoutineLegacy(MiniportDeviceContext, MessageNumber);
     return fVMSVGA || fHGSMI;
+#else
+    return fVMSVGA;
+#endif
 }
 
 static VOID DxgkDdiDpcRoutine(const PVOID MiniportDeviceContext)
@@ -5023,7 +5194,9 @@ static VOID DxgkDdiDpcRoutine(const PVOID MiniportDeviceContext)
 #ifdef VBOX_WITH_VMSVGA
     GaDxgkDdiDpcRoutine(MiniportDeviceContext);
 #endif
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     DxgkDdiDpcRoutineLegacy(MiniportDeviceContext);
+#endif
 
     pDevExt->u.primary.DxgkInterface.DxgkCbNotifyDpc(pDevExt->u.primary.DxgkInterface.DeviceHandle);
 }
@@ -5124,6 +5297,7 @@ static NTSTATUS vboxWddmInitFullGraphicsDriver(IN PDRIVER_OBJECT pDriverObject, 
     {
         RT_NOREF(enmHwType);
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
         DriverInitializationData.DxgkDdiPatch             = DxgkDdiPatchLegacy;
         DriverInitializationData.DxgkDdiSubmitCommand     = DxgkDdiSubmitCommandLegacy;
         DriverInitializationData.DxgkDdiPreemptCommand    = DxgkDdiPreemptCommandLegacy;
@@ -5131,6 +5305,9 @@ static NTSTATUS vboxWddmInitFullGraphicsDriver(IN PDRIVER_OBJECT pDriverObject, 
         DriverInitializationData.DxgkDdiQueryCurrentFence = DxgkDdiQueryCurrentFenceLegacy;
         DriverInitializationData.DxgkDdiRender            = DxgkDdiRenderLegacy;
         DriverInitializationData.DxgkDdiPresent           = DxgkDdiPresentLegacy;
+#else
+        AssertFailed();
+#endif
     }
 
     DriverInitializationData.DxgkDdiQueryChildRelations = DxgkDdiQueryChildRelations;
@@ -5252,6 +5429,7 @@ DriverEntry(
     if (RT_SUCCESS(rc))
     {
         /* Check whether 3D is provided by the host. */
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
         VBOXVIDEO_HWTYPE enmHwType = VBOXVIDEO_HWTYPE_VBOX;
         BOOL f3DSupported = FALSE;
 
@@ -5301,6 +5479,15 @@ DriverEntry(
         }
 
         LOGREL(("WDDM: 3D is %ssupported, hardware type %d", f3DSupported? "": "not ", enmHwType));
+#else
+        VBOXVIDEO_HWTYPE enmHwType = VBOXVIDEO_HWTYPE_VMSVGA; /* ARM only supports VMSVGA3 based VBoxSVGA. */
+
+        /** @todo Query 3D and display count from the host. */
+        BOOL f3DSupported = FALSE;
+
+        g_f3DSupported = f3DSupported;
+        g_cDisplays = 1;
+#endif /* !(defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)) */
 
         if (NT_SUCCESS(Status))
         {

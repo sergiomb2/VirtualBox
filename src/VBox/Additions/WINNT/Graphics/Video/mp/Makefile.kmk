@@ -112,28 +112,31 @@ ifdef VBOX_WITH_WDDM
 
  VBoxWddm_SOURCES          = \
  	wddm/VBoxMPWddm.cpp \
- 	wddm/VBoxMPLegacy.cpp \
  	wddm/VBoxMPVidPn.cpp \
- 	wddm/VBoxMPVdma.cpp \
- 	wddm/VBoxMPShgsmi.cpp \
  	wddm/VBoxMPCm.cpp \
  	wddm/VBoxMPSa.cpp \
  	wddm/VBoxMPMisc.cpp \
  	wddm/VBoxWddm.rc \
  	wddm/VBoxMPRegistry.cpp \
  	wddm/VBoxMPVModes.cpp \
- 	common/VBoxMPUtils.cpp \
- 	common/VBoxMPCommon.cpp \
- 	common/VBoxMPHGSMI.cpp \
- 	$(PATH_ROOT)/src/VBox/Additions/common/VBoxVideo/HGSMIBase.cpp \
- 	$(PATH_ROOT)/src/VBox/Additions/common/VBoxVideo/HGSMIBuffers.cpp \
- 	$(PATH_ROOT)/src/VBox/Additions/common/VBoxVideo/HGSMIHostCmd.cpp \
- 	$(PATH_ROOT)/src/VBox/Additions/common/VBoxVideo/VBVABase.cpp \
- 	$(PATH_ROOT)/src/VBox/Additions/common/VBoxVideo/Modesetting.cpp
+ 	common/VBoxMPUtils.cpp
 
- ifdef VBOXWDDM_WITH_VBVA
+ if1of ($(KBUILD_TARGET_ARCH), amd64 x86)
   VBoxWddm_SOURCES        += \
-  	wddm/VBoxMPVbva.cpp
+  	wddm/VBoxMPLegacy.cpp \
+  	wddm/VBoxMPVdma.cpp \
+  	wddm/VBoxMPShgsmi.cpp \
+  	common/VBoxMPCommon.cpp \
+  	common/VBoxMPHGSMI.cpp \
+  	$(PATH_ROOT)/src/VBox/Additions/common/VBoxVideo/HGSMIBase.cpp \
+  	$(PATH_ROOT)/src/VBox/Additions/common/VBoxVideo/HGSMIBuffers.cpp \
+  	$(PATH_ROOT)/src/VBox/Additions/common/VBoxVideo/HGSMIHostCmd.cpp \
+  	$(PATH_ROOT)/src/VBox/Additions/common/VBoxVideo/VBVABase.cpp \
+  	$(PATH_ROOT)/src/VBox/Additions/common/VBoxVideo/Modesetting.cpp
+  ifdef VBOXWDDM_WITH_VBVA
+   VBoxWddm_SOURCES        += \
+   	wddm/VBoxMPVbva.cpp
+  endif
  endif
 
  VBoxWddm_LIBS             = \
@@ -150,6 +153,7 @@ ifdef VBOX_WITH_WDDM
  VBoxWddm_LIBS.amd64       = \
  	$(PATH_SDK_$(VBOX_WINDDK_GST_W8)_LIB)/BufferOverflowK.lib
  VBoxWddm_LIBS.arm64       = \
+ 	$(PATH_SDK_$(VBOX_WINDDK_GST)_LIB.$(KBUILD_TARGET_ARCH))/libcntpr.lib \
  	$(PATH_SDK_$(VBOX_WINDDK_GST_W8)_LIB)/BufferOverflowFastFailK.lib
 
  ifdef VBOX_WITH_VMSVGA

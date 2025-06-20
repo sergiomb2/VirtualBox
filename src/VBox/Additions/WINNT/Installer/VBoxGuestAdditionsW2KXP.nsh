@@ -519,7 +519,7 @@ Function W2K_CallbackInstall
 ;
 ; WDDM driver.
 ;
-!if $%KBUILD_TARGET_ARCH% != "arm64" ;; @todo win.arm64: Make VBoxVideo and friends build on arm.
+!if $%VBOX_WITH_WDDM% == "1"
   ${If} $g_bNoVideoDrv == "false"
     ${If} $g_bWithWDDM == "true"
       ${LogVerbose} "Installing WDDM video driver..."
@@ -535,7 +535,7 @@ Function W2K_CallbackInstall
   ${Else}
     ${LogVerbose} "Video driver installation skipped!"
   ${EndIf}
-!endif ; $%KBUILD_TARGET_ARCH% != "arm64"
+!endif ; $%VBOX_WITH_WDDM% == "1"
 
   ;
   ; Mouse driver.

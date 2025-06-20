@@ -33,10 +33,12 @@
 
 #include "Svga.h"
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
 NTSTATUS SvgaFifoInit(PVBOXWDDM_EXT_VMSVGA pSvga);
 
 void *SvgaFifoReserve(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t cbReserve);
 void SvgaFifoCommit(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t cbActual);
+#endif /* defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86) */
 
 NTSTATUS SvgaCmdBufInit(PVBOXWDDM_EXT_VMSVGA pSvga);
 NTSTATUS SvgaCmdBufDestroy(PVBOXWDDM_EXT_VMSVGA pSvga);
@@ -61,7 +63,11 @@ DECLINLINE(void *) SvgaReserve(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t cbReserve, u
 {
     if (pSvga->pCBState)
         return SvgaCmdBufReserve(pSvga, cbReserve, idDXContext);
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     return SvgaFifoReserve(pSvga, cbReserve);
+#else
+    AssertFailedReturn(NULL);
+#endif
 }
 
 DECLINLINE(void) SvgaCommit(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t cbActual)
@@ -71,7 +77,9 @@ DECLINLINE(void) SvgaCommit(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t cbActual)
         SvgaCmdBufCommit(pSvga, cbActual);
         return;
     }
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     SvgaFifoCommit(pSvga, cbActual);
+#endif
 }
 
 DECLINLINE(void) SvgaFlush(PVBOXWDDM_EXT_VMSVGA pSvga)

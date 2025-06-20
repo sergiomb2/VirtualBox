@@ -480,9 +480,14 @@ static void gaReportFence(PVBOXMP_DEVEXT pDevExt)
     AssertReturnVoid(pSvga);
 
     /* Read the last completed fence from the device. */
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     const uint32_t u32Fence = pSvga->fMMIO
                             ? SVGARegRead(pSvga, SVGA_REG_FENCE)
                             : SVGAFifoRead(pSvga, SVGA_FIFO_FENCE);
+#else
+    Assert(pSvga->fMMIO);
+    const uint32_t u32Fence = SVGARegRead(pSvga, SVGA_REG_FENCE);
+#endif
     GALOG(("Fence %u\n", u32Fence));
 
     if (u32Fence == ASMAtomicReadU32(&pGaDevExt->u32PreemptionFenceId))
@@ -1464,6 +1469,7 @@ NTSTATUS APIENTRY GaDxgkDdiSubmitCommand(const HANDLE hAdapter, const DXGKARG_SU
                 Assert(NT_SUCCESS(Status)); RT_NOREF(Status);
             }
         }
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
         else
         {
             Assert(pSubmitCommand->DmaBufferSegmentId == 0);
@@ -1489,6 +1495,7 @@ NTSTATUS APIENTRY GaDxgkDdiSubmitCommand(const HANDLE hAdapter, const DXGKARG_SU
                 }
             }
         }
+#endif
     }
 
     ASMAtomicWriteU32(&pGaDevExt->u32LastSubmittedFenceId, pSubmitCommand->SubmissionFenceId);
@@ -2096,6 +2103,21 @@ static void vboxWddmRectCopy(void *pvDst, uint32_t cbDstBytesPerPixel, uint32_t 
     uint8_t const *pu8Src = (uint8_t *)pvSrc;
     pu8Src += pRect->top * cbSrcPitch + pRect->left * cbSrcBytesPerPixel;
 
+#if defined(RT_ARCH_ARM64)
+    /* memcpy uses st1 [v,v,v,v],[x] instruction, which crashes if address is not 128 bit aligned. */
+    for (INT y = pRect->top; y < pRect->bottom; ++y)
+    {
+        uint32_t *d = (uint32_t *)pu8Dst;
+        uint32_t const *s = (uint32_t *)pu8Src;
+        for (INT x = pRect->left; x < pRect->right; ++x)
+        {
+            *d++ = *s++;
+        }
+
+        pu8Dst += cbDstPitch;
+        pu8Src += cbSrcPitch;
+    }
+#else
     uint32_t const cbLine = (pRect->right - pRect->left) * cbDstBytesPerPixel;
     for (INT y = pRect->top; y < pRect->bottom; ++y)
     {
@@ -2103,6 +2125,7 @@ static void vboxWddmRectCopy(void *pvDst, uint32_t cbDstBytesPerPixel, uint32_t 
         pu8Dst += cbDstPitch;
         pu8Src += cbSrcPitch;
     }
+#endif
 }
 
 static NTSTATUS gaSourceBlitToScreen(PVBOXMP_DEVEXT pDevExt, VBOXWDDM_SOURCE *pSource, RECT const *pRect)

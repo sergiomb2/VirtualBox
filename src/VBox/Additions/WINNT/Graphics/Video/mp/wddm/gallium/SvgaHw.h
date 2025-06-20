@@ -34,12 +34,20 @@
 #include "Svga.h"
 
 #include <iprt/asm.h>
-#include <iprt/asm-amd64-x86.h>
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
+# include <iprt/asm-amd64-x86.h>
+#elif defined(RT_ARCH_ARM64) || defined(RT_ARCH_ARM32)
+# include <iprt/asm-arm.h>
+#else
+# error "Port me"
+#endif
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
 DECLINLINE(RTIOPORT) SVGAPort(PVBOXWDDM_EXT_VMSVGA pSvga, uint16_t u16Offset)
 {
     return pSvga->hw.ioportBase + u16Offset;
 }
+#endif
 
 DECLINLINE(void) SVGAWriteIRQStatus(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t u32IrqStatus)
 {
@@ -51,7 +59,9 @@ DECLINLINE(void) SVGAWriteIRQStatus(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t u32IrqS
         return;
     }
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     ASMOutU32(SVGAPort(pSvga, SVGA_IRQSTATUS_PORT), u32IrqStatus);
+#endif
 }
 
 DECLINLINE(uint32_t) SVGAReadIRQStatus(PVBOXWDDM_EXT_VMSVGA pSvga)
@@ -64,7 +74,11 @@ DECLINLINE(uint32_t) SVGAReadIRQStatus(PVBOXWDDM_EXT_VMSVGA pSvga)
         return u32Value;
     }
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     return ASMInU32(SVGAPort(pSvga, SVGA_IRQSTATUS_PORT));
+#else
+    AssertFailedReturn(0);
+#endif
 }
 
 DECLINLINE(void) SVGARegWrite(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t u32Offset, uint32_t u32Value)
@@ -77,6 +91,7 @@ DECLINLINE(void) SVGARegWrite(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t u32Offset, ui
         return;
     }
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     KIRQL OldIrql;
     KeAcquireSpinLock(&pSvga->HwSpinLock, &OldIrql);
 
@@ -84,6 +99,7 @@ DECLINLINE(void) SVGARegWrite(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t u32Offset, ui
     ASMOutU32(SVGAPort(pSvga, SVGA_VALUE_PORT), u32Value);
 
     KeReleaseSpinLock(&pSvga->HwSpinLock, OldIrql);
+#endif
 }
 
 DECLINLINE(uint32_t) SVGARegRead(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t u32Offset)
@@ -98,6 +114,7 @@ DECLINLINE(uint32_t) SVGARegRead(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t u32Offset)
         return u32Value;
     }
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     KIRQL OldIrql;
     KeAcquireSpinLock(&pSvga->HwSpinLock, &OldIrql);
 
@@ -106,6 +123,9 @@ DECLINLINE(uint32_t) SVGARegRead(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t u32Offset)
 
     KeReleaseSpinLock(&pSvga->HwSpinLock, OldIrql);
     return u32Value;
+#else
+    AssertFailedReturn(0);
+#endif
 }
 
 DECLINLINE(uint32_t) SVGADevCapRead(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t idx)
@@ -127,6 +147,7 @@ DECLINLINE(uint32_t) SVGADevCapRead(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t idx)
         return u32Value;
     }
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
     KeAcquireSpinLock(&pSvga->HwSpinLock, &OldIrql);
 
     ASMOutU32(SVGAPort(pSvga, SVGA_INDEX_PORT), SVGA_REG_DEV_CAP);
@@ -135,8 +156,12 @@ DECLINLINE(uint32_t) SVGADevCapRead(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t idx)
 
     KeReleaseSpinLock(&pSvga->HwSpinLock, OldIrql);
     return u32Value;
+#else
+    AssertFailedReturn(0);
+#endif
 }
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
 DECLINLINE(volatile void *) SVGAFifoPtrFromOffset(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t u32Offset)
 {
     return (volatile uint8_t *)pSvga->hw.pu32FIFO + u32Offset;
@@ -159,5 +184,6 @@ DECLINLINE(void) SVGAFifoWrite(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t u32Index, ui
     ASMAtomicWriteU32(pu32, u32Value);
     ASMCompilerBarrier();
 }
+#endif /* defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86) */
 
 #endif /* !GA_INCLUDED_SRC_WINNT_Graphics_Video_mp_wddm_gallium_SvgaHw_h */

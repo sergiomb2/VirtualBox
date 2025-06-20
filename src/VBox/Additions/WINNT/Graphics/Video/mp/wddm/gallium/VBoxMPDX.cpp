@@ -720,7 +720,13 @@ static NTSTATUS svgaPagingFill(PVBOXMP_DEVEXT pDevExt, DXGKARG_BUILDPAGINGBUFFER
                 uint64_t const offVRAM = pBuildPagingBuffer->Fill.Destination.SegmentAddress.QuadPart;
                 AssertReturn(   offVRAM < pDevExt->cbVRAMCpuVisible
                              && pBuildPagingBuffer->Fill.FillSize <= pDevExt->cbVRAMCpuVisible - offVRAM, STATUS_INVALID_PARAMETER);
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
                 ASMMemFill32((uint8_t *)pDevExt->pvVisibleVram + offVRAM, pBuildPagingBuffer->Fill.FillSize, pBuildPagingBuffer->Fill.FillPattern);
+#else
+                uint32_t *pu32 = (uint32_t *)((uint8_t *)pDevExt->pvVisibleVram + offVRAM);
+                for (unsigned i = 0; i < pBuildPagingBuffer->Fill.FillSize / 4; ++i)
+                    *pu32++ = pBuildPagingBuffer->Fill.FillPattern;
+#endif
                 break;
             }
         }
@@ -747,7 +753,13 @@ static NTSTATUS svgaPagingFill(PVBOXMP_DEVEXT pDevExt, DXGKARG_BUILDPAGINGBUFFER
 
             /* Fill the guest backing pages. */
             uint32_t const cbFill = RT_MIN(pBuildPagingBuffer->Fill.FillSize, cbAllocation);
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
             ASMMemFill32(pvDst, cbFill, pBuildPagingBuffer->Fill.FillPattern);
+#else
+            uint32_t *pu32 = (uint32_t *)pvDst;
+            for (unsigned i = 0; i < cbFill / 4; ++i)
+                *pu32++ = pBuildPagingBuffer->Fill.FillPattern;
+#endif
 
             /* Emit UPDATE_GB_SURFACE */
             uint8_t *pu8Cmd = (uint8_t *)pBuildPagingBuffer->pDmaBuffer;

@@ -37,6 +37,7 @@
 #include <iprt/thread.h>
 #include <iprt/x86.h>
 
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
 NTSTATUS SvgaFifoInit(PVBOXWDDM_EXT_VMSVGA pSvga)
 {
 // ASMBreakpoint();
@@ -249,6 +250,7 @@ void SvgaFifoCommit(PVBOXWDDM_EXT_VMSVGA pSvga, uint32_t cbActual)
 
     ExReleaseFastMutex(&pFifo->FifoMutex);
 }
+#endif /* defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86) */
 
 
 /*

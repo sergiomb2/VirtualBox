@@ -52,6 +52,7 @@ FeatureScore = F8
 Include = msdv.inf
 ;x86   CopyFiles = VBoxWDDM.Miniport, VBoxWDDM.Display
 ;amd64 CopyFiles = VBoxWDDM.Miniport, VBoxWDDM.Display, VBoxWDDM.Display_wow64
+;arm64 CopyFiles = VBoxWDDM.Miniport, VBoxWDDM.Display
 AddReg = VBoxWDDM_SoftwareDeviceSettings
 ;todo: clear XPDM driver settings: DelReg = VBoxWDDM_RemoveDeviceSettings
 
