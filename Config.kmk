@@ -677,9 +677,7 @@ if1of ($(KBUILD_TARGET).$(KBUILD_TARGET_ARCH), win.x86 win.amd64)
  VBOX_WITH_XPDM = 1
 endif
 # Enable Wddm Video driver for Vista+ guests.
-ifn1of ($(KBUILD_TARGET).$(KBUILD_TARGET_ARCH), win.arm64) ## @todo win.arm64: port the WDDM + VGA device to arm64.
- VBOX_WITH_WDDM = 1
-endif
+VBOX_WITH_WDDM = 1
 # Lazy developer!!
 VBOXWDDM_WITH_VBVA = 1
 # Lazy developer!!
