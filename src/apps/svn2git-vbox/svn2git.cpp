@@ -2420,17 +2420,22 @@ static RTEXITCODE s2gGitInit(PS2GCTX pThis)
         {
             if (idRevLast != 0)
             {
-                /*
-                 * We need to match the revision to the one of the repository as svn:sync-xref-src-repo-rev
-                 * is a property.
-                 */
                 uint32_t idRevPublic = 0;
-                RTEXITCODE rcExit = s2gSvnFindMatchingRevision(pThis, idRevLast + 1, &idRevPublic);
-                if (rcExit != RTEXITCODE_SUCCESS)
-                    return rcExit;
+                if (pThis->fSvnSyncXrefSrcRepoRevAvail)
+                {
+                    /*
+                     * We need to match the revision to the one of the repository as svn:sync-xref-src-repo-rev
+                     * is a property.
+                     */
+                    RTEXITCODE rcExit = s2gSvnFindMatchingRevision(pThis, idRevLast + 1, &idRevPublic);
+                    if (rcExit != RTEXITCODE_SUCCESS)
+                        return rcExit;
 
-                RTMsgInfo("Matched internal revision r%u to public r%u, continuing at that revision\n",
-                          idRevLast + 1, idRevPublic);
+                    RTMsgInfo("Matched internal revision r%u to public r%u, continuing at that revision\n",
+                              idRevLast + 1, idRevPublic);
+                }
+                else
+                    idRevPublic = idRevLast;
 
                 pThis->idRevStart = idRevPublic + 1;
             }
