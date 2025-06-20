@@ -445,22 +445,34 @@ class ArmAstBase(object):
     ARM instruction AST base class.
     """
 
-    ksTypeBinaryOp   = 'AST.BinaryOp';
-    ksTypeBool       = 'AST.Bool';
-    ksTypeConcat     = 'AST.Concat';
-    ksTypeFunction   = 'AST.Function';
-    ksTypeIdentifier = 'AST.Identifier';
-    ksTypeInteger    = 'AST.Integer';
-    ksTypeSet        = 'AST.Set';
-    ksTypeSquareOp   = 'AST.SquareOp';
-    ksTypeDotAtom    = 'AST.DotAtom';
-    ksTypeUnaryOp    = 'AST.UnaryOp';
-    ksTypeValue      = 'Values.Value';
-    ksTypeString     = 'Types.String';
-    ksTypeField      = 'Types.Field';
+    ksTypeAssignment    = 'AST.Assignment';
+    ksTypeBinaryOp      = 'AST.BinaryOp';
+    ksTypeBool          = 'AST.Bool';
+    ksTypeConcat        = 'AST.Concat';
+    ksTypeDotAtom       = 'AST.DotAtom';
+    ksTypeFunction      = 'AST.Function';
+    ksTypeIdentifier    = 'AST.Identifier';
+    ksTypeInteger       = 'AST.Integer';
+    ksTypeReturn        = 'AST.Return';
+    ksTypeSet           = 'AST.Set';
+    ksTypeSlice         = 'AST.Slice';
+    ksTypeSquareOp      = 'AST.SquareOp';
+    ksTypeType          = 'AST.Type';
+    ksTypeTypeAnnotation= 'AST.TypeAnnotation';
+    ksTypeTuple         = 'AST.Tuple';
+    ksTypeUnaryOp       = 'AST.UnaryOp';
+    ksTypeValue         = 'Values.Value';
+    ksTypeEquationValue = 'Values.EquationValue';
+    ksTypeValuesGroup   = 'Values.Group';
+    ksTypeField         = 'Types.Field';
+    ksTypeString        = 'Types.String';
+    ksTypeRegisterType  = 'Types.RegisterType';
 
-    ksModeConditions = 'condition';
-    ksModeConstraints = 'contraints';
+    ksModeAccessor      = 'accessor';
+    ksModeAccessorCond  = 'accessor-cond';
+    ksModeConditions    = 'condition';
+    ksModeConstraints   = 'contraints';
+    ksModeValuesOnly    = 'values-only'; # Value and EquationValue
 
     def __init__(self, sType):
         self.sType = sType;
@@ -473,6 +485,7 @@ class ArmAstBase(object):
     kAttribSetBinaryOp = frozenset(['_type', 'left', 'op', 'right']);
     @staticmethod
     def fromJsonBinaryOp(oJson, sMode):
+        assert sMode != ArmAstBase.ksModeValuesOnly;
         ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetBinaryOp);
         return ArmAstBinaryOp(ArmAstBase.fromJson(oJson['left'], sMode),
                               oJson['op'],
@@ -482,59 +495,78 @@ class ArmAstBase(object):
     kAttribSetUnaryOp = frozenset(['_type', 'op', 'expr']);
     @staticmethod
     def fromJsonUnaryOp(oJson, sMode):
+        assert sMode != ArmAstBase.ksModeValuesOnly;
         ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetUnaryOp);
         return ArmAstUnaryOp(oJson['op'], ArmAstBase.fromJson(oJson['expr'], sMode));
+
+    kAttribSetSlice = frozenset(['_type', 'left', 'right']);
+    @staticmethod
+    def fromJsonSlice(oJson, sMode):
+        assert sMode in (ArmAstBase.ksModeAccessor, ArmAstBase.ksModeAccessorCond);
+        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetSlice);
+        return ArmAstSlice(ArmAstBase.fromJson(oJson['left'], sMode), ArmAstBase.fromJson(oJson['right'], sMode));
 
     kAttribSetSquareOp = frozenset(['_type', 'var', 'arguments']);
     @staticmethod
     def fromJsonSquareOp(oJson, sMode):
+        assert sMode != ArmAstBase.ksModeValuesOnly;
         ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetSquareOp);
         return ArmAstSquareOp(ArmAstBase.fromJson(oJson['var'], sMode),
                               [ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['arguments']]);
 
+    kAttribSetTuple = frozenset(['_type', 'values']);
+    @staticmethod
+    def fromJsonTuple(oJson, sMode):
+        assert sMode == ArmAstBase.ksModeAccessor;
+        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetTuple);
+        return ArmAstTuple([ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['values']]);
+
     kAttribSetDotAtom = frozenset(['_type', 'values']);
     @staticmethod
     def fromJsonDotAtom(oJson, sMode):
-        assert sMode == ArmAstBase.ksModeConstraints; # Only seen in feature constraints
+        assert sMode in (ArmAstBase.ksModeConstraints, ArmAstBase.ksModeAccessor, ArmAstBase.ksModeAccessorCond);
         ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetDotAtom);
         return ArmAstDotAtom([ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['values']]);
 
     kAttribSetConcat = frozenset(['_type', 'values']);
     @staticmethod
     def fromJsonConcat(oJson, sMode):
+        assert sMode != ArmAstBase.ksModeValuesOnly;
         ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetConcat);
         return ArmAstConcat([ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['values']]);
 
     kAttribSetFunction = frozenset(['_type', 'name', 'arguments']);
     @staticmethod
     def fromJsonFunction(oJson, sMode):
+        assert sMode != ArmAstBase.ksModeValuesOnly;
         ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetFunction);
         return ArmAstFunction(oJson['name'], [ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['arguments']]);
 
     kAttribSetIdentifier = frozenset(['_type', 'value']);
     @staticmethod
     def fromJsonIdentifier(oJson, sMode):
-        _ = sMode;
+        assert sMode != ArmAstBase.ksModeValuesOnly;
         ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetIdentifier);
         return ArmAstIdentifier(oJson['value'], sMode == ArmAstBase.ksModeConstraints);
 
     kAttribSetBool = frozenset(['_type', 'value']);
     @staticmethod
     def fromJsonBool(oJson, sMode):
-        _ = sMode;
+        assert sMode != ArmAstBase.ksModeValuesOnly;
         ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetBool);
         return ArmAstBool(oJson['value']);
 
     kAttribSetInteger = frozenset(['_type', 'value']);
     @staticmethod
     def fromJsonInteger(oJson, sMode):
-        _ = sMode;
+        assert sMode != ArmAstBase.ksModeValuesOnly;
         ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetInteger);
         return ArmAstInteger(oJson['value']);
 
     kAttribSetSet = frozenset(['_type', 'values']);
     @staticmethod
     def fromJsonSet(oJson, sMode):
+        assert sMode != ArmAstBase.ksModeValuesOnly;
         ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetSet);
         return ArmAstSet([ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['values']]);
 
@@ -545,10 +577,32 @@ class ArmAstBase(object):
         ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetValue);
         return ArmAstValue(oJson['value']);
 
+    kAttribSetEquationValue      = frozenset(['_type', 'value', 'meaning', 'slice']);
+    kAttribSetEquationValueRange = frozenset(['_type', 'start', 'width']);
+    @staticmethod
+    def fromJsonEquationValue(dJson, sMode):
+        assert sMode == ArmAstBase.ksModeValuesOnly;
+        ArmAstBase.assertAttribsInSet(dJson, ArmAstBase.kAttribSetEquationValue);
+        assert len(dJson['slice']) == 1;
+        dSlice = dJson['slice'][0];
+        assert dSlice['_type'] == 'Range';
+        ArmAstBase.assertAttribsInSet(dSlice, ArmAstBase.kAttribSetEquationValueRange);
+        return ArmAstEquationValue(dJson['value'], int(dSlice['start']), int(dSlice['width']));
+
+    kAttribSetValuesGroup = frozenset(['_type', 'value', 'meaning', 'values']);
+    @staticmethod
+    def fromJsonValuesGroup(dJson, sMode):
+        assert sMode == ArmAstBase.ksModeValuesOnly;
+        ArmAstBase.assertAttribsInSet(dJson, ArmAstBase.kAttribSetValuesGroup);
+        assert dJson['values']['_type'] == 'Valuesets.Values';
+        assert len(dJson['values']['values']) == 0;
+        return ArmAstValuesGroup(dJson['value']);
+
     kAttribSetField = frozenset(['_type', 'value']);
     @staticmethod
     def fromJsonString(oJson, sMode):
-        assert sMode == ArmAstBase.ksModeConstraints; # Seen in register contraints as 'input' to ImpDefBool.
+        assert sMode in (ArmAstBase.ksModeConstraints, # Seen in register as 'input' to ImpDefBool.
+                         ArmAstBase.ksModeAccessorCond);
         ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetField);
         return ArmAstString(oJson['value']);
 
@@ -556,27 +610,74 @@ class ArmAstBase(object):
     kAttribSetFieldValue = frozenset(['field', 'name', 'state', 'instance', 'slices']);
     @staticmethod
     def fromJsonField(oJson, sMode):
-        assert sMode == ArmAstBase.ksModeConstraints; # Only seen in feature constraints
+        assert sMode in (ArmAstBase.ksModeConstraints, ArmAstBase.ksModeAccessor, ArmAstBase.ksModeAccessorCond);
         ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetField);
         dJsonValue = oJson['value'];
         ArmAstBase.assertAttribsInSet(dJsonValue, ArmAstBase.kAttribSetFieldValue);
         return ArmAstField(dJsonValue['field'], dJsonValue['name'], dJsonValue['state'],
                            dJsonValue['slices'], dJsonValue['instance']);
 
+    kAttribSetRegisterType = frozenset(['_type', 'value']);
+    kAttribSetRegisterTypeValue = frozenset(['name', 'state', 'instance', 'slices']);
+    @staticmethod
+    def fromJsonRegisterType(oJson, sMode):
+        assert sMode in (ArmAstBase.ksModeConstraints, ArmAstBase.ksModeAccessorCond);
+        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetRegisterType);
+        dJsonValue = oJson['value'];
+        ArmAstBase.assertAttribsInSet(dJsonValue, ArmAstBase.kAttribSetRegisterTypeValue);
+        return ArmAstRegisterType(dJsonValue['name'], dJsonValue['state'], dJsonValue['slices'], dJsonValue['instance']);
+
+    kAttribSetType = frozenset(['_type', 'name']);
+    @staticmethod
+    def fromJsonType(dJson, sMode):
+        assert sMode == ArmAstBase.ksModeAccessor;
+        ArmAstBase.assertAttribsInSet(dJson, ArmAstBase.kAttribSetType);
+        return ArmAstType(ArmAstBase.fromJson(dJson['name'], sMode));
+
+    kAttribSetTypeAnnotation = frozenset(['_type', 'type', 'var']);
+    @staticmethod
+    def fromJsonTypeAnnotation(dJson, sMode):
+        assert sMode == ArmAstBase.ksModeAccessor;
+        ArmAstBase.assertAttribsInSet(dJson, ArmAstBase.kAttribSetTypeAnnotation);
+        return ArmAstTypeAnnotation(ArmAstBase.fromJson(dJson['var'], sMode), ArmAstBase.fromJson(dJson['type'], sMode));
+
+    kAttribSetAssignment = frozenset(['_type', 'val', 'var']);
+    @staticmethod
+    def fromJsonAssignment(dJson, sMode):
+        assert sMode == ArmAstBase.ksModeAccessor;
+        ArmAstBase.assertAttribsInSet(dJson, ArmAstBase.kAttribSetAssignment);
+        return ArmAstAssignment(ArmAstBase.fromJson(dJson['var'], sMode), ArmAstBase.fromJson(dJson['val'], sMode));
+
+    kAttribSetReturn = frozenset(['_type', 'val']);
+    @staticmethod
+    def fromJsonReturn(dJson, sMode):
+        assert sMode == ArmAstBase.ksModeAccessor;
+        ArmAstBase.assertAttribsInSet(dJson, ArmAstBase.kAttribSetReturn);
+        return ArmAstReturn(ArmAstBase.fromJson(dJson['val'], sMode) if dJson['val'] else None);
+
     kfnTypeMap = {
-        ksTypeBinaryOp:     fromJsonBinaryOp,
-        ksTypeUnaryOp:      fromJsonUnaryOp,
-        ksTypeSquareOp:     fromJsonSquareOp,
-        ksTypeDotAtom:      fromJsonDotAtom,
-        ksTypeConcat:       fromJsonConcat,
-        ksTypeFunction:     fromJsonFunction,
-        ksTypeIdentifier:   fromJsonIdentifier,
-        ksTypeBool:         fromJsonBool,
-        ksTypeInteger:      fromJsonInteger,
-        ksTypeSet:          fromJsonSet,
-        ksTypeValue:        fromJsonValue,
-        ksTypeString:       fromJsonString,
-        ksTypeField:        fromJsonField,
+        ksTypeBinaryOp:         fromJsonBinaryOp,
+        ksTypeUnaryOp:          fromJsonUnaryOp,
+        ksTypeSlice:            fromJsonSlice,
+        ksTypeSquareOp:         fromJsonSquareOp,
+        ksTypeTuple:            fromJsonTuple,
+        ksTypeDotAtom:          fromJsonDotAtom,
+        ksTypeConcat:           fromJsonConcat,
+        ksTypeFunction:         fromJsonFunction,
+        ksTypeIdentifier:       fromJsonIdentifier,
+        ksTypeBool:             fromJsonBool,
+        ksTypeInteger:          fromJsonInteger,
+        ksTypeSet:              fromJsonSet,
+        ksTypeValue:            fromJsonValue,
+        ksTypeEquationValue:    fromJsonEquationValue,
+        ksTypeValuesGroup:      fromJsonValuesGroup,
+        ksTypeString:           fromJsonString,
+        ksTypeField:            fromJsonField,
+        ksTypeRegisterType:     fromJsonRegisterType,
+        ksTypeType:             fromJsonType,
+        ksTypeTypeAnnotation:   fromJsonTypeAnnotation,
+        ksTypeAssignment:       fromJsonAssignment,
+        ksTypeReturn:           fromJsonReturn,
     };
 
     @staticmethod
@@ -608,6 +709,7 @@ class ArmAstBinaryOp(ArmAstBase):
     kOpTypeArithmetical = 'arit';
     kOpTypeSet          = 'set';
     kOpTypeConstraints  = 'constraints';
+    kOpTypeTodo         = 'todo';
     kdOps = {
         '||':  kOpTypeLogical,
         '&&':  kOpTypeLogical,
@@ -619,10 +721,13 @@ class ArmAstBinaryOp(ArmAstBase):
         '<=':  kOpTypeCompare,
         'IN':  kOpTypeSet,
         '+':   kOpTypeArithmetical,
+        '-':   kOpTypeArithmetical,
         'MOD': kOpTypeArithmetical,
         '*':   kOpTypeArithmetical,
         '-->': kOpTypeConstraints,    # implies that the right hand side is true when left hand side is.
         '<->': kOpTypeConstraints,    # bidirectional version of -->, i.e. it follows strictly in both directions.
+        'AND': kOpTypeTodo,
+        'OR':  kOpTypeTodo,
     };
 
     def __init__(self, oLeft, sOp, oRight, fConstraints = False):
@@ -671,6 +776,9 @@ class ArmAstBinaryOp(ArmAstBase):
         return '%s %s %s' % (sLeft, self.sOp, sRight);
 
     def toCExpr(self, oHelper):
+        if ArmAstBinaryOp.kdOps[self.sOp] == ArmAstBinaryOp.kOpTypeTodo:
+            raise Exception('Not implemented: %s' % (self.sOp,));
+
         # Logical and compare operations are straight forward.
         if ArmAstBinaryOp.kdOps[self.sOp] in (ArmAstBinaryOp.kOpTypeLogical, ArmAstBinaryOp.kOpTypeCompare):
             sLeft = self.oLeft.toCExpr(oHelper);
@@ -754,8 +862,10 @@ class ArmAstBinaryOp(ArmAstBase):
 
 class ArmAstUnaryOp(ArmAstBase):
     kOpTypeLogical      = 'log';
+    kOpTypeTodo         = 'todo';
     kdOps = {
-        '!': kOpTypeLogical,
+        '!':   kOpTypeLogical,
+        'NOT': kOpTypeTodo,
     };
 
     def __init__(self, sOp, oExpr):
@@ -784,14 +894,46 @@ class ArmAstUnaryOp(ArmAstBase):
         return '%s%s' % (self.sOp, self.oExpr.toString(),);
 
     def toCExpr(self, oHelper):
+        if self.kdOps[self.sOp] == self.kOpTypeTodo:
+            raise Exception('Not implemented');
         if ArmAstUnaryOp.needParentheses(self.oExpr):
             return '%s(%s)' % (self.sOp, self.oExpr.toCExpr(oHelper));
         return '%s%s' % (self.sOp, self.oExpr.toCExpr(oHelper));
 
     def getWidth(self, oHelper):
         _ = oHelper;
+        if self.kdOps[self.sOp] == self.kOpTypeTodo:
+            raise Exception('Not implemented');
         assert self.sOp == '!';
         return 1;
+
+
+class ArmAstSlice(ArmAstBase):
+    def __init__(self, oFrom, oTo):
+        ArmAstBase.__init__(self, ArmAstBase.ksTypeSlice);
+        self.oFrom = oFrom; # left
+        self.oTo   = oTo;   # right
+
+    def clone(self):
+        return ArmAstSlice(self.oFrom.clone(), self.oTo.clone());
+
+    def isSame(self, oOther):
+        if isinstance(oOther, ArmAstSlice):
+            if self.oFrom.isSame(oOther.oFrom):
+                if self.oTo.isSame(oOther.oTo):
+                    return True;
+        return False;
+
+    def toString(self):
+        return '[%s:%s]' % (self.oFrom.toString(), self.oTo.toString());
+
+    def toCExpr(self, oHelper):
+        _ = oHelper;
+        raise Exception('not implemented');
+
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        raise Exception('not implemented');
 
 
 class ArmAstSquareOp(ArmAstBase):
@@ -820,6 +962,35 @@ class ArmAstSquareOp(ArmAstBase):
     def toCExpr(self, oHelper):
         _ = oHelper;
         raise Exception('ArmAstSquareOp does not support conversion to C expression: %s' % (self.toString()));
+
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        return -1;
+
+
+class ArmAstTuple(ArmAstBase):
+    def __init__(self, aoValues):
+        ArmAstBase.__init__(self, ArmAstBase.ksTypeTuple);
+        self.aoValues = aoValues;
+
+    def clone(self):
+        return ArmAstTuple([oValue.clone() for oValue in self.aoValues]);
+
+    def isSame(self, oOther):
+        if isinstance(oOther, ArmAstTuple):
+            if len(self.aoValues) == len(oOther.aoValues):
+                for idx, oMyValue in enumerate(self.aoValues):
+                    if not oMyValue.isSame(oOther.aoValues[idx]):
+                        return False;
+                return True;
+        return False;
+
+    def toString(self):
+        return '(%s)' % (','.join([oValue.toString() for oValue in self.aoValues]),);
+
+    def toCExpr(self, oHelper):
+        _ = oHelper;
+        raise Exception('ArmAstTuple does not support conversion to C expression: %s' % (self.toString()));
 
     def getWidth(self, oHelper):
         _ = oHelper;
@@ -1103,6 +1274,102 @@ class ArmAstValue(ArmAstBase):
         return cBitsWidth;
 
 
+class ArmAstEquationValue(ArmAstBase):
+
+    s_oSimpleName = re.compile('^[_A-Za-z][_A-Za-z0-9]+$');
+
+    def __init__(self, sValue, iFirstBit, cBitsWidth):
+        ArmAstBase.__init__(self, ArmAstBase.ksTypeValue);
+        self.sValue     = sValue;
+        self.iFirstBit  = iFirstBit;
+        self.cBitsWidth = cBitsWidth;
+
+    def clone(self):
+        return ArmAstEquationValue(self.sValue, self.iFirstBit, self.cBitsWidth);
+
+    def isSame(self, oOther):
+        if isinstance(oOther, ArmAstEquationValue):
+            if self.sValue == oOther.sValue:
+                if self.iFirstBit == oOther.iFirstBit:
+                    if self.cBitsWidth == oOther.cBitsWidth:
+                        return True;
+        return False;
+
+    def toString(self):
+        if self.s_oSimpleName.match(self.sValue):
+            return '%s[%u:%u]' % (self.sValue, self.iFirstBit, self.iFirstBit + self.cBitsWidth - 1,);
+        return '(%s)[%u:%u]' % (self.sValue, self.iFirstBit, self.iFirstBit + self.cBitsWidth - 1,);
+
+    def toCExpr(self, oHelper):
+        _ = oHelper;
+        raise Exception('todo');
+
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        return self.cBitsWidth;
+
+
+class ArmAstValuesGroup(ArmAstBase):
+
+    def __init__(self, sValue, aoValues = None):
+        ArmAstBase.__init__(self, ArmAstBase.ksTypeValue);
+        self.sValue     = sValue;
+        self.aoValues   = aoValues;
+        if aoValues is None:
+            ## @todo split up the value string. Optionally handle a specific 'values' list
+            ## when present (looks like it's suppressed in the spec generator).
+            self.aoValues = [];
+            off = 0;
+            while off < len(sValue):
+                offStart = off;
+                fSlice = False;
+                while off < len(sValue) and (sValue[off] != ':' or fSlice):
+                    if sValue[off] == '[':
+                        assert not fSlice;
+                        assert off > offStart;
+                        fSlice = True;
+                    elif sValue[off] == ']':
+                        assert fSlice;
+                        fSlice = False;
+                    off += 1;
+                sSubValue = sValue[offStart:off]
+                assert off > offStart;
+                assert not fSlice;
+
+                if sSubValue[0] == '\'':
+                    self.aoValues.append(ArmAstValue(sSubValue));
+                elif '[' in sSubValue[0]:
+                    assert sSubValue[-1] == ']';
+                    offSlice = sSubValue.find('[');
+                    asSlice = sSubValue[offSlice + 1:-1].split(':');
+                    assert len(asSlice) == 2;
+                    self.aoValues.append(ArmAstEquationValue(sSubValue[:offSlice], int(asSlice[0]),
+                                                             int(asSlice[1]) - int(asSlice[0]) + 1));
+                off += 1;
+
+    def clone(self):
+        return ArmAstValuesGroup(self.sValue, [oValue.clone() for oValue in self.aoValues]);
+
+    def isSame(self, oOther):
+        if isinstance(oOther, ArmAstValuesGroup):
+            if self.sValue == oOther.sValue:
+                assert len(self.aoValues) == len(oOther.aoValues);
+                for iValue, oValue in enumerate(self.aoValues):
+                    assert oValue.isSame(oOther.aoValues[iValue]);
+                return True;
+        return False;
+
+    def toString(self):
+        return ':'.join([oValue.toString() for oValue in self.aoValues]);
+
+    def toCExpr(self, oHelper):
+        _ = oHelper;
+        raise Exception('todo');
+
+    def getWidth(self, oHelper):
+        return sum(oValue.getWidth(oHelper) for oValue in self.aoValues);
+
+
 class ArmAstString(ArmAstBase):
     def __init__(self, sValue):
         ArmAstBase.__init__(self, ArmAstBase.ksTypeValue);
@@ -1161,9 +1428,155 @@ class ArmAstField(ArmAstBase):
         return sCName;
 
     def getWidth(self, oHelper):
-        _ = oHelper;
         (_, cBitsWidth) = oHelper.getFieldInfo(self.sField, self.sName, self.sState);
         return cBitsWidth;
+
+
+class ArmAstRegisterType(ArmAstBase):
+    def __init__(self, sName, sState = 'AArch64', sSlices = None, sInstance = None):
+        ArmAstBase.__init__(self, ArmAstBase.ksTypeRegisterType);
+        self.sName     = sName;
+        self.sState    = sState;
+        self.sSlices   = sSlices;
+        self.sInstance = sInstance;
+        assert sSlices is None;
+        assert sInstance is None;
+
+    def clone(self):
+        return ArmAstRegisterType(self.sName, self.sState, self.sSlices, self.sInstance);
+
+    def isSame(self, oOther):
+        if isinstance(oOther, ArmAstRegisterType):
+            if self.sName == oOther.sName:
+                if self.sState == oOther.sState:
+                    if self.sSlices == oOther.sSlices:
+                        if self.sInstance == oOther.sInstance:
+                            return True;
+        return False;
+
+    def toString(self):
+        return '%s.%s' % (self.sState, self.sName,);
+
+    def toCExpr(self, oHelper):
+        #(sCName, _) = oHelper.getFieldInfo(None, self.sName, self.sState);
+        #return sCName;
+        raise Exception('not implemented');
+
+    def getWidth(self, oHelper):
+        #(_, cBitsWidth) = oHelper.getFieldInfo(None, self.sName, self.sState);
+        #return cBitsWidth;
+        _ = oHelper;
+        return -1;
+
+
+class ArmAstType(ArmAstBase):
+    def __init__(self, oName):
+        ArmAstBase.__init__(self, ArmAstBase.ksTypeType);
+        self.oName = oName;
+
+    def clone(self):
+        return ArmAstType(self.oName.clone());
+
+    def isSame(self, oOther):
+        if isinstance(oOther, ArmAstType):
+            if self.oName.isSame(oOther.oName):
+                return True;
+        return False;
+
+    def toString(self):
+        return self.oName.toString();
+
+    def toCExpr(self, oHelper):
+        _ = oHelper;
+        raise Exception('not implemented');
+
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        raise Exception('not implemented');
+
+
+class ArmAstTypeAnnotation(ArmAstBase):
+    def __init__(self, oVar, oType):
+        ArmAstBase.__init__(self, ArmAstBase.ksTypeTypeAnnotation);
+        self.oVar  = oVar;
+        self.oType = oType;
+
+    def clone(self):
+        return ArmAstTypeAnnotation(self.oVar.clone(), self.oType.clone());
+
+    def isSame(self, oOther):
+        if isinstance(oOther, ArmAstType):
+            if self.oVar.isSame(oOther.oVar):
+                if self.oType.isSame(oOther.oType):
+                    return True;
+        return False;
+
+    def toString(self):
+        return '(%s) %s' % (self.oType.toString(), self.oVar.toString(),);
+
+    def toCExpr(self, oHelper):
+        _ = oHelper;
+        raise Exception('not implemented');
+
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        raise Exception('not implemented');
+
+
+class ArmAstAssignment(ArmAstBase):
+    def __init__(self, oVar, oValue):
+        ArmAstBase.__init__(self, ArmAstBase.ksTypeAssignment);
+        self.oVar      = oVar;
+        self.oValue    = oValue;
+
+    def clone(self):
+        return ArmAstAssignment(self.oVar.clone(), self.oValue.clone());
+
+    def isSame(self, oOther):
+        if isinstance(oOther, ArmAstAssignment):
+            if self.oVar.isSame(oOther.oVar):
+                if self.oValue.isSame(oOther.oValue):
+                    return True;
+        return False;
+
+    def toString(self):
+        return '%s = %s;' % (self.oVar.toString(), self.oValue.toString());
+
+    def toCExpr(self, oHelper):
+        _ = oHelper;
+        raise Exception('not implemented');
+
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        raise Exception('not implemented');
+
+
+class ArmAstReturn(ArmAstBase):
+    def __init__(self, oValue):
+        ArmAstBase.__init__(self, ArmAstBase.ksTypeReturn);
+        self.oValue    = oValue;
+
+    def clone(self):
+        return ArmAstReturn(self.oValue.clone());
+
+    def isSame(self, oOther):
+        if isinstance(oOther, ArmAstReturn):
+            if self.oValue.isSame(oOther.oValue):
+                return True;
+        return False;
+
+    def toString(self):
+        if self.oValue:
+            return 'return %s;' % (self.oValue.toString(),);
+        return 'return;';
+
+    def toCExpr(self, oHelper):
+        _ = oHelper;
+        raise Exception('not implemented');
+
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        raise Exception('not implemented');
 
 
 
@@ -1741,6 +2154,12 @@ class ArmFieldsBase(object):
         self.aoRanges = aoRanges    # Type: List[ArmRange]
         self.sName    = sName;
 
+    def toString(self):
+        """ Approximate string representation of the field. """
+        if len(self.aoRanges) == 1:
+            return '%s@%u:%u' % (self.sName, self.aoRanges[0].iFirstBit, self.aoRanges[0].cBitsWidth,);
+        return '%s@%s' % (self.sName, ','.join(['%u:%u' % (oRange.iFirstBit, oRange.cBitsWidth) for oRange in self.aoRanges]),);
+
     @staticmethod
     def addFieldListToLookupDict(daoFields, aoFields):
         """
@@ -1799,7 +2218,7 @@ class ArmFieldsBase(object):
 
 
     kAttribSetConditionalField = frozenset(['_type', 'description', 'display', 'fields', 'name',
-                                 'rangeset', 'reservedtype', 'resets', 'volatile']);
+                                            'rangeset', 'reservedtype', 'resets', 'volatile']);
     kAttribSetConditionalFieldEntry = frozenset(['condition', 'field']);
     @staticmethod
     def fromJsonConditionalField(dJson, oParent):
@@ -1968,8 +2387,14 @@ class ArmFieldset(object):
     def __init__(self, dJson, cBitsWidth, aoFields, sName = None):
         self.dJson      = dJson;
         self.cBitsWidth = cBitsWidth;
-        self.aoFields   = aoFields;
+        self.aoFields   = aoFields          # type: List[ArmFieldsBase]
         self.sName      = sName;
+
+    def toString(self):
+        """ Gets display string. """
+        return '%u bits%s: %s' \
+             % (self.cBitsWidth, ', %s' % (self.sName,) if self.sName else '',
+                ', '.join([oField.toString() for oField in sorted(self.aoFields, key = lambda o: o.aoRanges[0].iFirstBit)]),);
 
     @staticmethod
     def fromJson(dJson):
@@ -1979,18 +2404,279 @@ class ArmFieldset(object):
         return oNew;
 
 
+class ArmRegEncoding(object):
+    """ Register encoding. """
+
+    def __init__(self, sAsmValue, dNamedValues):
+        self.sAsmValue    = sAsmValue;
+        self.dNamedValues = dNamedValues;
+
+    def toString(self):
+        return '%s={%s}' \
+             % (self.sAsmValue, ', '.join(['%s=%s' % (sKey, oValue.toString()) for sKey, oValue in self.dNamedValues.items()]),);
+
+    kAttribSet = frozenset(['_type', 'asmvalue', 'encodings']);
+    @staticmethod
+    def fromJson(dJson):
+        """ Decodes a register encoding object. """
+        assert dJson['_type'] == 'Encoding';
+        assert set(dJson) == ArmRegEncoding.kAttribSet, '%s - %s' % (set(dJson) ^ ArmRegEncoding.kAttribSet, dJson,);
+        dNamedValues = collections.OrderedDict();
+        for sName, dValue in dJson['encodings'].items():
+            dNamedValues[sName] = ArmAstBase.fromJson(dValue, ArmAstBase.ksModeValuesOnly);
+        return ArmRegEncoding(dJson['asmvalue'], dNamedValues);
+
+
+class ArmAccessorPermissionBase(object):
+    """
+    Register accessor permission base class (Accessors.Permission.*).
+    """
+
+    def __init__(self, oCondition):
+        self.oCondition = oCondition;
+
+
+    @staticmethod
+    def assertAttribsInSet(dJson, oAttribSet):
+        """ Checks that the JSON element has all the attributes in the set and nothing else. """
+        assert set(dJson) == oAttribSet, '%s - %s' % (set(dJson) ^ oAttribSet, dJson,);
+
+    kAttribSetMemory = frozenset(['_type', 'access', 'condition',]);
+    @staticmethod
+    def fromJsonMemory(dJson):
+        assert dJson['_type'] == 'Accessors.Permission.MemoryAccess';
+        ArmAccessorPermissionBase.assertAttribsInSet(dJson, ArmAccessorPermissionBase.kAttribSetMemory);
+        oCondition = ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints)
+        # The 'access' attribute comes in three variations: Accessors.Permission.MemoryAccess list,
+        # Accessors.Permission.AccessTypes.Memory.ReadWriteAccess and
+        # Accessors.Permission.AccessTypes.Memory.ImplementationDefined.
+        oJsonAccess = dJson['access'];
+        if isinstance(oJsonAccess, list):
+            aoAccesses = [ArmAccessorPermissionBase.fromJsonMemory(dJsonSub) for dJsonSub in oJsonAccess]
+            return ArmAccessorPermissionMemoryAccessList(oCondition, aoAccesses);
+
+        if oJsonAccess['_type'] == 'Accessors.Permission.AccessTypes.Memory.ReadWriteAccess':
+            return ArmAccessorPermissionMemoryAccess(oCondition, ArmAccessorPermissionMemReadWriteAccess.fromJson(oJsonAccess));
+
+        if oJsonAccess['_type'] == 'Accessors.Permission.AccessTypes.Memory.ImplementationDefined':
+            aoConstraints = [ArmAccessorPermissionMemReadWriteAccess.fromJson(dJsonConstr)
+                            for dJsonConstr in oJsonAccess['constraints']];
+            return ArmAccessorPermissionMemoryAccessImplDef(oCondition, aoConstraints);
+        raise Exception('Unexpected access attr type: %s' % (oJsonAccess['_type'],));
+
+
+    kAttribSetSystem = frozenset(['_type', 'access', 'condition',]);
+    @staticmethod
+    def fromJsonSystem(dJson):
+        assert dJson['_type'] == 'Accessors.Permission.SystemAccess';
+        ArmAccessorPermissionBase.assertAttribsInSet(dJson, ArmAccessorPermissionBase.kAttribSetSystem);
+        oCondition = ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeAccessorCond)
+        # There are two variations here, one that has a list of Accessors.Permission.SystemAccess
+        # and one that has a AST tree as the 'access' attribute.  The former is typically the
+        # top level one and the latter makes up the element in the list.
+        if isinstance(dJson['access'], list):
+            aoAccesses = [ArmAccessorPermissionBase.fromJsonSystem(dJsonSub) for dJsonSub in dJson['access']]
+            return ArmAccessorPermissionSystemAccessList(oCondition, aoAccesses);
+        oAccess = ArmAstBase.fromJson(dJson['access'], ArmAstBase.ksModeAccessor)
+        return ArmAccessorPermissionSystemAccess(oCondition, oAccess);
+
+
+    kfnTypeMap = {
+        'Accessors.Permission.MemoryAccess': fromJsonMemory,
+        'Accessors.Permission.SystemAccess': fromJsonSystem,
+    };
+
+    @staticmethod
+    def fromJson(dJson):
+        """ Decodes a register accessor object. """
+        return ArmAccessorPermissionBase.kfnTypeMap[dJson['_type']](dJson);
+
+
+class ArmAccessorPermissionMemReadWriteAccess(object):
+    """ Accessors.Permission.AccessTypes.Memory.ReadWriteAccess """
+    def __init__(self, sRead, sWrite):
+        self.sRead  = sRead;
+        self.sWrite = sWrite;
+
+    kAttribSet = frozenset(['_type', 'read', 'write',]);
+    @staticmethod
+    def fromJson(dJson):
+        assert dJson['_type'] == 'Accessors.Permission.AccessTypes.Memory.ReadWriteAccess';
+        assert set(dJson) == ArmAccessorPermissionMemReadWriteAccess.kAttribSet, \
+               '%s - %s' % (set(dJson) ^ ArmAccessorPermissionMemReadWriteAccess.kAttribSet, dJson,);
+        return ArmAccessorPermissionMemReadWriteAccess(dJson['read'], dJson['write']);
+
+
+class ArmAccessorPermissionMemoryAccess(ArmAccessorPermissionBase):
+    """ Accessors.Permission.MemoryAccess """
+    def __init__(self, oCondition, oReadWriteAccess):
+        ArmAccessorPermissionBase.__init__(self, oCondition);
+        self.oReadWrite = oReadWriteAccess;
+
+
+class ArmAccessorPermissionMemoryAccessImplDef(ArmAccessorPermissionBase):
+    """ Accessors.Permission.MemoryAccess """
+    def __init__(self, oCondition, aoConstraints):
+        ArmAccessorPermissionBase.__init__(self, oCondition);
+        self.aoConstraints = aoConstraints;
+
+
+class ArmAccessorPermissionMemoryAccessList(ArmAccessorPermissionBase):
+    """ Accessors.Permission.MemoryAccess """
+    def __init__(self, oCondition, aoAccesses):
+        ArmAccessorPermissionBase.__init__(self, oCondition);
+        self.aoAccesses = aoAccesses;
+
+
+class ArmAccessorPermissionSystemAccess(ArmAccessorPermissionBase):
+    """ Accessors.Permission.SystemAccess """
+    def __init__(self, oCondition, oAccess):
+        ArmAccessorPermissionBase.__init__(self, oCondition);
+        self.oAccess = oAccess;
+
+
+class ArmAccessorPermissionSystemAccessList(ArmAccessorPermissionBase):
+    """ Accessors.Permission.SystemAccess """
+    def __init__(self, oCondition, aoAccesses):
+        ArmAccessorPermissionBase.__init__(self, oCondition);
+        self.aoAccesses = aoAccesses;
+
+
+class ArmAccessorBase(object):
+    """
+    Register accessor base class.
+    """
+    def __init__(self, dJson, oCondition):
+        self.dJson = dJson;
+        self.oCondition = oCondition;
+
+    @staticmethod
+    def assertAttribsInSet(dJson, oAttribSet):
+        """ Checks that the JSON element has all the attributes in the set and nothing else. """
+        assert set(dJson) == oAttribSet, '%s - %s' % (set(dJson) ^ oAttribSet, dJson,);
+
+
+    kAttribSetBlockAccess = frozenset(['_type', 'access', 'condition']);
+    @staticmethod
+    def fromJsonBlockAccess(dJson):
+        ArmAccessorBase.assertAttribsInSet(dJson, ArmAccessorBase.kAttribSetBlockAccess);
+        return ArmAccessorBlockAccess(dJson, ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints));
+
+
+    kAttribSetBlockAccessArray = frozenset(['_type', 'access', 'condition', 'index_variables', 'indexes',
+                                            'offset', 'references']);
+    @staticmethod
+    def fromJsonBlockAccessArray(dJson):
+        ArmAccessorBase.assertAttribsInSet(dJson, ArmAccessorBase.kAttribSetBlockAccessArray);
+        return ArmAccessorBlockAccessArray(dJson, ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints));
+
+
+    kAttribSetExternalDebug = frozenset(['_type', 'access', 'component', 'condition', 'instance', 'offset',
+                                         'power_domain', 'range']);
+    @staticmethod
+    def fromJsonExternalDebug(dJson):
+        ArmAccessorBase.assertAttribsInSet(dJson, ArmAccessorBase.kAttribSetExternalDebug);
+        return ArmAccessorExternalDebug(dJson, ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints));
+
+
+    kAttribSetMemoryMapped = frozenset(['_type', 'access', 'component', 'condition', 'frame', 'instance', 'offset',
+                                        'power_domain', 'range']);
+    @staticmethod
+    def fromJsonMemoryMapped(dJson):
+        ArmAccessorBase.assertAttribsInSet(dJson, ArmAccessorBase.kAttribSetMemoryMapped);
+        return ArmAccessorExternalDebug(dJson, ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints));
+
+
+    kAttribSetSystem = frozenset(['_type', 'access', 'condition', 'encoding', 'name']);
+    @staticmethod
+    def fromJsonSystem(dJson):
+        ArmAccessorBase.assertAttribsInSet(dJson, ArmAccessorBase.kAttribSetSystem);
+        assert len(dJson['encoding']) == 1;
+        oEncoding = ArmRegEncoding.fromJson(dJson['encoding'][0]);
+        oAccess = ArmAccessorPermissionBase.fromJson(dJson['access']) if dJson['access'] else None;
+        return ArmAccessorSystem(dJson, ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints),
+                                 dJson['name'], oEncoding, oAccess);
+
+
+    kAttribSetSystemArray = frozenset(['_type', 'access', 'condition', 'encoding', 'index_variable', 'indexes', 'name']);
+    @staticmethod
+    def fromJsonSystemArray(dJson):
+        ArmAccessorBase.assertAttribsInSet(dJson, ArmAccessorBase.kAttribSetSystemArray);
+        assert len(dJson['encoding']) == 1;
+        oEncoding = ArmRegEncoding.fromJson(dJson['encoding'][0]);
+        oAccess = ArmAccessorPermissionBase.fromJson(dJson['access']) if dJson['access'] else None;
+        return ArmAccessorSystemArray(dJson, ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints),
+                                      dJson['name'], oEncoding, oAccess);
+
+
+    kfnTypeMap = {
+        'Accessors.BlockAccess':            fromJsonBlockAccess,
+        'Accessors.BlockAccessArray':       fromJsonBlockAccessArray,
+        'Accessors.ExternalDebug':          fromJsonExternalDebug,
+        'Accessors.MemoryMapped':           fromJsonMemoryMapped,
+        'Accessors.SystemAccessor':         fromJsonSystem,
+        'Accessors.SystemAccessorArray':    fromJsonSystemArray,
+    };
+
+    @staticmethod
+    def fromJson(dJson):
+        """ Decodes a register accessor object. """
+        return ArmAccessorBase.kfnTypeMap[dJson['_type']](dJson);
+
+
+class ArmAccessorBlockAccess(ArmAccessorBase):
+    """ Accessors.BlockAccess """
+    def __init__(self, dJson, oCondition):
+        ArmAccessorBase.__init__(self, dJson, oCondition);
+
+
+class ArmAccessorBlockAccessArray(ArmAccessorBase):
+    """ Accessors.BlockAccessArray """
+    def __init__(self, dJson, oCondition):
+        ArmAccessorBase.__init__(self, dJson, oCondition);
+
+
+class ArmAccessorExternalDebug(ArmAccessorBase):
+    """ Accessors.ExternalDebug """
+    def __init__(self, dJson, oCondition):
+        ArmAccessorBase.__init__(self, dJson, oCondition);
+
+
+class ArmAccessorMemoryMapped(ArmAccessorBase):
+    """ Accessors.MemoryMapped """
+    def __init__(self, dJson, oCondition):
+        ArmAccessorBase.__init__(self, dJson, oCondition);
+
+
+class ArmAccessorSystem(ArmAccessorBase):
+    """ Accessors.SystemAccessor """
+    def __init__(self, dJson, oCondition, sName, oEncoding, oAccess):
+        ArmAccessorBase.__init__(self, dJson, oCondition);
+        self.sName     = sName;
+        self.oEncoding = oEncoding;
+        self.oAccess   = oAccess;   # Can be None!
+
+
+class ArmAccessorSystemArray(ArmAccessorSystem):
+    """ Accessors.SystemAccessorArray """
+    def __init__(self, dJson, oCondition, sName, oEncoding, oAccess):
+        ArmAccessorSystem.__init__(self, dJson, oCondition, sName, oEncoding, oAccess);
+
+
+
 class ArmRegister(object):
     """
     ARM system register.
     """
 
-    def __init__(self, oJson, sName, sState, aoFieldsets, fRegArray, oCondition):
+    def __init__(self, oJson, sName, sState, aoFieldsets, fRegArray, oCondition, aoAccessors):
         self.oJson          = oJson;
         self.sName          = sName;
         self.sState         = sState;
         self.aoFieldsets    = aoFieldsets       # Type: List[ArmFieldset]
         self.fRegArray      = fRegArray;
         self.oCondition     = oCondition        # Type: ArmAstBase
+        self.aoAccessors    = aoAccessors       # Type: List[ArmAccessorBase]
 
         self.daoFields      = {}                # Type: Dict[str,List[ArmFieldsBase]]
         for oFieldset in aoFieldsets:
@@ -2013,8 +2699,9 @@ class ArmRegister(object):
         sState      = dJson['state'];
         aoFieldsets = [ArmFieldset.fromJson(dJsonSet) for dJsonSet in dJson['fieldsets']];
         oCondition  = ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints); ## @todo hackish mode
+        aoAccessors = [ArmAccessorBase.fromJson(dJsonAcc) for dJsonAcc in dJson['accessors']];
 
-        return ArmRegister(dJson, sName, sStatePrefix + sState, aoFieldsets, sType == 'RegisterArray', oCondition);
+        return ArmRegister(dJson, sName, sStatePrefix + sState, aoFieldsets, sType == 'RegisterArray', oCondition, aoAccessors);
 
 
 
@@ -2629,6 +3316,11 @@ def LoadArmOpenSourceSpecification(oOptions):
     print("Found %u instructions (%s ns)" % (len(g_aoAllArmInstructions), nsElapsedAsStr(nsStart),));
     #oBrk = g_dAllArmInstructionsByName['BRK_EX_exception'];
     #print("oBrk=%s" % (oBrk,))
+    return True;
+
+
+def PrintSpecs(oOptions):
+    """ Prints the specification if requested in the options. """
 
     if oOptions.fPrintInstructions or oOptions.fPrintInstructionsWithEncoding or oOptions.fPrintInstructionsWithConditions:
         for oInstr in g_aoAllArmInstructions:
@@ -2641,7 +3333,7 @@ def LoadArmOpenSourceSpecification(oOptions):
             if oOptions.fPrintInstructionsWithConditions and not oInstr.oCondition.isBoolAndTrue():
                 print('  condition: %s' % (oInstr.oCondition.toString(),));
 
-    # Gather stats on fixed bits:
+    # Print stats on fixed bits:
     if oOptions.fPrintFixedMaskStats:
         dCounts = collections.Counter();
         for oInstr in g_aoAllArmInstructions:
@@ -2664,6 +3356,25 @@ def LoadArmOpenSourceSpecification(oOptions):
         print('Top 20 fixed masks:');
         for fFixedMask, cHits in dCounts.most_common(20):
             print('  %#x: %u times' % (fFixedMask, cHits,));
+
+    # System registers.
+    if oOptions.fPrintSysRegs:
+        print('');
+        print('System registers:');
+        for oReg in sorted(g_aoAllArmRegisters, key = operator.attrgetter('sState', 'sName')): # type: ArmRegister
+            if oReg.sState != 'AArch64': continue; # temp
+            print('   %s.%s' % (oReg.sState, oReg.sName, ));
+            print('       Condition: %s' % (oReg.oCondition.toString(),));
+            if oReg.aoFieldsets:
+                for oFieldset in oReg.aoFieldsets: # type: ArmFieldset
+                    print('       Fieldsset: %s' % (oFieldset.toString(),));
+            for i, oAccessor in enumerate(oReg.aoAccessors): # type: int, ArmAccessorBase
+                if isinstance(oAccessor, ArmAccessorSystem):
+                    print('       Accessors[%u]: encoding=%s' % (i, oAccessor.oEncoding.toString(),));
+                    if not ArmAstBool.isBoolAndTrue(oAccessor.oCondition):
+                        print('                     condition=%s' % (oAccessor.oCondition.toString(),));
+                else:
+                    print('       Accessors[%u]: %s' % (i, oAccessor,));
 
     return True;
 
@@ -4169,6 +4880,11 @@ Then add @hints.rsp to the command line to make use of them.''');
                                 action  = 'store_true',
                                 default = False,
                                 help    = 'List the 10 top fixed bit masks.');
+        oArgParser.add_argument('--print-sysregs',
+                                dest    = 'fPrintSysRegs',
+                                action  = 'store_true',
+                                default = False,
+                                help    = 'List system registers after loading.');
         # Hacks
         oArgParser.add_argument('--decoder-hint0',
                                 metavar = 'mask-to-use',
@@ -4224,6 +4940,8 @@ Then add @hints.rsp to the command line to make use of them.''');
         # Load the specification.
         #
         if LoadArmOpenSourceSpecification(oOptions):
+            PrintSpecs(oOptions)
+
             #
             # Check if we're generating any output before constructing the decoder.
             #
