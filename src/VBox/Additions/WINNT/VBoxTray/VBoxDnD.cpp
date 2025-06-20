@@ -353,8 +353,9 @@ void VBoxDnDWnd::Destroy(void)
         if (RT_SUCCESS(rc))
             rc = rc2;
 #endif
-        OleUninitialize();
     }
+
+    OleUninitialize();
 
     if (!fSignalled)
     {
