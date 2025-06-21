@@ -2114,7 +2114,7 @@ BOOL VBoxDispIfResizeDisplayWin7Wddm(PCVBOXDISPIF const pIf, uint32_t cDispDef, 
     }
     else
     {
-        WARN(("VBoxTray:(WDDM) pfnSetDisplayConfig Ok to VALIDATE winEr %d.\n", winEr));
+        Log(("VBoxTray:(WDDM) pfnSetDisplayConfig Ok to VALIDATE.\n"));
         vboxDispIfWddmDcLogRel(&DispCfg, fSetFlags);
     }
 
