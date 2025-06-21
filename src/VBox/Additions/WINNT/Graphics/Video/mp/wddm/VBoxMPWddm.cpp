@@ -2032,6 +2032,10 @@ NTSTATUS APIENTRY DxgkDdiQueryAdapterInfo(
             Status = STATUS_NOT_SUPPORTED;
             break;
 
+        case DXGKQAITYPE_ADAPTERPERFDATA:
+            Status = STATUS_NOT_SUPPORTED;
+            break;
+
 #if defined(RT_ARCH_ARM64) || defined(RT_ARCH_ARM32)
         case DXGKQAITYPE_64BITONLYCAPS:
             memset(pQueryAdapterInfo->pOutputData, 0, pQueryAdapterInfo->OutputDataSize);
@@ -5482,11 +5486,13 @@ DriverEntry(
 #else
         VBOXVIDEO_HWTYPE enmHwType = VBOXVIDEO_HWTYPE_VMSVGA; /* ARM only supports VMSVGA3 based VBoxSVGA. */
 
-        /** @todo Query 3D and display count from the host. */
-        BOOL f3DSupported = FALSE;
-
+        /* Query 3D and display count from the host. */
+        BOOL f3DSupported = VBoxGetHostGraphicsCap(VBOX_GRAPHICS_DEVCAP_3D) != 0;
         g_f3DSupported = f3DSupported;
-        g_cDisplays = 1;
+
+        g_cDisplays = VBoxGetHostGraphicsCap(VBOX_GRAPHICS_DEVCAP_NUM_DISPLAYS);
+        if (g_cDisplays == 0)
+            g_cDisplays = 1;
 #endif /* !(defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)) */
 
         if (NT_SUCCESS(Status))

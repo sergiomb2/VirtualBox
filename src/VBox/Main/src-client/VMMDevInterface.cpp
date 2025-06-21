@@ -573,6 +573,58 @@ static DECLCALLBACK(int) vmmdevIsPageFusionEnabled(PPDMIVMMDEVCONNECTOR pInterfa
 }
 
 /**
+ * Query a virtual graphics device capability
+ *
+ * @returns VBox status code.
+ * @param   pInterface          Pointer to this interface.
+ * @param   capIndex            Index of a capabiltity VBOX_GRAPHICS_DEVCAP_*
+ * @param   pCapValue           Where to store the capability value
+ * @thread  The emulation thread.
+ */
+static DECLCALLBACK(int) vmmdevGetHostGraphicsCapability(PPDMIVMMDEVCONNECTOR pInterface, uint32_t capIndex, uint32_t *pCapValue)
+{
+    PDRVMAINVMMDEV pDrv = RT_FROM_MEMBER(pInterface, DRVMAINVMMDEV, Connector);
+    Console *pConsole = pDrv->pVMMDev->getParent();
+
+    if (!pCapValue)
+        return VERR_INVALID_PARAMETER;
+
+    if (capIndex == VBOX_GRAPHICS_DEVCAP_MAX_INDEX)
+    {
+        *pCapValue = VBOX_GRAPHICS_DEVCAP_MAX;
+        return VINF_SUCCESS;
+    }
+
+    ComPtr<IGraphicsAdapter> pGraphicsAdapter;
+    HRESULT hrc = pConsole->i_machine()->COMGETTER(GraphicsAdapter)(pGraphicsAdapter.asOutParam());
+    AssertComRCReturn(hrc, VERR_INTERNAL_ERROR);
+    AssertReturn(!pGraphicsAdapter.isNull(), VERR_INTERNAL_ERROR);
+
+    int vrc = VINF_SUCCESS;
+
+    switch (capIndex)
+    {
+        case VBOX_GRAPHICS_DEVCAP_3D:
+        {
+            BOOL f3DEnabled = FALSE;
+            pGraphicsAdapter->IsFeatureEnabled(GraphicsFeature_Acceleration3D, &f3DEnabled);
+            *pCapValue = (uint32_t)f3DEnabled;
+        } break;
+        case VBOX_GRAPHICS_DEVCAP_NUM_DISPLAYS:
+        {
+            ULONG cMonitorCount = 1;
+            pGraphicsAdapter->COMGETTER(MonitorCount)(&cMonitorCount);
+            *pCapValue = (uint32_t)cMonitorCount;
+        } break;
+        default:
+            vrc = VERR_NOT_SUPPORTED;
+            break;
+    }
+
+    return vrc;
+}
+
+/**
  * Report new guest statistics
  *
  * @returns VBox status code.
@@ -1105,6 +1157,7 @@ DECLCALLBACK(int) VMMDev::drvConstruct(PPDMDRVINS pDrvIns, PCFGMNODE pCfg, uint3
     pThis->Connector.pfnQueryStatisticsInterval       = vmmdevQueryStatisticsInterval;
     pThis->Connector.pfnQueryBalloonSize              = vmmdevQueryBalloonSize;
     pThis->Connector.pfnIsPageFusionEnabled           = vmmdevIsPageFusionEnabled;
+    pThis->Connector.pfnGetHostGraphicsCapability     = vmmdevGetHostGraphicsCapability;
 
 #ifdef VBOX_WITH_HGCM
     pThis->HGCMConnector.pfnConnect                   = iface_hgcmConnect;

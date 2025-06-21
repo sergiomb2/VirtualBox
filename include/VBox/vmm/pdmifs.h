@@ -1994,9 +1994,20 @@ typedef struct PDMIVMMDEVCONNECTOR
      */
     DECLR3CALLBACKMEMBER(int, pfnIsPageFusionEnabled,(PPDMIVMMDEVCONNECTOR pInterface, bool *pfPageFusionEnabled));
 
+    /**
+     * Queries a capability of virtual graphics device.
+     *
+     * @returns VBox status code
+     * @param   pInterface          Pointer to this interface.
+     * @param   capIndex            Capability index.
+     * @param   pCapValue           Pointer to the result value.
+     * @thread  The emulation thread.
+     */
+    DECLR3CALLBACKMEMBER(int, pfnGetHostGraphicsCapability,(PPDMIVMMDEVCONNECTOR pInterface, uint32_t capIndex, uint32_t *pCapValue));
+
 } PDMIVMMDEVCONNECTOR;
 /** PDMIVMMDEVCONNECTOR interface ID. */
-#define PDMIVMMDEVCONNECTOR_IID                 "aff90240-a443-434e-9132-80c186ab97d4"
+#define PDMIVMMDEVCONNECTOR_IID                 "eedbe8d9-eeec-4f03-8da4-a83d24870c71"
 
 
 /**

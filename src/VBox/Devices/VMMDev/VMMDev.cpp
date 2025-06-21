@@ -2770,6 +2770,25 @@ static int vmmdevReqHandler_WriteCoreDump(PPDMDEVINS pDevIns, PVMMDEV pThis, VMM
 
 
 /**
+ * Handles VMMDevReq_GetHostGraphicsCapability.
+ *
+ * @returns VBox status code that the guest should see.
+ * @param   pThisCC         The VMMDev ring-3 instance data.
+ * @param   pReqHdr         The header of the request to handle.
+ */
+static int vmmdevReqHandler_GetHostGraphicsCapability(PVMMDEVCC pThisCC, VMMDevRequestHeader *pReqHdr)
+{
+    VMMDevGetHostGraphicsCapability *pReq = (VMMDevGetHostGraphicsCapability *)pReqHdr;
+    AssertMsgReturn(pReq->header.size == sizeof(*pReq), ("%u\n", pReq->header.size), VERR_INVALID_PARAMETER);
+
+    /* forward the call */
+    return pThisCC->pDrv->pfnGetHostGraphicsCapability(pThisCC->pDrv,
+                                                       pReq->capIndex,
+                                                       &pReq->capValue);
+}
+
+
+/**
  * Sets request status to VINF_HGCM_ASYNC_EXECUTE.
  *
  * @param   pDevIns         The device instance.
@@ -3078,6 +3097,10 @@ static VBOXSTRICTRC vmmdevReqDispatcher(PPDMDEVINS pDevIns, PVMMDEV pThis, PVMMD
 
         case VMMDevReq_NtBugCheck:
             pReqHdr->rc = vmmDevReqHandler_NtBugCheck(pDevIns, pReqHdr);
+            break;
+
+        case VMMDevReq_GetHostGraphicsCapability:
+            pReqHdr->rc = vmmdevReqHandler_GetHostGraphicsCapability(pThisCC, pReqHdr);
             break;
 
         default:

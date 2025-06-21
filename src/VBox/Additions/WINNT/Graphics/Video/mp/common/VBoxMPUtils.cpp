@@ -185,6 +185,31 @@ bool VBoxLikesVideoMode(uint32_t display, uint32_t width, uint32_t height, uint3
     return bRC;
 }
 
+uint32_t VBoxGetHostGraphicsCap(uint32_t capIndex)
+{
+    uint32_t u32Result = 0;
+
+    VMMDevGetHostGraphicsCapability *req = NULL;
+    int rc = VbglR0GRAlloc((VMMDevRequestHeader**)&req, sizeof(VMMDevGetHostGraphicsCapability), VMMDevReq_GetHostGraphicsCapability);
+    if (RT_SUCCESS(rc))
+    {
+        req->capIndex = capIndex;
+
+        rc = VbglR0GRPerform(&req->header);
+        if (RT_SUCCESS(rc))
+            u32Result = req->capValue;
+        else
+            WARN(("ERROR querying host graphics cap %d from VMMDev. rc = %d", capIndex, rc));
+
+        VbglR0GRFree(&req->header);
+    }
+    else
+        LOG(("ERROR allocating request, rc = %d", rc));
+
+    LOG(("capIndex: %d -> 0x%x", capIndex, u32Result));
+    return u32Result;
+}
+
 bool VBoxQueryDisplayRequest(uint32_t *xres, uint32_t *yres, uint32_t *bpp, uint32_t *pDisplayId)
 {
     bool bRC = FALSE;
