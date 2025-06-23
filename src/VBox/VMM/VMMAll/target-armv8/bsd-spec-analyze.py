@@ -1542,9 +1542,29 @@ class ArmAstTypeAnnotation(ArmAstBase):
         raise Exception('not implemented');
 
 
-class ArmAstAssignment(ArmAstBase):
+
+class ArmAstStatementBase(ArmAstBase):
+    """
+    Base class for statements.
+
+    This adds the toStringList method.
+    """
+    def __init__(self, sType):
+        ArmAstBase.__init__(self, sType);
+
+    def toString(self):
+        return '\n'.join(self.toStringList());
+
+    def toStringList(self, sIndent = ''):
+        _ = sIndent;
+        raise Exception('Not implemented');
+
+
+class ArmAstAssignment(ArmAstStatementBase):
+    """ We classify assignments as statements. """
+
     def __init__(self, oVar, oValue):
-        ArmAstBase.__init__(self, ArmAstBase.ksTypeAssignment);
+        ArmAstStatementBase.__init__(self, ArmAstBase.ksTypeAssignment);
         self.oVar      = oVar;
         self.oValue    = oValue;
 
@@ -1561,6 +1581,9 @@ class ArmAstAssignment(ArmAstBase):
     def toString(self):
         return '%s = %s;' % (self.oVar.toString(), self.oValue.toString());
 
+    def toStringList(self, sIndent = ''):
+        return [ sIndent + self.toString(), ];
+
     def toCExpr(self, oHelper):
         _ = oHelper;
         raise Exception('not implemented');
@@ -1570,9 +1593,11 @@ class ArmAstAssignment(ArmAstBase):
         raise Exception('not implemented');
 
 
-class ArmAstReturn(ArmAstBase):
+class ArmAstReturn(ArmAstStatementBase):
+    """ We classify assignments as statements. """
+
     def __init__(self, oValue):
-        ArmAstBase.__init__(self, ArmAstBase.ksTypeReturn);
+        ArmAstStatementBase.__init__(self, ArmAstBase.ksTypeReturn);
         self.oValue    = oValue;
 
     def clone(self):
@@ -1588,6 +1613,9 @@ class ArmAstReturn(ArmAstBase):
         if self.oValue:
             return 'return %s;' % (self.oValue.toString(),);
         return 'return;';
+
+    def toStringList(self, sIndent = ''):
+        return [ sIndent + self.toString(), ];
 
     def toCExpr(self, oHelper):
         _ = oHelper;
@@ -2446,6 +2474,7 @@ class ArmRegEncoding(object):
         return ArmRegEncoding(dJson['asmvalue'], dNamedValues);
 
 
+## @todo remove this.
 class ArmAccessorPermissionBase(object):
     """
     Register accessor permission base class (Accessors.Permission.*).
@@ -2485,28 +2514,8 @@ class ArmAccessorPermissionBase(object):
         raise Exception('Unexpected access attr type: %s' % (oJsonAccess['_type'],));
 
 
-    kAttribSetSystem = frozenset(['_type', 'access', 'condition',]);
-    @staticmethod
-    def fromJsonSystem(dJson, fNested):
-        assert dJson['_type'] == 'Accessors.Permission.SystemAccess';
-        ArmAccessorPermissionBase.assertAttribsInSet(dJson, ArmAccessorPermissionBase.kAttribSetSystem);
-        oCondition = ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeAccessorCond)
-        # There are two variations here, one that has a list of Accessors.Permission.SystemAccess
-        # and one that has a AST tree as the 'access' attribute.  The former is typically the
-        # top level one and the latter makes up the element in the list.
-        if isinstance(dJson['access'], list):
-            aoAccesses = [ArmAccessorPermissionBase.fromJsonSystem(dJsonSub, True) for dJsonSub in dJson['access']]
-            #if not fNested or len(aoAccesses) != 1: # Eliminate unnecessary nested lists.
-            return ArmAccessorPermissionSystemAccessList(oCondition, aoAccesses);
-            #oAccess = aoAccesses[0];
-        else:
-            oAccess = ArmAstBase.fromJson(dJson['access'], ArmAstBase.ksModeAccessor);
-        return ArmAccessorPermissionSystemAccess(oCondition, oAccess);
-
-
     kfnTypeMap = {
         'Accessors.Permission.MemoryAccess': fromJsonMemory,
-        'Accessors.Permission.SystemAccess': fromJsonSystem,
     };
 
     @staticmethod
@@ -2551,38 +2560,174 @@ class ArmAccessorPermissionMemoryAccessList(ArmAccessorPermissionBase):
         self.aoAccesses = aoAccesses;
 
 
-class ArmAccessorPermissionSystemAccess(ArmAccessorPermissionBase):
-    """ Accessors.Permission.SystemAccess """
-    def __init__(self, oCondition, oAccess):
-        ArmAccessorPermissionBase.__init__(self, oCondition);
-        self.oAccess = oAccess;
+class ArmAstIfList(ArmAstStatementBase):
+    """
+    Accessors.Permission.SystemAccess
 
+    We make this part of the AST.
 
-class ArmAccessorPermissionSystemAccessList(ArmAccessorPermissionBase):
-    """ Accessors.Permission.SystemAccess """
-    def __init__(self, oCondition, aoAccesses):
-        ArmAccessorPermissionBase.__init__(self, oCondition);
-        self.aoAccesses = aoAccesses;
+    A series of conditional actions or nested conditional series:
+        if cond1:
+            action1;
+        elif cond2:
+            if cond2a:  # nested series
+                action2a;
+            else:
+                action2b;
+        else:
+            action3;
+    """
+
+    def __init__(self, aoIfConditions, aoIfStatements, oElseStatement, uDepth = 0):
+        ArmAstStatementBase.__init__(self, 'Accessors.Permission.MemoryAccess');
+        # The if/elif condition expressions.
+        self.aoIfConditions  = aoIfConditions   # type: List[ArmAstBase]
+        # The if/elif statements, runs in parallel to aoIfConditions. ArmAstIfList allowed.
+        self.aoIfStatements  = aoIfStatements   # type: List[ArmAstBase]
+        # The else statement - optional.  ArmAstIfList allowed.
+        self.oElseStatement  = oElseStatement   # type: ArmAstBase
+        self.uDepth          = uDepth;
+
+        # Assert sanity.
+        assert len(aoIfConditions) == len(aoIfStatements);
+        assert aoIfStatements or oElseStatement;  # Pretty lax at the moment.
+        for oStmt in list(aoIfStatements):
+            assert isinstance(oStmt, (ArmAstStatementBase, ArmAstFunction));
+        assert oElseStatement is None or isinstance(oElseStatement, (ArmAstStatementBase, ArmAstFunction));
+
+    def clone(self):
+        return ArmAstIfList([oIfCond.clone() for oIfCond in self.aoIfConditions],
+                            [oIfStmt.clone() for oIfStmt in self.aoIfStatements],
+                            self.oElseStatement.clone() if self.oElseStatement else None,
+                            self.uDepth);
+
+    def isSame(self, oOther):
+        if isinstance(oOther, ArmAstIfList):
+            if len(self.aoIfConditions) == len(oOther.aoIfConditions):
+                for i, oIfCond in enumerate(self.aoIfConditions):
+                    if not oIfCond.isSame(oOther.aoIfConditions[i]):
+                        return False;
+                    if not self.aoIfStatements[i].isSame(oOther.aoIfStatements[i]):
+                        return False;
+                if (self.oElseStatement is None) == (oOther.oElseStatement is None):
+                    if self.oElseStatement and not self.oElseStatement.isSame(oOther.oElseStatement):
+                        return False;
+                if self.uDepth == oOther.uDepth:
+                    return True;
+        return False;
 
     def toStringList(self, sIndent = ''):
         asLines = [];
-        if self.oCondition and not self.oCondition.isBoolAndTrue():
-            asLines.append(sIndent + 'if (%s)' % (self.oCondition.toString(),));
-            sIndent += '    ';
-        for i, oChild in enumerate(self.aoAccesses):
-            sExtraIndent = '    ';
-            if oChild.oCondition and not oChild.oCondition.isBoolAndTrue():
-                asLines.append(sIndent + '%sif (%s)' % ('else ' if i > 0 else '', oChild.oCondition.toString(),));
-            elif i > 0:
+        sNextIndent = sIndent + '    ';
+        for i, oIfCond in enumerate(self.aoIfConditions):
+            asLines.append('%s%sif (%s)' % (sIndent, 'else ' if i > 0 else '', oIfCond.toString(),));
+            oIfStmt = self.aoIfStatements[i];
+            if isinstance(oIfStmt, ArmAstStatementBase):
+                asLines.extend(oIfStmt.toStringList(sNextIndent));
+            else:
+                asLines.append(sNextIndent + oIfStmt.toString());
+
+        if self.oElseStatement:
+            if self.aoIfConditions:
                 asLines.append(sIndent + 'else');
             else:
-                assert len(self.aoAccesses) == 1;
-                sExtraIndent = '';
-            if isinstance(oChild, ArmAccessorPermissionSystemAccessList):
-                asLines.extend(oChild.toStringList(sIndent + sExtraIndent));
+                sNextIndent = sIndent; # Trick.
+            if isinstance(self.oElseStatement, ArmAstStatementBase):
+                asLines.extend(self.oElseStatement.toStringList(sNextIndent));
             else:
-                asLines.append(sIndent + sExtraIndent + oChild.oAccess.toString());
+                asLines.append(sNextIndent + self.oElseStatement.toString());
         return asLines;
+
+    def toCExpr(self, oHelper):
+        raise Exception('not implemented');
+
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        return -1;
+
+    kAttribSet = frozenset(['_type', 'access', 'condition',]);
+    @staticmethod
+    def fromJson(dJson, uDepth = 0): # pylint: disable=arguments-renamed
+        #
+        # There are two variants of this object.
+        #
+        if dJson['_type'] != 'Accessors.Permission.SystemAccess': raise Exception('wrong type: %s' % (dJson['_type'],));
+        ArmAstBase.assertAttribsInSet(dJson, ArmAstIfList.kAttribSet);
+        oCondition = ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeAccessorCond);
+
+        #
+        # 1. 'access' is an AST: This is one if/else + action without nesting.
+        #
+        if not isinstance(dJson['access'], list):
+            oStmt = ArmAstBase.fromJson(dJson['access'], ArmAstBase.ksModeAccessor);
+            if oCondition.isBoolAndTrue():
+                assert isinstance(oStmt, (ArmAstStatementBase, ArmAstFunction)); ## @todo may need a wrapper.
+                #print('debug/IfList/%u:%s 1a. oStmt=%s' % (uDepth, ' '*uDepth, oStmt,));
+                return oStmt;
+            oRet = ArmAstIfList([oCondition], [oStmt], None, uDepth);
+            #print('debug/IfList/%u:%s 1b. oRet=\n%s' % (uDepth, ' '*uDepth, oRet,));
+            return oRet;
+
+        #
+        # 2. 'access' is a list of the same type: Typically nested if-list.
+        #
+        #    This is more complicated because of the nesting and different ways
+        #    of expressing the same stuff.  We make it even more complicated by
+        #    not mirroring the json representation 1:1.
+        #
+        aoChildren = [ArmAstIfList.fromJson(dJsonChild, uDepth + 1) for dJsonChild in dJson['access']];
+        assert aoChildren;
+
+        # Iff there is only one child, we need to check for some special cases.
+        if len(aoChildren) == 1:
+            oChild = aoChildren[0];
+            if not isinstance(oChild, ArmAstIfList):
+                if oCondition.isBoolAndTrue():
+                    #print('debug/IfList/%u:%s 2a. oChild=%s' % (uDepth, ' '*uDepth, oChild,));
+                    return oChild;
+                #print('debug/IfList/%u:%s 2b. oCondition=%s oChild=%s' % (uDepth, ' '*uDepth, oCondition, oChild,));
+                return ArmAstIfList([oCondition], aoChildren, None, uDepth);
+
+            # If our condition is a dummy one, return the child.
+            if oCondition.isBoolAndTrue():
+                #print('debug/IfList/%u:%s 2c. oChild=%s' % (uDepth, ' '*uDepth, oChild,));
+                return oChild;
+            assert oChild.aoIfConditions;
+
+        # Generic.
+        #print('debug/IfList/%u:%s 2d. #aoChildren=%s' % (uDepth, ' '*uDepth, len(aoChildren),));
+        aoIfConds = [];
+        aoIfStmts = [];
+        oElseStmt = None;
+        for i, oChild in enumerate(aoChildren):
+            if isinstance(oChild, ArmAstIfList):
+                assert not oChild.oElseStatement or i + 1 == len(aoChildren), \
+                       'i=%s/%u\noIfConditions=%s\noElseStmts=%s\naoChildren=[\n%s]' \
+                        % (i, len(aoChildren), oChild.aoIfConditions, oChild.oElseStatement,
+                           '\n'.join(['  #%u: %s' % (j, o.toString()) for j, o in enumerate(aoChildren)])
+                           );
+                aoIfConds.extend(oChild.aoIfConditions);
+                aoIfStmts.extend(oChild.aoIfStatements);
+                if oChild.oElseStatement:
+                    assert i == len(aoChildren) - 1 and not oElseStmt;
+                    oElseStmt = oChild.oElseStatement;
+                    #print('debug/IfList/%u:%s 2e. i=%u oChild=%s' % (uDepth, ' '*uDepth, i, oChild,));
+                #else: print('debug/IfList/%u:%s 2f. i=%u oChild=%s' % (uDepth, ' '*uDepth, i, oChild,));
+            else:
+                #print('debug/IfList/%u:%s 2g. i=%u oChild=%s' % (uDepth, ' '*uDepth, i, oChild,));
+                assert i == len(aoChildren) - 1 and not oElseStmt;
+                oElseStmt = oChild;
+        #print('debug/IfList/%u:%s 2x. oElseStmt=%s' % (uDepth, ' '*uDepth, oElseStmt));
+
+        # Twist: Eliminate this level if the current condition is just 'true'.
+        ## @todo correct uDepth?
+        if oCondition.isBoolAndTrue():
+            oRet = ArmAstIfList(aoIfConds, aoIfStmts, oElseStmt, uDepth);
+            #print('debug/IfList/%u:%s 2y. oRet=\n%s\n' % (uDepth, ' '*uDepth, oRet));
+        else:
+            oRet = ArmAstIfList([oCondition], [ArmAstIfList(aoIfConds, aoIfStmts, oElseStmt, uDepth + 1)], None, uDepth);
+            #print('debug/IfList/%u:%s 2z. oRet=\n%s\n' % (uDepth, ' '*uDepth, oRet));
+        return oRet;
 
 
 
@@ -2636,10 +2781,11 @@ class ArmAccessorBase(object):
     def fromJsonSystem(dJson):
         ArmAccessorBase.assertAttribsInSet(dJson, ArmAccessorBase.kAttribSetSystem);
         assert len(dJson['encoding']) == 1;
+        sName     = dJson['name']; # For exception listing
         oEncoding = ArmRegEncoding.fromJson(dJson['encoding'][0]);
-        oAccess = ArmAccessorPermissionBase.fromJson(dJson['access']) if dJson['access'] else None;
+        oAccess   = ArmAstIfList.fromJson(dJson['access']) if dJson['access'] else None;
         return ArmAccessorSystem(dJson, ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints),
-                                 dJson['name'], oEncoding, oAccess);
+                                 sName, oEncoding, oAccess);
 
 
     kAttribSetSystemArray = frozenset(['_type', 'access', 'condition', 'encoding', 'index_variable', 'indexes', 'name']);
@@ -2648,7 +2794,7 @@ class ArmAccessorBase(object):
         ArmAccessorBase.assertAttribsInSet(dJson, ArmAccessorBase.kAttribSetSystemArray);
         assert len(dJson['encoding']) == 1;
         oEncoding = ArmRegEncoding.fromJson(dJson['encoding'][0]);
-        oAccess = ArmAccessorPermissionBase.fromJson(dJson['access']) if dJson['access'] else None;
+        oAccess   = ArmAstIfList.fromJson(dJson['access']) if dJson['access'] else None;
         return ArmAccessorSystemArray(dJson, ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints),
                                       dJson['name'], oEncoding, oAccess);
 
@@ -3414,6 +3560,7 @@ def PrintSpecs(oOptions):
             for i, oAccessor in enumerate(oReg.aoAccessors): # type: int, ArmAccessorBase
                 if isinstance(oAccessor, ArmAccessorSystem):
                     print('       Accessors[%u]: encoding=%s' % (i, oAccessor.oEncoding.toString(),));
+                    print('                     name=%s' % (oAccessor.sName,));
                     if not ArmAstBool.isBoolAndTrue(oAccessor.oCondition):
                         print('                     condition=%s' % (oAccessor.oCondition.toString(),));
                     if oAccessor.oAccess: # ArmAccessorPermissionSystemAccessList
