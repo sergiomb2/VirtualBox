@@ -1050,7 +1050,14 @@ check_status_kernel()
     # running VBoxVGA or VBoxSVGA graphics.
     if [ $? -eq 0 ]; then
         gpu_vendor=$(lspci | grep 'VGA compatible controller' | cut -d ' ' -f 5 2>/dev/null)
-        if [ "$gpu_vendor" = "InnoTek" ]; then
+
+        # vboxvideo is not installed for kernels 3.10.x and older.
+        have_vboxvideo=
+        if [ "$(printf '%s\n%s\n' "3.10" "$(uname -r)" | sort -Vr | head -1)" = "$(uname -r)" ]; then
+            have_vboxvideo="1"
+        fi
+
+        if [ -n "$have_vboxvideo" -a "$gpu_vendor" = "InnoTek" ]; then
             check_running_module "vboxvideo"
         else
             # Do not spoil $?.
