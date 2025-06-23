@@ -3159,7 +3159,7 @@
 #  pragma warning(disable:4200) /* -wd4200 does not work with VS2010 */
 #  pragma warning(disable:4815) /* -wd4815 does not work with VS2019 */
 # endif
-#elif RT_STDC_VERSION_PREREQ(__STDC_VERSION__, 199901L)
+#elif RT_STDC_VERSION_PREREQ(199901L)
 # define RT_FLEXIBLE_ARRAY
 #else
 # define RT_FLEXIBLE_ARRAY                      1
