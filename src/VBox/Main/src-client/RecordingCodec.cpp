@@ -1203,6 +1203,7 @@ int recordingCodecScreenChange(PRECORDINGCODEC pCodec, PRECORDINGSURFACEINFO pIn
     if (   !pInfo->uWidth
         || !pInfo->uHeight)
         return VERR_INVALID_PARAMETER;
+    AssertReturn(pInfo->enmPixelFmt == RECORDINGPIXELFMT_BRGA32 /* Only format we support for now */, VERR_INVALID_PARAMETER);
     AssertReturn(pInfo->uBPP % 8 == 0, VERR_INVALID_PARAMETER);
 
     return pCodec->Ops.pfnScreenChange(pCodec, pInfo);
