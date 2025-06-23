@@ -24,6 +24,11 @@
  */
 #include "slirp.h"
 
+// #ifdef VBOX
+// # include <iprt/net.h>
+// # include <iprt/types.h>
+// #endif
+
 #ifndef g_warning_once
 #define g_warning_once g_warning
 #endif

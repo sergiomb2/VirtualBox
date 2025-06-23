@@ -69,8 +69,6 @@
 #include <iprt/cpp/utils.h>
 #include <VBox/log.h>
 
-#include <limits.h>
-
 #include <iprt/buildconfig.h>
 #include <iprt/getopt.h>
 #include <iprt/process.h>
