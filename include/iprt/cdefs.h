@@ -249,9 +249,20 @@
  * @param   a_Min           The minimum version, e.g. 201100.
  */
 #ifdef __cplusplus
-# define RT_CPLUSPLUS_PREREQ(a_Min)      (__cplusplus >= (a_Min))
+# define RT_CPLUSPLUS_PREREQ(a_Min)     (__cplusplus >= (a_Min))
 #else
-# define RT_CPLUSPLUS_PREREQ(a_Min)      (0)
+# define RT_CPLUSPLUS_PREREQ(a_Min)     (0)
+#endif
+
+/** @def RT_STDC_VERSION_PREREQ
+ * Require a minimum __STDC_VERSION__ value, simplifying dealing with non-C code.
+ *
+ * @param   a_Min           The minimum version, e.g. 201100L or 201700L.
+ */
+#if !defined(__cplusplus) && defined(__STDC_VERSION__)
+# define RT_STDC_VERSION_PREREQ(a_Min)  (__STDC_VERSION__ >= (a_Min))
+#else
+# define RT_STDC_VERSION_PREREQ(a_Min)  (0)
 #endif
 
 /** @def RT_GNUC_PREREQ
@@ -3148,12 +3159,8 @@
 #  pragma warning(disable:4200) /* -wd4200 does not work with VS2010 */
 #  pragma warning(disable:4815) /* -wd4815 does not work with VS2019 */
 # endif
-#elif defined(__STDC_VERSION__)
-# if __STDC_VERSION__ >= 199901L
-#  define RT_FLEXIBLE_ARRAY
-# else /* __STDC_VERSION__ < 199901L */
-#  define RT_FLEXIBLE_ARRAY                     1
-# endif /* __STDC_VERSION__ < 199901L */
+#elif RT_STDC_VERSION_PREREQ(__STDC_VERSION__, 199901L)
+# define RT_FLEXIBLE_ARRAY
 #else
 # define RT_FLEXIBLE_ARRAY                      1
 #endif
