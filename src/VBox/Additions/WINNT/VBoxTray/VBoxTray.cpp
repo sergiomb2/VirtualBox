@@ -834,7 +834,7 @@ static int vboxTrayServiceMain(void)
 #endif
                                 if (msg.message == WM_QUIT)
                                 {
-                                    LogFunc(("Terminating ...\n"));
+                                    VBoxTrayInfo("Received quit event, terminating ...\n");
                                     SetEvent(g_hStopSem);
                                 }
                                 TranslateMessage(&msg);
@@ -918,6 +918,40 @@ static int vboxTrayAttachConsole(void)
 static void vboxTrayDetachConsole()
 {
     g_fHasConsole = false;
+}
+
+/**
+ * Console control event callback.
+ *
+ * @returns TRUE if handled, FALSE if not.
+ * @param   dwCtrlType      The control event type.
+ *
+ * @remarks This is generally called on a new thread, so we're racing every
+ *          other thread in the process.
+ */
+static BOOL WINAPI vboxTrayConsoleControlHandler(DWORD dwCtrlType) RT_NOTHROW_DEF
+{
+    int rc = VINF_SUCCESS;
+    bool fEventHandled = FALSE;
+    switch (dwCtrlType)
+    {
+        /* User pressed CTRL+C or CTRL+BREAK or an external event was sent
+         * via GenerateConsoleCtrlEvent(). */
+        case CTRL_BREAK_EVENT:
+        case CTRL_CLOSE_EVENT:
+        case CTRL_C_EVENT:
+            VBoxTrayVerbose(4, "ControlHandler: Received break/close event\n");
+            PostMessage(g_hwndToolWindow, WM_QUIT, 0, 0);
+            fEventHandled = TRUE;
+            break;
+        default:
+            break;
+        /** @todo Add other events here. */
+    }
+
+    if (RT_FAILURE(rc))
+        VBoxTrayError("ControlHandler: Event %ld handled with error rc=%Rrc\n", dwCtrlType, rc);
+    return fEventHandled;
 }
 
 /**
@@ -1232,8 +1266,24 @@ int main(int cArgs, char **papszArgs)
 
                 vboxTraySetupSeamless();
 
+                /* Install console control handler. */
+                if (g_fHasConsole)
+                {
+                    if (!SetConsoleCtrlHandler(vboxTrayConsoleControlHandler, TRUE /* Add handler */))
+                        VBoxTrayError("Unable to add console control handler, error=%ld\n", GetLastError());
+                    /* Just skip this error, not critical. */
+                }
+
                 rc = vboxTrayServiceMain();
                 /* Note: Do *not* overwrite rc in the following code, as this acts as the exit code. */
+
+                /* Uninstall console control handler. */
+                if (g_fHasConsole)
+                {
+                    if (!SetConsoleCtrlHandler((PHANDLER_ROUTINE)NULL, FALSE /* Remove handler */))
+                        VBoxTrayError("Unable to remove console control handler, error=%ld\n", GetLastError());
+                    /* Just skip this error, not critical. */
+                }
 
                 vboxTrayShutdownSeamless();
 
