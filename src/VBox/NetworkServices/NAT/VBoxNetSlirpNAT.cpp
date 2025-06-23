@@ -252,14 +252,9 @@ private:
                                     const com::Utf8Str &strContext);
     static void reportErrorInfo(const com::ErrorInfo &info);
 
-#if 0
-    void initIPv4RawSock();
-    void initIPv6RawSock();
-#endif
-
     HRESULT HandleEvent(VBoxEventType_T aEventType, IEvent *pEvent);
 
-    const char **getHostNameservers();
+    PCRTNETADDRIPV4 getHostNameservers();
 
     int slirpTimersAdjustTimeoutDown(int cMsTimeout);
     void slirpNotifyPollThread(const char *pszWho);
@@ -302,18 +297,15 @@ VBoxNetSlirpNAT::VBoxNetSlirpNAT()
 {
     LogFlowFuncEnter();
 
-#if 0
-    RT_ZERO(m_ProxyOptions.ipv4_addr);
-    RT_ZERO(m_ProxyOptions.ipv4_mask);
-    RT_ZERO(m_ProxyOptions.ipv6_addr);
-    m_ProxyOptions.ipv6_enabled = 0;
-    m_ProxyOptions.ipv6_defroute = 0;
-    m_ProxyOptions.icmpsock4 = INVALID_SOCKET;
-    m_ProxyOptions.icmpsock6 = INVALID_SOCKET;
-    m_ProxyOptions.tftp_root = NULL;
-    m_ProxyOptions.src4 = NULL;
-    m_ProxyOptions.src6 = NULL;
-#endif
+    RT_ZERO(m_ProxyOptions);
+
+    m_ProxyOptions.version = 6;
+    m_ProxyOptions.restricted   = false;
+    m_ProxyOptions.in_enabled   = true;
+    m_ProxyOptions.if_mtu       = m_u16Mtu;
+    m_ProxyOptions.disable_dhcp = true;
+    m_ProxyOptions.disable_host_loopback = false;
+
     RT_ZERO(m_src4);
     RT_ZERO(m_src6);
     m_src4.sin_family = AF_INET;
@@ -344,25 +336,6 @@ VBoxNetSlirpNAT::~VBoxNetSlirpNAT()
 {
     RTReqQueueDestroy(m_hSlirpReqQueue);
     m_hSlirpReqQueue = NIL_RTREQQUEUE;
-
-#if 0
-    if (m_ProxyOptions.tftp_root)
-    {
-        RTStrFree((char *)m_ProxyOptions.tftp_root);
-        m_ProxyOptions.tftp_root = NULL;
-    }
-    if (m_ProxyOptions.nameservers)
-    {
-        const char **pv = m_ProxyOptions.nameservers;
-        while (*pv)
-        {
-            RTStrFree((char*)*pv);
-            pv++;
-        }
-        RTMemFree(m_ProxyOptions.nameservers);
-        m_ProxyOptions.nameservers = NULL;
-    }
-#endif
 }
 
 
@@ -497,15 +470,6 @@ int VBoxNetSlirpNAT::init()
     hrc = virtualbox->COMGETTER(Host)(m_host.asOutParam());
     AssertComRCReturn(hrc, VERR_INTERNAL_ERROR);
 
-    RT_ZERO(m_ProxyOptions);
-    m_u16Mtu = 1500; // XXX: FIXME
-
-    m_ProxyOptions.version = 6;
-    m_ProxyOptions.restricted   = false;
-    m_ProxyOptions.in_enabled   = true;
-    m_ProxyOptions.if_mtu       = m_u16Mtu;
-    m_ProxyOptions.disable_dhcp = true;
-
     /* Get the settings related to IPv4. */
     rc = initIPv4();
     if (RT_FAILURE(rc))
@@ -516,10 +480,7 @@ int VBoxNetSlirpNAT::init()
     if (RT_FAILURE(rc))
         return rc;
 
-
-    fetchNatPortForwardRules(m_vecPortForwardRule4, /* :fIsIPv6 */ false);
     if (m_ProxyOptions.in6_enabled)
-        fetchNatPortForwardRules(m_vecPortForwardRule6, /* :fIsIPv6 */ true);
 
 
     if (m_strHome.isNotEmpty())
@@ -530,10 +491,6 @@ int VBoxNetSlirpNAT::init()
         AssertRC(rc);
         m_ProxyOptions.tftp_path = pszStrTemp;
     }
-
-#if 0 /** @todo */
-    m_ProxyOptions.nameservers = getHostNameservers();
-#endif
 
     static SlirpCb slirpCallbacks = { 0 };
 
@@ -687,7 +644,6 @@ int VBoxNetSlirpNAT::initIPv4()
 
     AssertReturn(m_net.isNotNull(), VERR_GENERAL_FAILURE);
 
-
     /*
      * IPv4 address and mask.
      */
@@ -727,9 +683,36 @@ int VBoxNetSlirpNAT::initIPv4()
     memcpy(&m_ProxyOptions.vnetmask, &Mask4, sizeof(in_addr));
     memcpy(&m_ProxyOptions.vhost,    &Addr4, sizeof(in_addr));
 
-#if 0 /** @todo */
-    /* Raw socket for ICMP. */
-    initIPv4RawSock();
+    /*
+     * IPv4 Nameservers
+     */
+    PCRTNETADDRIPV4 acNameservers = getHostNameservers();
+    //populate only first entry
+    /** @todo r=jack: fix that in libslirp. */
+    if (acNameservers != NULL)
+    {
+        memcpy(&m_ProxyOptions.vnameserver, acNameservers, sizeof(RTNETADDRIPV4));
+        m_ProxyOptions.disable_dns = true;
+    }
+    else
+    {
+        LogRel(("Failed to obtain IPv4 nameservers from host."
+                "Falling back to default libslirp virtual nameserver.\n"));
+
+        RTNETADDRIPV4 Nameserver4;
+        Nameserver4.u = Net4.u | RT_H2N_U32_C(0x00000003);
+
+        memcpy(&m_ProxyOptions.vnameserver, &Nameserver4, sizeof(in_addr));
+    }
+
+    if (acNameservers)
+    {
+        RTMemFree((PRTNETADDRIPV4)acNameservers);
+        acNameservers = NULL;
+    }
+
+    rc = fetchNatPortForwardRules(m_vecPortForwardRule4, /* :fIsIPv6 */ false);
+    AssertLogRelRCReturn(rc, rc);
 
     /* IPv4 source address (host), if configured. */
     com::Utf8Str strSourceIp4;
@@ -740,8 +723,7 @@ int VBoxNetSlirpNAT::initIPv4()
         rc = RTNetStrToIPv4Addr(strSourceIp4.c_str(), &addr);
         if (RT_SUCCESS(rc))
         {
-            m_src4.sin_addr.s_addr = addr.u;
-            m_ProxyOptions.src4 = &m_src4;
+            m_ProxyOptions.outbound_addr->sin_addr.s_addr = addr.u;
 
             LogRel(("Will use %RTnaipv4 as IPv4 source address\n",
                     m_src4.sin_addr.s_addr));
@@ -753,8 +735,12 @@ int VBoxNetSlirpNAT::initIPv4()
         }
     }
 
-    /* Make host's loopback(s) available from inside the natnet */
-    initIPv4LoopbackMap();
+#if 0 /** @todo */
+    /* Raw socket for ICMP. */
+    // initIPv4RawSock(); jack: shouldn't be needed. libslirp handles rawsock/dgram sock.
+
+    // /* Make host's loopback(s) available from inside the natnet */
+    // initIPv4LoopbackMap();
 #endif
 
     return VINF_SUCCESS;
@@ -762,51 +748,51 @@ int VBoxNetSlirpNAT::initIPv4()
 
 
 #if 0 /** @todo */
-/**
- * Create raw IPv4 socket for sending and snooping ICMP.
- */
-void VBoxNetSlirpNAT::initIPv4RawSock()
-{
-    SOCKET icmpsock4 = INVALID_SOCKET;
+// /**
+//  * Create raw IPv4 socket for sending and snooping ICMP.
+//  */
+// void VBoxNetSlirpNAT::initIPv4RawSock()
+// {
+//     SOCKET icmpsock4 = INVALID_SOCKET;
 
-#ifndef RT_OS_DARWIN
-    const int icmpstype = SOCK_RAW;
-#else
-    /* on OS X it's not privileged */
-    const int icmpstype = SOCK_DGRAM;
-#endif
+// #ifndef RT_OS_DARWIN
+//     const int icmpstype = SOCK_RAW;
+// #else
+//     /* on OS X it's not privileged */
+//     const int icmpstype = SOCK_DGRAM;
+// #endif
 
-    icmpsock4 = socket(AF_INET, icmpstype, IPPROTO_ICMP);
-    if (icmpsock4 == INVALID_SOCKET)
-    {
-        perror("IPPROTO_ICMP");
-#ifdef VBOX_RAWSOCK_DEBUG_HELPER
-        icmpsock4 = getrawsock(AF_INET);
-#endif
-    }
+//     icmpsock4 = socket(AF_INET, icmpstype, IPPROTO_ICMP);
+//     if (icmpsock4 == INVALID_SOCKET)
+//     {
+//         perror("IPPROTO_ICMP");
+// #ifdef VBOX_RAWSOCK_DEBUG_HELPER
+//         icmpsock4 = getrawsock(AF_INET);
+// #endif
+//     }
 
-    if (icmpsock4 != INVALID_SOCKET)
-    {
-#ifdef ICMP_FILTER              //  Linux specific
-        struct icmp_filter flt = {
-            ~(uint32_t)(
-                  (1U << ICMP_ECHOREPLY)
-                | (1U << ICMP_DEST_UNREACH)
-                | (1U << ICMP_TIME_EXCEEDED)
-            )
-        };
+//     if (icmpsock4 != INVALID_SOCKET)
+//     {
+// #ifdef ICMP_FILTER              //  Linux specific
+//         struct icmp_filter flt = {
+//             ~(uint32_t)(
+//                   (1U << ICMP_ECHOREPLY)
+//                 | (1U << ICMP_DEST_UNREACH)
+//                 | (1U << ICMP_TIME_EXCEEDED)
+//             )
+//         };
 
-        int status = setsockopt(icmpsock4, SOL_RAW, ICMP_FILTER,
-                                &flt, sizeof(flt));
-        if (status < 0)
-        {
-            perror("ICMP_FILTER");
-        }
-#endif
-    }
+//         int status = setsockopt(icmpsock4, SOL_RAW, ICMP_FILTER,
+//                                 &flt, sizeof(flt));
+//         if (status < 0)
+//         {
+//             perror("ICMP_FILTER");
+//         }
+// #endif
+//     }
 
-    m_ProxyOptions.icmpsock4 = icmpsock4;
-}
+//     m_ProxyOptions.icmpsock4 = icmpsock4;
+// }
 
 
 /**
@@ -815,112 +801,112 @@ void VBoxNetSlirpNAT::initIPv4RawSock()
  * services on loopback addresses other than 127.0.0.1.  E.g. a
  * caching dns proxy on 127.0.1.1 or 127.0.0.53.
  */
-int VBoxNetSlirpNAT::initIPv4LoopbackMap()
-{
-    HRESULT hrc;
-    int rc;
+// int VBoxNetSlirpNAT::initIPv4LoopbackMap()
+// {
+//     HRESULT hrc;
+//     int rc;
 
-    com::SafeArray<BSTR> aStrLocalMappings;
-    hrc = m_net->COMGETTER(LocalMappings)(ComSafeArrayAsOutParam(aStrLocalMappings));
-    if (FAILED(hrc))
-    {
-        reportComError(m_net, "LocalMappings", hrc);
-        return VERR_GENERAL_FAILURE;
-    }
+//     com::SafeArray<BSTR> aStrLocalMappings;
+//     hrc = m_net->COMGETTER(LocalMappings)(ComSafeArrayAsOutParam(aStrLocalMappings));
+//     if (FAILED(hrc))
+//     {
+//         reportComError(m_net, "LocalMappings", hrc);
+//         return VERR_GENERAL_FAILURE;
+//     }
 
-    if (aStrLocalMappings.size() == 0)
-        return VINF_SUCCESS;
-
-
-    /* netmask in host order, to verify the offsets */
-    uint32_t uMask = RT_N2H_U32(ip4_addr_get_u32(&m_ProxyOptions.ipv4_mask.u_addr.ip4));
+//     if (aStrLocalMappings.size() == 0)
+//         return VINF_SUCCESS;
 
 
-    /*
-     * Process mappings of the form "127.x.y.z=off"
-     */
-    unsigned int dst = 0;      /* typeof(ip4_lomap_desc::num_lomap) */
-    for (size_t i = 0; i < aStrLocalMappings.size(); ++i)
-    {
-        com::Utf8Str strMapping(aStrLocalMappings[i]);
-        const char *pcszRule = strMapping.c_str();
-        LogRel(("IPv4 loopback mapping %zu: %s\n", i, pcszRule));
+//     /* netmask in host order, to verify the offsets */
+//     uint32_t uMask = RT_N2H_U32(ip4_addr_get_u32(&m_ProxyOptions.ipv4_mask.u_addr.ip4));
 
-        RTNETADDRIPV4 Loopback4;
-        char *pszNext;
-        rc = RTNetStrToIPv4AddrEx(pcszRule, &Loopback4, &pszNext);
-        if (RT_FAILURE(rc))
-        {
-            LogRel(("Failed to parse IPv4 address: %Rra\n", rc));
-            continue;
-        }
 
-        if (Loopback4.au8[0] != 127)
-        {
-            LogRel(("Not an IPv4 loopback address\n"));
-            continue;
-        }
+//     /*
+//      * Process mappings of the form "127.x.y.z=off"
+//      */
+//     unsigned int dst = 0;      /* typeof(ip4_lomap_desc::num_lomap) */
+//     for (size_t i = 0; i < aStrLocalMappings.size(); ++i)
+//     {
+//         com::Utf8Str strMapping(aStrLocalMappings[i]);
+//         const char *pcszRule = strMapping.c_str();
+//         LogRel(("IPv4 loopback mapping %zu: %s\n", i, pcszRule));
 
-        if (rc != VWRN_TRAILING_CHARS)
-        {
-            LogRel(("Missing right hand side\n"));
-            continue;
-        }
+//         RTNETADDRIPV4 Loopback4;
+//         char *pszNext;
+//         rc = RTNetStrToIPv4AddrEx(pcszRule, &Loopback4, &pszNext);
+//         if (RT_FAILURE(rc))
+//         {
+//             LogRel(("Failed to parse IPv4 address: %Rra\n", rc));
+//             continue;
+//         }
 
-        pcszRule = RTStrStripL(pszNext);
-        if (*pcszRule != '=')
-        {
-            LogRel(("Invalid rule format\n"));
-            continue;
-        }
+//         if (Loopback4.au8[0] != 127)
+//         {
+//             LogRel(("Not an IPv4 loopback address\n"));
+//             continue;
+//         }
 
-        pcszRule = RTStrStripL(pcszRule+1);
-        if (*pszNext == '\0')
-        {
-            LogRel(("Empty right hand side\n"));
-            continue;
-        }
+//         if (rc != VWRN_TRAILING_CHARS)
+//         {
+//             LogRel(("Missing right hand side\n"));
+//             continue;
+//         }
 
-        uint32_t u32Offset;
-        rc = RTStrToUInt32Ex(pcszRule, &pszNext, 10, &u32Offset);
-        if (rc != VINF_SUCCESS && rc != VWRN_TRAILING_SPACES)
-        {
-            LogRel(("Invalid offset\n"));
-            continue;
-        }
+//         pcszRule = RTStrStripL(pszNext);
+//         if (*pcszRule != '=')
+//         {
+//             LogRel(("Invalid rule format\n"));
+//             continue;
+//         }
 
-        if (u32Offset <= 1 || u32Offset == ~uMask)
-        {
-            LogRel(("Offset maps to a reserved address\n"));
-            continue;
-        }
+//         pcszRule = RTStrStripL(pcszRule+1);
+//         if (*pszNext == '\0')
+//         {
+//             LogRel(("Empty right hand side\n"));
+//             continue;
+//         }
 
-        if ((u32Offset & uMask) != 0)
-        {
-            LogRel(("Offset exceeds the network size\n"));
-            continue;
-        }
+//         uint32_t u32Offset;
+//         rc = RTStrToUInt32Ex(pcszRule, &pszNext, 10, &u32Offset);
+//         if (rc != VINF_SUCCESS && rc != VWRN_TRAILING_SPACES)
+//         {
+//             LogRel(("Invalid offset\n"));
+//             continue;
+//         }
 
-        if (dst >= RT_ELEMENTS(m_lo2off))
-        {
-            LogRel(("Ignoring the mapping, too many mappings already\n"));
-            continue;
-        }
+//         if (u32Offset <= 1 || u32Offset == ~uMask)
+//         {
+//             LogRel(("Offset maps to a reserved address\n"));
+//             continue;
+//         }
 
-        ip4_addr_set_u32(&m_lo2off[dst].loaddr, Loopback4.u);
-        m_lo2off[dst].off = u32Offset;
-        ++dst;
-    }
+//         if ((u32Offset & uMask) != 0)
+//         {
+//             LogRel(("Offset exceeds the network size\n"));
+//             continue;
+//         }
 
-    if (dst > 0)
-    {
-        m_loOptDescriptor.lomap = m_lo2off;
-        m_loOptDescriptor.num_lomap = dst;
-        m_ProxyOptions.lomap_desc = &m_loOptDescriptor;
-    }
+//         if (dst >= RT_ELEMENTS(m_lo2off))
+//         {
+//             LogRel(("Ignoring the mapping, too many mappings already\n"));
+//             continue;
+//         }
 
-    return VINF_SUCCESS;
-}
+//         ip4_addr_set_u32(&m_lo2off[dst].loaddr, Loopback4.u);
+//         m_lo2off[dst].off = u32Offset;
+//         ++dst;
+//     }
+
+//     if (dst > 0)
+//     {
+//         m_loOptDescriptor.lomap = m_lo2off;
+//         m_loOptDescriptor.num_lomap = dst;
+//         m_ProxyOptions.lomap_desc = &m_loOptDescriptor;
+//     }
+
+//     return VINF_SUCCESS;
+// }
 #endif
 
 
@@ -935,7 +921,6 @@ int VBoxNetSlirpNAT::initIPv6()
     int rc;
 
     AssertReturn(m_net.isNotNull(), VERR_GENERAL_FAILURE);
-
 
     /* Is IPv6 enabled for this network at all? */
     BOOL fIPv6Enabled = FALSE;
@@ -1029,15 +1014,10 @@ int VBoxNetSlirpNAT::initIPv6()
         return VERR_GENERAL_FAILURE;
     }
 
-#if 0 /** @todo */
-    m_ProxyOptions.ipv6_defroute = fIPv6DefaultRoute;
+    rc = fetchNatPortForwardRules(m_vecPortForwardRule6, /* :fIsIPv6 */ true);
+    AssertLogRelRCReturn(rc, rc);
 
-
-    /* Raw socket for ICMP. */
-    initIPv6RawSock();
-
-
-    /* IPv6 source address, if configured. */
+    /* IPv6 source address (host), if configured. */
     com::Utf8Str strSourceIp6;
     rc = getExtraData(strSourceIp6, "SourceIp6");
     if (RT_SUCCESS(rc) && strSourceIp6.isNotEmpty())
@@ -1047,18 +1027,25 @@ int VBoxNetSlirpNAT::initIPv6()
         rc = RTNetStrToIPv6Addr(strSourceIp6.c_str(), &addr, &pszZone);
         if (RT_SUCCESS(rc))
         {
-            memcpy(&m_src6.sin6_addr, &addr, sizeof(addr));
-            m_ProxyOptions.src6 = &m_src6;
+            m_ProxyOptions.outbound_addr->sin_addr.s_addr = addr.u;
 
-            LogRel(("Will use %RTnaipv6 as IPv6 source address\n",
-                    &m_src6.sin6_addr));
+            LogRel(("Will use %RTnaipv4 as IPv4 source address\n",
+                    m_src4.sin_addr.s_addr));
         }
         else
         {
-            LogRel(("Failed to parse \"%s\" IPv6 source address specification\n",
+            LogRel(("Failed to parse \"%s\" IPv4 source address specification\n",
                     strSourceIp6.c_str()));
         }
     }
+
+#if 0 /** @todo */
+    m_ProxyOptions.ipv6_defroute = fIPv6DefaultRoute;
+
+
+    // /* Raw socket for ICMP. */
+    // initIPv6RawSock();
+
 #endif
 
     return VINF_SUCCESS;
@@ -1066,57 +1053,57 @@ int VBoxNetSlirpNAT::initIPv6()
 
 
 #if 0
-/**
- * Create raw IPv6 socket for sending and snooping ICMP6.
- */
-void VBoxNetSlirpNAT::initIPv6RawSock()
-{
-    SOCKET icmpsock6 = INVALID_SOCKET;
+// /**
+//  * Create raw IPv6 socket for sending and snooping ICMP6.
+//  */
+// void VBoxNetSlirpNAT::initIPv6RawSock()
+// {
+//     SOCKET icmpsock6 = INVALID_SOCKET;
 
-#ifndef RT_OS_DARWIN
-    const int icmpstype = SOCK_RAW;
-#else
-    /* on OS X it's not privileged */
-    const int icmpstype = SOCK_DGRAM;
-#endif
+// #ifndef RT_OS_DARWIN
+//     const int icmpstype = SOCK_RAW;
+// #else
+//     /* on OS X it's not privileged */
+//     const int icmpstype = SOCK_DGRAM;
+// #endif
 
-    icmpsock6 = socket(AF_INET6, icmpstype, IPPROTO_ICMPV6);
-    if (icmpsock6 == INVALID_SOCKET)
-    {
-        perror("IPPROTO_ICMPV6");
-#ifdef VBOX_RAWSOCK_DEBUG_HELPER
-        icmpsock6 = getrawsock(AF_INET6);
-#endif
-    }
+//     icmpsock6 = socket(AF_INET6, icmpstype, IPPROTO_ICMPV6);
+//     if (icmpsock6 == INVALID_SOCKET)
+//     {
+//         perror("IPPROTO_ICMPV6");
+// #ifdef VBOX_RAWSOCK_DEBUG_HELPER
+//         icmpsock6 = getrawsock(AF_INET6);
+// #endif
+//     }
 
-    if (icmpsock6 != INVALID_SOCKET)
-    {
-#ifdef ICMP6_FILTER             // Windows doesn't support RFC 3542 API
-        /*
-         * XXX: We do this here for now, not in pxping.c, to avoid
-         * name clashes between lwIP and system headers.
-         */
-        struct icmp6_filter flt;
-        ICMP6_FILTER_SETBLOCKALL(&flt);
+//     if (icmpsock6 != INVALID_SOCKET)
+//     {
+// #ifdef ICMP6_FILTER             // Windows doesn't support RFC 3542 API
+//         /*
+//          * XXX: We do this here for now, not in pxping.c, to avoid
+//          * name clashes between lwIP and system headers.
+//          */
+//         struct icmp6_filter flt;
+//         ICMP6_FILTER_SETBLOCKALL(&flt);
 
-        ICMP6_FILTER_SETPASS(ICMP6_ECHO_REPLY, &flt);
+//         ICMP6_FILTER_SETPASS(ICMP6_ECHO_REPLY, &flt);
 
-        ICMP6_FILTER_SETPASS(ICMP6_DST_UNREACH, &flt);
-        ICMP6_FILTER_SETPASS(ICMP6_PACKET_TOO_BIG, &flt);
-        ICMP6_FILTER_SETPASS(ICMP6_TIME_EXCEEDED, &flt);
-        ICMP6_FILTER_SETPASS(ICMP6_PARAM_PROB, &flt);
+//         ICMP6_FILTER_SETPASS(ICMP6_DST_UNREACH, &flt);
+//         ICMP6_FILTER_SETPASS(ICMP6_PACKET_TOO_BIG, &flt);
+//         ICMP6_FILTER_SETPASS(ICMP6_TIME_EXCEEDED, &flt);
+//         ICMP6_FILTER_SETPASS(ICMP6_PARAM_PROB, &flt);
 
-        int status = setsockopt(icmpsock6, IPPROTO_ICMPV6, ICMP6_FILTER,
-                                &flt, sizeof(flt));
-        if (status < 0)
-        {
-            perror("ICMP6_FILTER");
-        }
-#endif
-    }
+//         int status = setsockopt(icmpsock6, IPPROTO_ICMPV6, ICMP6_FILTER,
+//                                 &flt, sizeof(flt));
+//         if (status < 0)
+//         {
+//             perror("ICMP6_FILTER");
+//         }
+// #endif
+//     }
 
-    m_ProxyOptions.icmpsock6 = icmpsock6;
-}
+//     m_ProxyOptions.icmpsock6 = icmpsock6;
+// }
 #endif
 
 
@@ -1544,17 +1531,35 @@ HRESULT VBoxNetSlirpNAT::HandleEvent(VBoxEventType_T aEventType, IEvent *pEvent)
 
         case VBoxEventType_OnHostNameResolutionConfigurationChange:
         {
-#if 0 /** @todo */
-            const char **ppcszNameServers = getHostNameservers();
-            err_t error;
+            PCRTNETADDRIPV4 acNameservers = getHostNameservers();
+            //populate only first entry
+            /** @todo r=jack: fix that in libslirp. */
+            if (acNameservers != NULL)
+            {
+                memcpy(&m_ProxyOptions.vnameserver, acNameservers, sizeof(RTNETADDRIPV4));
+                slirp_set_vnameserver(m_pSlirp, m_ProxyOptions.vnameserver);
+                m_ProxyOptions.disable_dns = true;
+                slirp_set_disable_dns(m_pSlirp, m_ProxyOptions.disable_dns);
+            }
+            else if (m_ProxyOptions.disable_dns == true)
+            {
+                LogRel(("Failed to obtain IPv4 nameservers from host."
+                        "Falling back to default libslirp virtual nameserver.\n"));
 
-            error = tcpip_callback_with_block(pxdns_set_nameservers,
-                                              ppcszNameServers,
-                                              /* :block */ 0);
-            if (error != ERR_OK && ppcszNameServers != NULL)
-                RTMemFree(ppcszNameServers);
-#endif
-            break;
+                RTNETADDRIPV4 Nameserver4;
+                Nameserver4.u = m_ProxyOptions.vnetwork.s_addr | RT_H2N_U32_C(0x00000003);
+
+                memcpy(&m_ProxyOptions.vnameserver, &Nameserver4, sizeof(in_addr));
+                slirp_set_vnameserver(m_pSlirp, m_ProxyOptions.vnameserver);
+                m_ProxyOptions.disable_dns = false;
+                slirp_set_disable_dns(m_pSlirp, m_ProxyOptions.disable_dns);
+            }
+
+            if (acNameservers)
+            {
+                RTMemFree((PRTNETADDRIPV4)acNameservers);
+                acNameservers = NULL;
+            }
         }
 
         case VBoxEventType_OnNATNetworkStartStop:
@@ -1595,41 +1600,51 @@ HRESULT VBoxNetSlirpNAT::HandleEvent(VBoxEventType_T aEventType, IEvent *pEvent)
  * Called during initialization and in response to the
  * VBoxEventType_OnHostNameResolutionConfigurationChange event.
  */
-const char **VBoxNetSlirpNAT::getHostNameservers()
+PCRTNETADDRIPV4 VBoxNetSlirpNAT::getHostNameservers()
 {
     if (m_host.isNull())
         return NULL;
 
-    com::SafeArray<BSTR> aNameServers;
-    HRESULT hrc = m_host->COMGETTER(NameServers)(ComSafeArrayAsOutParam(aNameServers));
+    com::SafeArray<BSTR> aRawNameservers;
+    HRESULT hrc = m_host->COMGETTER(NameServers)(ComSafeArrayAsOutParam(aRawNameservers));
     if (FAILED(hrc))
         return NULL;
 
-    const size_t cNameServers = aNameServers.size();
-    if (cNameServers == 0)
+    const size_t cNameservers = aRawNameservers.size();
+    if (cNameservers == 0)
         return NULL;
 
-    const char **ppcszNameServers =
-        (const char **)RTMemAllocZ(sizeof(char *) * (cNameServers + 1));
-    if (ppcszNameServers == NULL)
+    PRTNETADDRIPV4 aNameservers =
+        (PRTNETADDRIPV4)RTMemAllocZ(sizeof(RTNETADDRIPV4) * cNameservers);
+    if (aNameservers == NULL)
         return NULL;
 
-    size_t idxLast = 0;
-    for (size_t i = 0; i < cNameServers; ++i)
+    size_t idx = 0;
+    for (; idx < cNameservers; idx++)
     {
-        com::Utf8Str strNameServer(aNameServers[i]);
-        ppcszNameServers[idxLast] = RTStrDup(strNameServer.c_str());
-        if (ppcszNameServers[idxLast] != NULL)
-            ++idxLast;
+        RTNETADDRIPV4 tmpNameserver;
+        int rc = RTNetStrToIPv4Addr(com::Utf8Str(aRawNameservers[idx]).c_str(), &tmpNameserver);
+        if (RT_FAILURE(rc))
+        {
+            LogRel(("Failed to parse IPv4 nameserver %ls\n", aNameservers[idx]));
+            return NULL;
+        }
+
+        memcpy(&aNameservers[idx], &tmpNameserver, sizeof(RTNETADDRIPV4));
     }
 
-    if (idxLast == 0)
+    if (idx == 0)
     {
-        RTMemFree(ppcszNameServers);
+        RTMemFree(aNameservers);
         return NULL;
     }
 
-    return ppcszNameServers;
+    /** @todo r=jack: fix this in libslirp. */
+    if (idx > 1)
+        LogRel(("NAT Network: More than one IPv4 nameserver detected. Due to current "
+                "libslirp limitations, only the first entry  will be provided to the guest.\n"));
+
+    return aNameservers;
 }
 
 

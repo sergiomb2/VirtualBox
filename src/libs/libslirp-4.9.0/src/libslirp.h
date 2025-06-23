@@ -33,11 +33,13 @@ typedef ssize_t slirp_ssize_t;
 #include <arpa/inet.h>
 #define SLIRP_EXPORT
 #endif
+
 #ifdef VBOX
 # include <iprt/types.h> /* for ssize_t on windows */
-#define LOG_GROUP LOG_GROUP_DRV_NAT
-#define __STDC_LIMIT_MACROS
-#define __STDC_CONSTANT_MACROS
+# include <iprt/net.h> /* for RTNETADDRIPV4 in slirp_set_vnameserver */
+# define LOG_GROUP LOG_GROUP_DRV_NAT
+# define __STDC_LIMIT_MACROS
+# define __STDC_CONSTANT_MACROS
 #endif
 
 #include "libslirp-version.h"
@@ -424,6 +426,8 @@ const char *slirp_version_string(void);
 char *slirp_set_vdomainname(Slirp *, char const *);
 char *slirp_get_vdomainname(Slirp *);
 int slirp_set_vdnssearch(Slirp *, const char * const *);
+void slirp_set_vnameserver(Slirp *, struct in_addr);
+void slirp_set_disable_dns(Slirp *, bool);
 #endif
 
 /* Debugging support: There are two methods for enabling debugging
@@ -437,7 +441,7 @@ int slirp_set_vdnssearch(Slirp *, const char * const *);
 
 /* Set debugging flags independently of the SLIRP_DEBUG environment
  * variable. */
-SLIRP_EXPORT 
+SLIRP_EXPORT
 void slirp_set_debug(unsigned int flags);
 
 /* Reset debugging flags. */

@@ -24,6 +24,11 @@
  */
 #include "slirp.h"
 
+// #ifdef VBOX
+// # include <iprt/net.h>
+// # include <iprt/types.h>
+// #endif
+
 #ifndef g_warning_once
 #define g_warning_once g_warning
 #endif
@@ -1750,6 +1755,16 @@ char *slirp_get_vdomainname(Slirp *pSlirp)
 int slirp_set_vdnssearch(Slirp *pSlirp, const char * const *ppszSearchDomains)
 {
     return translate_dnssearch(pSlirp, (const char **)ppszSearchDomains);
+}
+
+void slirp_set_vnameserver(Slirp *pSlirp, struct in_addr uAddr)
+{
+    pSlirp->vnameserver_addr = uAddr;
+}
+
+void slirp_set_disable_dns(Slirp *pSlirp, bool fDisableDNS)
+{
+    pSlirp->disable_dns = !!fDisableDNS;
 }
 
 #endif /* VBOX */
