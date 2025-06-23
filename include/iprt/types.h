@@ -265,8 +265,9 @@ typedef signed long ssize_t;
 
 /*
  * C doesn't have bool, nor does VisualAge for C++ v3.08.
+ * Starting with c23, bool, true and false are keywords.
  */
-#if !defined(__cplusplus) || (defined(__IBMCPP__) && defined(RT_OS_OS2))
+#if (!defined(__cplusplus) || (defined(__IBMCPP__) && defined(RT_OS_OS2))) && !RT_STDC_VERSION_PREREQ(202311L)
 # if defined(__GNUC__)
 #  if defined(RT_OS_LINUX) && __GNUC__ < 3
 typedef uint8_t bool;
