@@ -35,6 +35,10 @@
 # define AF_INET6 23
 #endif
 
+#ifdef RT_OS_LINUX
+# include <limits.h>
+#endif
+
 #include <VBox/com/assert.h>
 #include <VBox/com/com.h>
 #include <VBox/com/listeners.h>
@@ -305,6 +309,7 @@ VBoxNetSlirpNAT::VBoxNetSlirpNAT()
     m_ProxyOptions.if_mtu       = m_u16Mtu;
     m_ProxyOptions.disable_dhcp = true;
     m_ProxyOptions.disable_host_loopback = false;
+    m_ProxyOptions.disable_dns = false;
 
     RT_ZERO(m_src4);
     RT_ZERO(m_src6);
@@ -692,7 +697,7 @@ int VBoxNetSlirpNAT::initIPv4()
     if (acNameservers != NULL)
     {
         memcpy(&m_ProxyOptions.vnameserver, acNameservers, sizeof(RTNETADDRIPV4));
-        m_ProxyOptions.disable_dns = true;
+        // m_ProxyOptions.disable_dns = true;
     }
     else
     {
@@ -735,180 +740,8 @@ int VBoxNetSlirpNAT::initIPv4()
         }
     }
 
-#if 0 /** @todo */
-    /* Raw socket for ICMP. */
-    // initIPv4RawSock(); jack: shouldn't be needed. libslirp handles rawsock/dgram sock.
-
-    // /* Make host's loopback(s) available from inside the natnet */
-    // initIPv4LoopbackMap();
-#endif
-
     return VINF_SUCCESS;
 }
-
-
-#if 0 /** @todo */
-// /**
-//  * Create raw IPv4 socket for sending and snooping ICMP.
-//  */
-// void VBoxNetSlirpNAT::initIPv4RawSock()
-// {
-//     SOCKET icmpsock4 = INVALID_SOCKET;
-
-// #ifndef RT_OS_DARWIN
-//     const int icmpstype = SOCK_RAW;
-// #else
-//     /* on OS X it's not privileged */
-//     const int icmpstype = SOCK_DGRAM;
-// #endif
-
-//     icmpsock4 = socket(AF_INET, icmpstype, IPPROTO_ICMP);
-//     if (icmpsock4 == INVALID_SOCKET)
-//     {
-//         perror("IPPROTO_ICMP");
-// #ifdef VBOX_RAWSOCK_DEBUG_HELPER
-//         icmpsock4 = getrawsock(AF_INET);
-// #endif
-//     }
-
-//     if (icmpsock4 != INVALID_SOCKET)
-//     {
-// #ifdef ICMP_FILTER              //  Linux specific
-//         struct icmp_filter flt = {
-//             ~(uint32_t)(
-//                   (1U << ICMP_ECHOREPLY)
-//                 | (1U << ICMP_DEST_UNREACH)
-//                 | (1U << ICMP_TIME_EXCEEDED)
-//             )
-//         };
-
-//         int status = setsockopt(icmpsock4, SOL_RAW, ICMP_FILTER,
-//                                 &flt, sizeof(flt));
-//         if (status < 0)
-//         {
-//             perror("ICMP_FILTER");
-//         }
-// #endif
-//     }
-
-//     m_ProxyOptions.icmpsock4 = icmpsock4;
-// }
-
-
-/**
- * Init mapping from the natnet's IPv4 addresses to host's IPv4
- * loopbacks.  Plural "loopbacks" because it's now quite common to run
- * services on loopback addresses other than 127.0.0.1.  E.g. a
- * caching dns proxy on 127.0.1.1 or 127.0.0.53.
- */
-// int VBoxNetSlirpNAT::initIPv4LoopbackMap()
-// {
-//     HRESULT hrc;
-//     int rc;
-
-//     com::SafeArray<BSTR> aStrLocalMappings;
-//     hrc = m_net->COMGETTER(LocalMappings)(ComSafeArrayAsOutParam(aStrLocalMappings));
-//     if (FAILED(hrc))
-//     {
-//         reportComError(m_net, "LocalMappings", hrc);
-//         return VERR_GENERAL_FAILURE;
-//     }
-
-//     if (aStrLocalMappings.size() == 0)
-//         return VINF_SUCCESS;
-
-
-//     /* netmask in host order, to verify the offsets */
-//     uint32_t uMask = RT_N2H_U32(ip4_addr_get_u32(&m_ProxyOptions.ipv4_mask.u_addr.ip4));
-
-
-//     /*
-//      * Process mappings of the form "127.x.y.z=off"
-//      */
-//     unsigned int dst = 0;      /* typeof(ip4_lomap_desc::num_lomap) */
-//     for (size_t i = 0; i < aStrLocalMappings.size(); ++i)
-//     {
-//         com::Utf8Str strMapping(aStrLocalMappings[i]);
-//         const char *pcszRule = strMapping.c_str();
-//         LogRel(("IPv4 loopback mapping %zu: %s\n", i, pcszRule));
-
-//         RTNETADDRIPV4 Loopback4;
-//         char *pszNext;
-//         rc = RTNetStrToIPv4AddrEx(pcszRule, &Loopback4, &pszNext);
-//         if (RT_FAILURE(rc))
-//         {
-//             LogRel(("Failed to parse IPv4 address: %Rra\n", rc));
-//             continue;
-//         }
-
-//         if (Loopback4.au8[0] != 127)
-//         {
-//             LogRel(("Not an IPv4 loopback address\n"));
-//             continue;
-//         }
-
-//         if (rc != VWRN_TRAILING_CHARS)
-//         {
-//             LogRel(("Missing right hand side\n"));
-//             continue;
-//         }
-
-//         pcszRule = RTStrStripL(pszNext);
-//         if (*pcszRule != '=')
-//         {
-//             LogRel(("Invalid rule format\n"));
-//             continue;
-//         }
-
-//         pcszRule = RTStrStripL(pcszRule+1);
-//         if (*pszNext == '\0')
-//         {
-//             LogRel(("Empty right hand side\n"));
-//             continue;
-//         }
-
-//         uint32_t u32Offset;
-//         rc = RTStrToUInt32Ex(pcszRule, &pszNext, 10, &u32Offset);
-//         if (rc != VINF_SUCCESS && rc != VWRN_TRAILING_SPACES)
-//         {
-//             LogRel(("Invalid offset\n"));
-//             continue;
-//         }
-
-//         if (u32Offset <= 1 || u32Offset == ~uMask)
-//         {
-//             LogRel(("Offset maps to a reserved address\n"));
-//             continue;
-//         }
-
-//         if ((u32Offset & uMask) != 0)
-//         {
-//             LogRel(("Offset exceeds the network size\n"));
-//             continue;
-//         }
-
-//         if (dst >= RT_ELEMENTS(m_lo2off))
-//         {
-//             LogRel(("Ignoring the mapping, too many mappings already\n"));
-//             continue;
-//         }
-
-//         ip4_addr_set_u32(&m_lo2off[dst].loaddr, Loopback4.u);
-//         m_lo2off[dst].off = u32Offset;
-//         ++dst;
-//     }
-
-//     if (dst > 0)
-//     {
-//         m_loOptDescriptor.lomap = m_lo2off;
-//         m_loOptDescriptor.num_lomap = dst;
-//         m_ProxyOptions.lomap_desc = &m_loOptDescriptor;
-//     }
-
-//     return VINF_SUCCESS;
-// }
-#endif
-
 
 /*
  * Read IPv6 related settings and do necessary initialization.  These
@@ -1538,10 +1371,10 @@ HRESULT VBoxNetSlirpNAT::HandleEvent(VBoxEventType_T aEventType, IEvent *pEvent)
             {
                 memcpy(&m_ProxyOptions.vnameserver, acNameservers, sizeof(RTNETADDRIPV4));
                 slirp_set_vnameserver(m_pSlirp, m_ProxyOptions.vnameserver);
-                m_ProxyOptions.disable_dns = true;
-                slirp_set_disable_dns(m_pSlirp, m_ProxyOptions.disable_dns);
+                // m_ProxyOptions.disable_dns = true;
+                // slirp_set_disable_dns(m_pSlirp, m_ProxyOptions.disable_dns);
             }
-            else if (m_ProxyOptions.disable_dns == true)
+            else
             {
                 LogRel(("Failed to obtain IPv4 nameservers from host."
                         "Falling back to default libslirp virtual nameserver.\n"));
@@ -1551,8 +1384,8 @@ HRESULT VBoxNetSlirpNAT::HandleEvent(VBoxEventType_T aEventType, IEvent *pEvent)
 
                 memcpy(&m_ProxyOptions.vnameserver, &Nameserver4, sizeof(in_addr));
                 slirp_set_vnameserver(m_pSlirp, m_ProxyOptions.vnameserver);
-                m_ProxyOptions.disable_dns = false;
-                slirp_set_disable_dns(m_pSlirp, m_ProxyOptions.disable_dns);
+                // m_ProxyOptions.disable_dns = false;
+                // slirp_set_disable_dns(m_pSlirp, m_ProxyOptions.disable_dns);
             }
 
             if (acNameservers)
@@ -1560,6 +1393,8 @@ HRESULT VBoxNetSlirpNAT::HandleEvent(VBoxEventType_T aEventType, IEvent *pEvent)
                 RTMemFree((PRTNETADDRIPV4)acNameservers);
                 acNameservers = NULL;
             }
+
+            break;
         }
 
         case VBoxEventType_OnNATNetworkStartStop:
