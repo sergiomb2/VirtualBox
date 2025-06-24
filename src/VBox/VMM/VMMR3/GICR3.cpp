@@ -51,7 +51,7 @@
 *   Defined Constants And Macros                                                                                                 *
 *********************************************************************************************************************************/
 /** GIC saved state version. */
-#define GIC_SAVED_STATE_VERSION                     10
+#define GIC_SAVED_STATE_VERSION                     11
 
 # define GIC_SYSREGRANGE(a_uFirst, a_uLast, a_szName) \
     { (a_uFirst), (a_uLast), kCpumSysRegRdFn_GicIcc, kCpumSysRegWrFn_GicIcc, 0, 0, 0, 0, 0, 0, a_szName, { 0 }, { 0 }, { 0 }, { 0 } }
@@ -141,9 +141,11 @@ static DECLCALLBACK(void) gicR3DbgInfoDist(PVM pVM, PCDBGFINFOHLP pHlp, const ch
     PCGICDEV   pGicDev = PDMDEVINS_2_DATA(pDevIns, PCGICDEV);
 
     pHlp->pfnPrintf(pHlp, "GIC Distributor:\n");
-    pHlp->pfnPrintf(pHlp, "  fIntrGroup0Enabled = %RTbool\n", pGicDev->fIntrGroup0Enabled);
-    pHlp->pfnPrintf(pHlp, "  fIntrGroup1Enabled = %RTbool\n", pGicDev->fIntrGroup1Enabled);
-    pHlp->pfnPrintf(pHlp, "  fAffRoutingEnabled = %RTbool\n", pGicDev->fAffRoutingEnabled);
+    pHlp->pfnPrintf(pHlp, "  fIntrGroupMask = %#RX32 (group_0=%RTbool, group_1s=%RTbool, group_1ns=%RTbool)\n",
+                    pGicDev->fIntrGroupMask,
+                    RT_BOOL(pGicDev->fIntrGroupMask & GIC_INTR_GROUP_0),
+                    RT_BOOL(pGicDev->fIntrGroupMask & GIC_INTR_GROUP_1S),
+                    RT_BOOL(pGicDev->fIntrGroupMask & GIC_INTR_GROUP_1NS));
 
 #define GIC_DBGFINFO_DIST_INTR_BITMAP(a_Name, a_bmIntr) \
     do \
@@ -558,9 +560,7 @@ static DECLCALLBACK(int) gicR3SaveExec(PPDMDEVINS pDevIns, PSSMHANDLE pSSM)
     pHlp->pfnSSMPutBool(pSSM, pGicDev->fLpi);
 
     /* Distributor state. */
-    pHlp->pfnSSMPutBool(pSSM, pGicDev->fIntrGroup0Enabled);
-    pHlp->pfnSSMPutBool(pSSM, pGicDev->fIntrGroup1Enabled);
-    pHlp->pfnSSMPutBool(pSSM, pGicDev->fAffRoutingEnabled);
+    pHlp->pfnSSMPutU32(pSSM,  pGicDev->fIntrGroupMask);
     pHlp->pfnSSMPutMem(pSSM,  &pGicDev->bmIntrGroup[0],       sizeof(pGicDev->bmIntrGroup));
     pHlp->pfnSSMPutMem(pSSM,  &pGicDev->bmIntrConfig[0],      sizeof(pGicDev->bmIntrConfig));
     pHlp->pfnSSMPutMem(pSSM,  &pGicDev->bmIntrEnabled[0],     sizeof(pGicDev->bmIntrEnabled));
@@ -660,8 +660,7 @@ static DECLCALLBACK(int) gicR3LoadExec(PPDMDEVINS pDevIns, PSSMHANDLE pSSM, uint
     pHlp->pfnSSMGetBool(pSSM, &pGicDev->fLpi);
 
     /* Distributor state. */
-    pHlp->pfnSSMGetBool(pSSM, &pGicDev->fIntrGroup0Enabled);
-    pHlp->pfnSSMGetBool(pSSM, &pGicDev->fIntrGroup1Enabled);
+    pHlp->pfnSSMGetU32(pSSM,  &pGicDev->fIntrGroupMask);
     pHlp->pfnSSMGetBool(pSSM, &pGicDev->fAffRoutingEnabled);
     pHlp->pfnSSMGetMem(pSSM,  &pGicDev->bmIntrGroup[0],       sizeof(pGicDev->bmIntrGroup));
     pHlp->pfnSSMGetMem(pSSM,  &pGicDev->bmIntrConfig[0],      sizeof(pGicDev->bmIntrConfig));

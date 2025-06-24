@@ -83,13 +83,6 @@
 #define GIC_IS_INTR_EXT_SPI(a_uIntId)           ((uint32_t)(a_uIntId) - (uint32_t)GIC_INTID_RANGE_EXT_SPI_START < (uint32_t)GIC_INTID_EXT_SPI_RANGE_SIZE)
 #define GIC_IS_INTR_LPI(a_pGicDev, a_uIntId)    ((uint32_t)(a_uIntId) - (uint32_t)GIC_INTID_RANGE_LPI_START < (uint32_t)RT_ELEMENTS((a_pGicDev)->abLpiConfig))
 
-/** Interrupt Group 0. */
-#define GIC_INTR_GROUP_0                          RT_BIT_32(0)
-/** Interrupt Group 1 (Secure). */
-#define GIC_INTR_GROUP_1S                         RT_BIT_32(1)
-/** Interrupt Group 1 (Non-secure). */
-#define GIC_INTR_GROUP_1NS                        RT_BIT_32(2)
-
 
 /*********************************************************************************************************************************
 *   Structures and Typedefs                                                                                                      *
@@ -810,12 +803,8 @@ static void gicReDistHasIrqPending(PCGICCPU pGicCpu, bool *pfIrq, bool *pfFiq)
  */
 static void gicDistHasIrqPendingForVCpu(PCGICDEV pGicDev, PCVMCPUCC pVCpu, bool *pfIrq, bool *pfFiq)
 {
-    /** @todo r=aeichner Why have these separate booleans and not have the fIntrGroupMask directly as a
-     * GICDEV/GICCPU member which is updated during register writes? Would save us a few conditionals below
-     * in a hot code path. */
-    bool const fIsGroup1Enabled = pGicDev->fIntrGroup1Enabled;
-    bool const fIsGroup0Enabled = pGicDev->fIntrGroup0Enabled;
-    LogFlowFunc(("fIsGroup1Enabled=%RTbool fIsGroup0Enabled=%RTbool\n", fIsGroup1Enabled, fIsGroup0Enabled));
+    uint32_t const fIntrGroupMask = pGicDev->fIntrGroupMask;
+    LogFlowFunc(("fIntrGroupMask=%#RX32\n", fIntrGroupMask));
 
     /* Quick bailout if all interrupts are fully masked or if the active interrupt is at the highest priority. */
     PCGICCPU pGicCpu = VMCPU_TO_GICCPU(pVCpu);
@@ -824,8 +813,6 @@ static void gicDistHasIrqPendingForVCpu(PCGICDEV pGicDev, PCVMCPUCC pVCpu, bool 
     {
         /* Get the highest pending priority interrupt from the distributor. */
         GICINTR Intr;
-        uint32_t const fIntrGroupMask = (fIsGroup0Enabled ? GIC_INTR_GROUP_0 : 0)
-                                      | (fIsGroup1Enabled ? (GIC_INTR_GROUP_1S | GIC_INTR_GROUP_1NS) : 0);
         if (fIntrGroupMask)
         {
             gicDistGetHighestPriorityPendingIntr(pGicDev, pVCpu, fIntrGroupMask, &Intr);
@@ -836,8 +823,8 @@ static void gicDistHasIrqPendingForVCpu(PCGICDEV pGicDev, PCVMCPUCC pVCpu, bool 
                 bool const fSufficientPriority = gicReDistIsSufficientPriority(pGicCpu, Intr.bPriority, fGroup0);
                 if (fSufficientPriority)
                 {
-                    *pfFiq = fIsGroup0Enabled && RT_BOOL(Intr.fIntrGroupMask & GIC_INTR_GROUP_0);
-                    *pfIrq = fIsGroup1Enabled && RT_BOOL(Intr.fIntrGroupMask & (GIC_INTR_GROUP_1S | GIC_INTR_GROUP_1NS));
+                    *pfFiq = fIntrGroupMask & Intr.fIntrGroupMask & GIC_INTR_GROUP_0;
+                    *pfIrq = fIntrGroupMask & Intr.fIntrGroupMask & (GIC_INTR_GROUP_1S | GIC_INTR_GROUP_1NS);
                     return;
                 }
             }
@@ -2200,8 +2187,8 @@ DECLINLINE(VBOXSTRICTRC) gicDistReadRegister(PPDMDEVINS pDevIns, PVMCPUCC pVCpu,
     {
         case GIC_DIST_REG_CTLR_OFF:
             Assert(pGicDev->fAffRoutingEnabled);
-            *puValue = (pGicDev->fIntrGroup0Enabled ? GIC_DIST_REG_CTRL_ENABLE_GRP0    : 0)
-                     | (pGicDev->fIntrGroup1Enabled ? GIC_DIST_REG_CTRL_ENABLE_GRP1_NS : 0)
+            *puValue = ((pGicDev->fIntrGroupMask & GIC_INTR_GROUP_0)   ? GIC_DIST_REG_CTRL_ENABLE_GRP0    : 0)
+                     | ((pGicDev->fIntrGroupMask & GIC_INTR_GROUP_1NS) ? GIC_DIST_REG_CTRL_ENABLE_GRP1_NS : 0)
                      | GIC_DIST_REG_CTRL_DS         /* We don't support dual security states. */
                      | GIC_DIST_REG_CTRL_ARE_S;     /* We don't support GICv2 backwards compatibility, ARE is always enabled. */
             break;
@@ -2430,11 +2417,17 @@ DECLINLINE(VBOXSTRICTRC) gicDistWriteRegister(PPDMDEVINS pDevIns, PVMCPUCC pVCpu
     switch (offReg)
     {
         case GIC_DIST_REG_CTLR_OFF:
+        {
             Assert(!(uValue & GIC_DIST_REG_CTRL_ARE_NS));
-            pGicDev->fIntrGroup0Enabled = RT_BOOL(uValue & GIC_DIST_REG_CTRL_ENABLE_GRP0);
-            pGicDev->fIntrGroup1Enabled = RT_BOOL(uValue & GIC_DIST_REG_CTRL_ENABLE_GRP1_NS);
-            rcStrict = gicDistUpdateIrqState(pVM, pGicDev);
+            uint32_t const fIntrGroupMask = ((uValue & GIC_DIST_REG_CTRL_ENABLE_GRP0)    ? GIC_INTR_GROUP_0   : 0)
+                                          | ((uValue & GIC_DIST_REG_CTRL_ENABLE_GRP1_NS) ? GIC_INTR_GROUP_1NS : 0);
+            if (pGicDev->fIntrGroupMask != fIntrGroupMask)
+            {
+                pGicDev->fIntrGroupMask = fIntrGroupMask;
+                rcStrict = gicDistUpdateIrqState(pVM, pGicDev);
+            }
             break;
+        }
 
         default:
         {
@@ -3307,8 +3300,7 @@ static void gicInit(PPDMDEVINS pDevIns)
     RT_ZERO(pGicDev->abIntrPriority);
     RT_ZERO(pGicDev->au32IntrRouting);
     RT_ZERO(pGicDev->bmIntrRoutingMode);
-    pGicDev->fIntrGroup0Enabled = false;
-    pGicDev->fIntrGroup1Enabled = false;
+    pGicDev->fIntrGroupMask = 0;
     pGicDev->fAffRoutingEnabled = true; /* GICv2 backwards compatibility is not implemented, so this is RA1/WI. */
 
     /* GITS. */
