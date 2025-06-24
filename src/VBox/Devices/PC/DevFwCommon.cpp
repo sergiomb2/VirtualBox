@@ -252,10 +252,8 @@ typedef struct DMIOEMSTRINGS
 {
     DMIHDR          header;
     uint8_t         u8Count;
-    uint8_t         u8VBoxVersion;
-    uint8_t         u8VBoxRevision;
 } *PDMIOEMSTRINGS;
-AssertCompileSize(DMIOEMSTRINGS, 0x7);
+AssertCompileSize(DMIOEMSTRINGS, 0x5);
 
 /** DMI OEM-specific table (Type 128) */
 typedef struct DMIOEMSPECIFIC
@@ -991,12 +989,13 @@ int FwCommonPlantDMITable(PPDMDEVINS pDevIns, uint8_t *pTable, unsigned cbMax, P
         pOEMStrings->header.u16Handle = 0x0002;
         pOEMStrings->u8Count          = 2;
 
+        uint8_t u8Tmp = 0;
         char szTmp[64];
         RTStrPrintf(szTmp, sizeof(szTmp), "vboxVer_%u.%u.%u",
                     RTBldCfgVersionMajor(), RTBldCfgVersionMinor(), RTBldCfgVersionBuild());
-        DMI_READ_CFG_STR_DEF(pOEMStrings->u8VBoxVersion, "DmiOEMVBoxVer", szTmp);
+        DMI_READ_CFG_STR_DEF(u8Tmp, "DmiOEMVBoxVer", szTmp);
         RTStrPrintf(szTmp, sizeof(szTmp), "vboxRev_%u", RTBldCfgRevision());
-        DMI_READ_CFG_STR_DEF(pOEMStrings->u8VBoxRevision, "DmiOEMVBoxRev", szTmp);
+        DMI_READ_CFG_STR_DEF(u8Tmp, "DmiOEMVBoxRev", szTmp);
         DMI_TERM_STRUCT;
 
         /*************************************
