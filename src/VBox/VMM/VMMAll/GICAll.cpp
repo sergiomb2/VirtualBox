@@ -1815,13 +1815,17 @@ DECL_FORCE_INLINE(VMCPUID) gicGetCpuIdFromAffinity(uint8_t idCpuInterface, uint8
  */
 static uint16_t gicGetHighestPriorityPendingIntr(PCGICDEV pGicDev, PCVMCPUCC pVCpu, uint32_t fIntrGroupMask, PGICINTR pIntr)
 {
+    /* Only one group must be specified here since this is called from registers that specify a single group! */
+    Assert(   fIntrGroupMask == GIC_INTR_GROUP_0
+           || fIntrGroupMask == GIC_INTR_GROUP_1S
+           || fIntrGroupMask == GIC_INTR_GROUP_1NS);
+
     PCGICCPU pGicCpu = VMCPU_TO_GICCPU(pVCpu);
 
     /* Quick bailout if all interrupts are fully masked or if the active interrupt is at the highest priority. */
     uint16_t uIntId;
     if (   pGicCpu->bIntrPriorityMask
-        && pGicCpu->abRunningPriorities[pGicCpu->idxRunningPriority]
-        && fIntrGroupMask)
+        && pGicCpu->abRunningPriorities[pGicCpu->idxRunningPriority])
     {
         GICINTR IntrRedist;
         gicReDistGetHighestPriorityPendingIntr(pGicCpu, fIntrGroupMask, &IntrRedist);
