@@ -162,6 +162,7 @@ BOOLEAN vboxShRcTreeRemove(PVBOXMP_DEVEXT pDevExt, PVBOXWDDM_ALLOCATION pAlloc);
 #endif
 
 NTSTATUS vboxWddmDrvCfgInit(PUNICODE_STRING pRegStr);
+NTSTATUS vboxWddmLoggerCreate(PUNICODE_STRING pRegStr);
 
 NTSTATUS VBoxWddmSlEnableVSyncNotification(PVBOXMP_DEVEXT pDevExt, BOOLEAN fEnable);
 NTSTATUS VBoxWddmSlGetScanLine(PVBOXMP_DEVEXT pDevExt, DXGKARG_GETSCANLINE *pSl);
