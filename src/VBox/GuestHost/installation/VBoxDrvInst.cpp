@@ -1071,11 +1071,11 @@ static DECLCALLBACK(RTEXITCODE) vboxDrvInstCmdStatusMain(PRTGETOPTSTATE pGetStat
     {
         /* Host services */
         { "VBoxAutostartSvc" },
-        { "VBoxDrv" },
         { "VBoxNetAdp" },
         { "VBoxNetFlt" },
         { "VBoxNetLwf" },
         { "VBoxSDS" },
+        { "VBoxSUP" },
         { "VBoxUSB" },
         { "VBoxUSBMon" },
         /* Guest services */
@@ -1126,7 +1126,9 @@ static DECLCALLBACK(RTEXITCODE) vboxDrvInstCmdStatusMain(PRTGETOPTSTATE pGetStat
             RT_ZERO(SvcInfo);
 
             rc = VBoxWinDrvInstServiceQuery(s_apszServices[i].pszName, &SvcInfo);
-            if (RT_SUCCESS(rc))
+            if (   RT_SUCCESS(rc)
+                /* Service / driver binary not found. We still can return the status, however. */
+                || rc == VERR_FILE_NOT_FOUND)
             {
                 if (szVer[0] == '\0')
                     RTStrPrintf(szVer, sizeof(szVer), "%s", SvcInfo.szVer);
@@ -1141,10 +1143,7 @@ static DECLCALLBACK(RTEXITCODE) vboxDrvInstCmdStatusMain(PRTGETOPTSTATE pGetStat
                 VBoxWinDrvInstServiceInfoDestroy(&SvcInfo);
             }
             else if (   g_uVerbosity >= 3
-                     || (   rc != VERR_NOT_FOUND
-                         && rc != VERR_FILE_NOT_FOUND
-                        )
-                    )
+                     || rc != VERR_NOT_FOUND)
             {
                 LOG_ERROR("Failed to query service '%s': %Rrc\n", s_apszServices[i].pszName, rc);
                 rc = VINF_SUCCESS; /* Not relevant to overall exit code. */

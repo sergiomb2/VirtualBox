@@ -3064,12 +3064,14 @@ int VBoxWinDrvPatternReplace(const char *pszInput, const PVBOXWINDRVSTRPATTERN p
 
     for (size_t i = 0; i < cPatterns; i++)
     {
-        size_t const cchPattern = strlen(paPatterns[i].psz);
+        PVBOXWINDRVSTRPATTERN pPatt = &paPatterns[i];
+
+        size_t const cchPattern = strlen(pPatt->psz);
         AssertReturn(cchPattern, VERR_INVALID_PARAMETER);
 
         size_t cFound = 0;
         const char *psz = pszInput;
-        while ((psz = strstr(psz, paPatterns[i].psz)) != NULL)
+        while ((psz = strstr(psz, pPatt->psz)) != NULL)
         {
             cFound++;
             psz += cchPattern;
@@ -3077,9 +3079,10 @@ int VBoxWinDrvPatternReplace(const char *pszInput, const PVBOXWINDRVSTRPATTERN p
 
         if (cFound)
         {
-            paPatterns[i].rep = paPatterns[i].pfn(paPatterns[i].psz, paPatterns[i].pvUser);
-            size_t cchDiff = strlen(paPatterns[i].rep) > strlen(paPatterns[i].psz)
-                           ? strlen(paPatterns[i].rep) - strlen(paPatterns[i].psz) : 0;
+            pPatt->rep = pPatt->pfn(pPatt->psz, pPatt->pvUser);
+            size_t const cchPatt = strlen(pPatt->psz);
+            size_t const cchRep  = pPatt->rep ? strlen(pPatt->rep) : cchPatt;
+            size_t const cchDiff = cchRep > cchPatt ? cchRep - cchPatt : 0;
             cchDst += cFound * cchDiff;
         }
     }
@@ -3096,14 +3099,17 @@ int VBoxWinDrvPatternReplace(const char *pszInput, const PVBOXWINDRVSTRPATTERN p
             size_t cReplaced = 0;
             for (size_t p = 0; p < cPatterns; p++)
             {
-                size_t const cchPattern = strlen(paPatterns[p].psz);
-                if (   cchPattern
-                    && strncmp(&pszInput[idxSrc], paPatterns[p].psz, cchPattern) == 0)
+                size_t const cchPatt = strlen(paPatterns[p].psz);
+                if (   cchPatt
+                    && strncmp(&pszInput[idxSrc], paPatterns[p].psz, cchPatt) == 0)
                 {
-                    size_t const cchRep = strlen(paPatterns[p].rep);
-                    memcpy(pszOutput + idxDst, paPatterns[p].rep, cchRep);
-                    idxDst += cchRep;
-                    idxSrc += cchPattern;
+                    size_t const cchRep = paPatterns[p].rep ? strlen(paPatterns[p].rep) : 0;
+                    if (cchRep)
+                    {
+                        memcpy(pszOutput + idxDst, paPatterns[p].rep, cchRep);
+                        idxDst += cchRep;
+                    }
+                    idxSrc += cchPatt;
                     cReplaced = 1;
                     break;
                 }
@@ -3135,10 +3141,16 @@ int VBoxWinDrvPatternReplace(const char *pszInput, const PVBOXWINDRVSTRPATTERN p
  */
 DECLCALLBACK(char *) vboxWinDrvInstPatternToEnvCallback(const char *pszPattern, void *pvUser)
 {
-    RT_NOREF(pszPattern, pvUser);
+    RT_NOREF(pvUser);
+
+    const char *pszRessolvedPattern;
+    if (RTStrICmp(pszPattern, "\\SystemRoot") == 0)
+        pszRessolvedPattern = "SystemRoot";
+    else
+        pszRessolvedPattern = pszPattern;
 
     char szVal[RTPATH_MAX];
-    int rc = RTEnvGetEx(RTENV_DEFAULT, "SystemRoot", szVal, sizeof(szVal), NULL);
+    int rc = RTEnvGetEx(RTENV_DEFAULT, pszRessolvedPattern, szVal, sizeof(szVal), NULL);
     if (RT_SUCCESS(rc))
         return RTStrDup(szVal);
 
