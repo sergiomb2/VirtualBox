@@ -37,7 +37,6 @@ typedef ssize_t slirp_ssize_t;
 #ifdef VBOX
 # include <iprt/types.h> /* for ssize_t on windows */
 # include <iprt/net.h> /* for RTNETADDRIPV4 in slirp_set_vnameserver */
-# define LOG_GROUP LOG_GROUP_NAT_ENGINE
 # define __STDC_LIMIT_MACROS
 # define __STDC_CONSTANT_MACROS
 #endif
