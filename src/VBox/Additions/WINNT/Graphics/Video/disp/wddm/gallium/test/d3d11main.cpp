@@ -29,6 +29,7 @@
 
 #include <iprt/file.h>
 #include <iprt/formats/bmp.h>
+#include <iprt/alloc.h>
 #include <iprt/string.h>
 
 /*
