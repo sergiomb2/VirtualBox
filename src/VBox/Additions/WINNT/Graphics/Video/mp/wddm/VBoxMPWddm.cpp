@@ -3219,7 +3219,8 @@ bool vboxWddmUpdatePointerShape(PVBOXMP_DEVEXT pDevExt, PVIDEO_POINTER_ATTRIBUTE
             Status = STATUS_INVALID_PARAMETER;
         }
 #else
-        /// @todo VMSVGA cursor interface
+        /* Use VMSVGA cursor interface to apply the current visibility status. */
+        SvgaCursorSetVisibility(pDevExt, RT_BOOL(pAttrs->Enable & VBOX_MOUSE_POINTER_VISIBLE));
 #endif
 
         return Status == STATUS_SUCCESS;
@@ -3251,12 +3252,16 @@ static void vboxWddmHostPointerEnable(PVBOXMP_DEVEXT pDevExt, BOOLEAN fEnable)
  *
  * @returns VBox status code.
  * @param   pDevExt             Device extension to use.
+ * @param   VidPnSourceId       Screen id.
  * @param   xPos                X position to report to the host.
  * @param   yPos                Y position to report to the host.
  */
-static int vboxWddmReportCursorPosition(PVBOXMP_DEVEXT pDevExt, uint32_t xPos, uint32_t yPos)
+static int vboxWddmReportCursorPosition(PVBOXMP_DEVEXT pDevExt, D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
+                                        int32_t xPos, int32_t yPos)
 {
 #if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
+    RT_NOREF(VidPnSourceId);
+
     VIDEO_POINTER_POSITION Pos;
     RT_ZERO(Pos);
     Pos.Column = xPos;
@@ -3264,8 +3269,9 @@ static int vboxWddmReportCursorPosition(PVBOXMP_DEVEXT pDevExt, uint32_t xPos, u
 
     return VBoxMPCmnReportCursorPosition(VBoxCommonFromDeviceExt(pDevExt), &Pos);
 #else
-    /// @todo VMSVGA cursor interface
-    RT_NOREF(pDevExt, xPos, yPos);
+    /* Use VMSVGA cursor interface */
+    PVBOXWDDM_SOURCE pSource = &pDevExt->aSources[VidPnSourceId];
+    SvgaCursorUpdatePosition(pDevExt, pSource->VScreenPos.x + xPos, pSource->VScreenPos.y + yPos);
     return VINF_SUCCESS;
 #endif
 }
@@ -3320,20 +3326,34 @@ DxgkDdiSetPointerPosition(
                 vboxWddmHostPointerEnable(pDevExt, FALSE);
             }
         }
-
-        // Always update the visibility as requested. Tell the host to use the guest's pointer.
-        vboxWddmHostPointerEnable(pDevExt, pSetPointerPosition->Flags.Visible);
     }
 
     /* Report the mouse cursor position to the host if changed. */
     if (   fWantsAbsolute
-        && (   pGlobalPointerInfo->iLastPosX != (uint32_t)pSetPointerPosition->X
-            || pGlobalPointerInfo->iLastPosY != (uint32_t)pSetPointerPosition->Y))
+        && (   pGlobalPointerInfo->iLastPosX != pSetPointerPosition->X
+            || pGlobalPointerInfo->iLastPosY != pSetPointerPosition->Y))
     {
-        vboxWddmReportCursorPosition(pDevExt, (uint32_t)pSetPointerPosition->X, (uint32_t)pSetPointerPosition->Y);
+        vboxWddmReportCursorPosition(pDevExt, pSetPointerPosition->VidPnSourceId, pSetPointerPosition->X, pSetPointerPosition->Y);
 
-        pGlobalPointerInfo->iLastPosX = (uint32_t)pSetPointerPosition->X;
-        pGlobalPointerInfo->iLastPosY = (uint32_t)pSetPointerPosition->Y;
+        pGlobalPointerInfo->iLastPosX = pSetPointerPosition->X;
+        pGlobalPointerInfo->iLastPosY = pSetPointerPosition->Y;
+    }
+
+    /* Update visibility as the last step. If VBoxSVGA uses SVGA_REG_CURSOR_* interface the device applies
+     * the cursor position when the device gets SVGA_REG_CURSOR_ON.
+     * For the old HGSMI interface the order does not matter.
+     */
+
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
+    /* Legacy interface. */
+    if ((fVisStateChanged || fScreenChanged) && fWantsAbsolute)
+#else
+    /* Non-x86 uses VMSVGA registers. */
+    if (fWantsAbsolute)
+#endif
+    {
+        // Always update the visibility as requested. Tell the host to use the guest's pointer.
+        vboxWddmHostPointerEnable(pDevExt, pSetPointerPosition->Flags.Visible);
     }
 
     //    LOGF(("LEAVE, hAdapter(0x%x)", hAdapter));

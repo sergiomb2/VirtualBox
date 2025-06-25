@@ -48,6 +48,25 @@ bool SvgaIsDXSupported(PVBOXMP_DEVEXT pDevExt)
 }
 
 
+void SvgaCursorSetVisibility(PVBOXMP_DEVEXT pDevExt, bool fVisible)
+{
+    /** @todo Implement SVGA_CAP2_EXTRA_REGS with SVGA_REG_CURSOR4_* */
+    PVBOXWDDM_EXT_VMSVGA pSvga = pDevExt->pGa->hw.pSvga;
+    uint32_t const u32CursorOn = fVisible
+                               ? SVGA_CURSOR_ON_SHOW
+                               : SVGA_CURSOR_ON_HIDE;
+    SVGARegWrite(pSvga, SVGA_REG_CURSOR_ON, u32CursorOn);
+}
+
+
+void SvgaCursorUpdatePosition(PVBOXMP_DEVEXT pDevExt, int xPos, int yPos)
+{
+    PVBOXWDDM_EXT_VMSVGA pSvga = pDevExt->pGa->hw.pSvga;
+    SVGARegWrite(pSvga, SVGA_REG_CURSOR_X, xPos);
+    SVGARegWrite(pSvga, SVGA_REG_CURSOR_Y, yPos);
+}
+
+
 static NTSTATUS svgaCreateSurfaceForAllocation(VBOXWDDM_EXT_VMSVGA *pSvga, PVBOXWDDM_ALLOCATION pAllocation)
 {
     NTSTATUS Status = SvgaSurfaceIdAlloc(pSvga, &pAllocation->dx.sid);

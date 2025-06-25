@@ -91,8 +91,8 @@ typedef struct VBOXWDDM_ALLOCATION *PVBOXWDDM_ALLOCATION;
 
 typedef struct _VBOXWDDM_POINTER_INFO
 {
-    uint32_t xPos;
-    uint32_t yPos;
+    int32_t xPos;
+    int32_t yPos;
     union
     {
         VIDEO_POINTER_ATTRIBUTES data;
@@ -103,9 +103,9 @@ typedef struct _VBOXWDDM_POINTER_INFO
 typedef struct _VBOXWDDM_GLOBAL_POINTER_INFO
 {
     /** Last updated X position. */
-    uint32_t iLastPosX;
+    int32_t iLastPosX;
     /** Last updated Y position. */
-    uint32_t iLastPosY;
+    int32_t iLastPosY;
     uint32_t iLastReportedScreen;
 } VBOXWDDM_GLOBAL_POINTER_INFO, *PVBOXWDDM_GLOBAL_POINTER_INFO;
 
