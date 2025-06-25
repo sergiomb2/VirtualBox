@@ -3864,7 +3864,7 @@ static int vboxDXDeviceCreateObjects(PVBOXDX_DEVICE pDevice)
     AssertRCReturn(rc, rc);
 
     rc = RTHandleTableCreateEx(&pDevice->hHTShaderResourceView, /* fFlags */ 0, /* uBase */ 0,
-                               SVGA3D_MAX_SHADERIDS, NULL, NULL);
+                               SVGA_COTABLE_MAX_IDS, NULL, NULL);
     AssertRCReturn(rc, rc);
 
     rc = RTHandleTableCreateEx(&pDevice->hHTRenderTargetView, /* fFlags */ 0, /* uBase */ 0,
