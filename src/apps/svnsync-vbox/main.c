@@ -218,6 +218,14 @@ typedef struct {
   svn_boolean_t help;
 } opt_baton_t;
 
+#ifdef VBOX
+typedef struct sync_process_override_t
+{
+  svn_revnum_t revision;
+  const char *paths[10];
+} sync_process_override_t;
+#endif /* VBOX */
+
 
 
 
@@ -272,6 +280,7 @@ check_lib_versions(void)
  * late. Need to know before adding/opening a file/directory. */
 static svn_error_t *
 get_props_sync(svn_ra_session_t *session,
+               const sync_process_override_t **process_override,
                const char *default_process,
                svn_boolean_t parent_deflt,
                svn_boolean_t parent_rec,
@@ -329,6 +338,47 @@ get_props_sync(svn_ra_session_t *session,
       {
         *deflt = !strcmp(default_process, "export");
         *rec = FALSE;
+      }
+    }
+  }
+
+  /* Check if there is a process override in place. Can be only the case
+   * if the default is "do not export" and recursive export is false. */
+  if (process_override && (!deflt || !*deflt) && (!rec || !*rec))
+  {
+    for (const sync_process_override_t **po = process_override; *po != NULL; po++)
+    {
+      if ((*po)->revision > revision)
+        continue;
+      /* Exact match of the primary process override directory: process */
+      if (nodekind == svn_node_dir && !strcmp((*po)->paths[0], path))
+      {
+	*proc = TRUE;
+        break;
+      }
+      size_t pathlen = strlen((*po)->paths[0]);
+      /* Something within the primary process override directory */
+      if (!strncmp((*po)->paths[0], path, pathlen) && path[pathlen] == '/')
+      {
+        svn_boolean_t pathmatch = FALSE;
+        for (const char *const *ps = &(*po)->paths[1]; *ps != NULL; ps++)
+        {
+          if (nodekind == svn_node_dir && !strcmp(*ps, path))
+          {
+	    *proc = TRUE;
+	    pathmatch = TRUE;
+            break;
+          }
+          pathlen = strlen(*ps);
+          if (!strncmp(*ps, path, pathlen) && path[pathlen] == '/')
+          {
+            pathmatch = TRUE;
+            break;
+          }
+        }
+	if (!pathmatch)
+          *proc = FALSE;
+        break;
       }
     }
   }
@@ -693,7 +743,7 @@ init_open_root(void *edit_baton,
   DX(fprintf(stderr, "init open_root %ld\n", base_revision);)
   base_revision = 1;
   DX(fprintf(stderr, "init override open_root %ld\n", base_revision);)
-  SVN_ERR(get_props_sync(eb->from_session_prop, eb->default_process, TRUE,
+  SVN_ERR(get_props_sync(eb->from_session_prop, NULL, eb->default_process, TRUE,
                          FALSE,"", eb->current, &db->process,
                          &db->process_default, &db->process_recursive, pool));
   DX(fprintf(stderr, "  %s\n", db->process ? "EXPORT" : "IGNORE");)
@@ -721,7 +771,7 @@ init_add_directory(const char *path,
   initdir_baton_t *db = apr_pcalloc(pool, sizeof(*db));
 
   DX(fprintf(stderr, "init add_directory %s\n", path);)
-  SVN_ERR(get_props_sync(eb->from_session_prop, eb->default_process,
+  SVN_ERR(get_props_sync(eb->from_session_prop, NULL, eb->default_process,
                          pb->process_default, pb->process_recursive, path,
                          eb->current, &db->process, &db->process_default,
                          &db->process_recursive, pool));
@@ -774,7 +824,7 @@ init_add_file(const char *path,
   initfile_baton_t *fb = apr_pcalloc(pool, sizeof(*fb));
 
   DX(fprintf(stderr, "init add_file %s\n", path);)
-  SVN_ERR(get_props_sync(eb->from_session_prop, eb->default_process,
+  SVN_ERR(get_props_sync(eb->from_session_prop, NULL, eb->default_process,
                          pb->process_default, pb->process_recursive,
                          path, eb->current, &fb->process, NULL, NULL, pool));
   DX(fprintf(stderr, "  %s\n", fb->process ? "EXPORT" : "IGNORE");)
@@ -1274,6 +1324,7 @@ typedef struct {
 #ifdef VBOX
   svn_ra_session_t *from_session_prop;
   svn_ra_session_t *to_session_prop;
+  const sync_process_override_t **process_override;
   svn_boolean_t changeset_live;
   svn_revnum_t start_rev;
   svn_revnum_t current;
@@ -1493,11 +1544,11 @@ open_root(void *edit_baton,
   node_baton_t *db = apr_pcalloc(pool, sizeof(*db));
 
   DX(fprintf(stderr, "open_root\n");)
-  SVN_ERR(get_props_sync(eb->from_session_prop, eb->default_process, TRUE,
+  SVN_ERR(get_props_sync(eb->from_session_prop, eb->process_override, eb->default_process, TRUE,
                          FALSE, "", eb->current-1, &db->prev_process,
                          &db->prev_process_default,
                          &db->prev_process_recursive, pool));
-  SVN_ERR(get_props_sync(eb->from_session_prop, eb->default_process,
+  SVN_ERR(get_props_sync(eb->from_session_prop, eb->process_override, eb->default_process,
                          TRUE, FALSE, "", eb->current, &db->process,
                          &db->process_default, &db->process_recursive, pool));
   DX(fprintf(stderr, "  %s (prev %s)\n", db->process ? "EXPORT" : "IGNORE", db->prev_process ? "EXPORT" : "IGNORE");)
@@ -1560,7 +1611,7 @@ delete_entry(const char *path,
     {
       /* Of course it doesn't make sense to get the properties of the current
        * revision - it is to be deleted, so it doesn't have any properties. */
-      SVN_ERR(get_props_sync(eb->from_session_prop, eb->default_process,
+      SVN_ERR(get_props_sync(eb->from_session_prop, eb->process_override, eb->default_process,
                              pb->prev_process_default, pb->prev_process_recursive,
                              path, eb->current-1, &prev_process, NULL, NULL, pool));
     }
@@ -1610,7 +1661,7 @@ add_directory(const char *path,
   {
     /* Of course it doesn't make sense to get the properties of the previous
      * revision - it is to be added, so it didn't have any properties. */
-    SVN_ERR(get_props_sync(eb->from_session_prop, eb->default_process,
+    SVN_ERR(get_props_sync(eb->from_session_prop, eb->process_override, eb->default_process,
                            pb->process_default, pb->process_recursive, path,
                            eb->current, &b->process, &b->process_default,
                            &b->process_recursive, pool));
@@ -1738,7 +1789,7 @@ open_directory(const char *path,
     {
       svn_revnum_t dst_rev;
 
-      SVN_ERR(get_props_sync(eb->from_session_prop, eb->default_process,
+      SVN_ERR(get_props_sync(eb->from_session_prop, eb->process_override, eb->default_process,
                              pb->prev_process_default, pb->prev_process_recursive,
                              path, eb->current-1, &db->prev_process,
                              &db->prev_process_default, &db->prev_process_recursive,
@@ -1755,7 +1806,7 @@ open_directory(const char *path,
     {
       dir_present_in_target = TRUE;
     }
-    SVN_ERR(get_props_sync(eb->from_session_prop, eb->default_process,
+    SVN_ERR(get_props_sync(eb->from_session_prop, eb->process_override, eb->default_process,
                            pb->process_default, pb->process_recursive, path,
                            eb->current, &db->process, &db->process_default,
                            &db->process_recursive, pool));
@@ -1874,7 +1925,7 @@ add_file(const char *path,
   {
     /* Of course it doesn't make sense to get the properties of the previous
      * revision - it is to be added, so it didn't have any properties. */
-    SVN_ERR(get_props_sync(eb->from_session_prop, eb->default_process,
+    SVN_ERR(get_props_sync(eb->from_session_prop, eb->process_override, eb->default_process,
                            pb->process_default, pb->process_recursive, path,
                            eb->current, &fb->process, NULL, NULL, pool));
     fb->process_default = FALSE;
@@ -1976,12 +2027,12 @@ open_file(const char *path,
                               eb->current-1, &nodekind, pool));
     file_added_this_changeset = (nodekind != svn_node_file);
     if (!file_added_this_changeset)
-      SVN_ERR(get_props_sync(eb->from_session_prop, eb->default_process,
+      SVN_ERR(get_props_sync(eb->from_session_prop, eb->process_override, eb->default_process,
                              pb->prev_process_default,
                              pb->prev_process_recursive,
                              path, eb->current-1, &fb->prev_process,
                              NULL, NULL, pool));
-    SVN_ERR(get_props_sync(eb->from_session_prop, eb->default_process,
+    SVN_ERR(get_props_sync(eb->from_session_prop, eb->process_override, eb->default_process,
                            pb->process_default, pb->process_recursive, path,
                            eb->current, &fb->process, NULL, NULL, pool));
     if (file_added_this_changeset)
@@ -2317,6 +2368,7 @@ get_sync_editor(const svn_delta_editor_t *wrapped_editor,
 #ifdef VBOX
                 svn_revnum_t start_rev,
                 svn_revnum_t current,
+                const sync_process_override_t **process_override,
                 svn_ra_session_t *prop_session_from,
                 svn_ra_session_t *prop_session_to,
                 const char *default_process,
@@ -2360,6 +2412,7 @@ get_sync_editor(const svn_delta_editor_t *wrapped_editor,
   eb->replace_license = replace_license;
   eb->from_session_prop = prop_session_from;
   eb->to_session_prop = prop_session_to;
+  eb->process_override = process_override;
 #endif /* VBOX */
   eb->to_url = to_url;
 
@@ -2542,6 +2595,17 @@ do_synchronize(svn_ra_session_t *to_session, void *b, apr_pool_t *pool)
   SVN_ERR(svn_ra_rev_prop(to_session, 0, SVNSYNC_PROP_REPLACE_LICENSE,
                           &replace_license_str, pool));
   replace_license = !!replace_license_str;
+
+  /* process override */
+  const sync_process_override_t **process_override = NULL;
+  if (!censor_author)
+  {
+    static const sync_process_override_t s_po_branch =
+    { 165129, { "branches", "branches/VBox-7.1", "branches/VBox-7.2", "branches/VBox-8.0", "branches/VBox-8.1", "branches/VBox-8.2", NULL, } };
+    static const sync_process_override_t *s_po[] =
+    { &s_po_branch, NULL };
+    process_override = &s_po[0];
+  }
   SVN_ERR(svn_ra_open4(&from_session_prop, NULL, from_url->data, NULL,
                        baton->callbacks, baton, baton->config, pool));
   SVN_ERR(svn_ra_open4(&to_session_prop, NULL, baton->to_url, NULL,
@@ -2737,7 +2801,7 @@ do_synchronize(svn_ra_session_t *to_session, void *b, apr_pool_t *pool)
       baton->from_rev = current;
       baton->committed_rev = SVN_INVALID_REVNUM;
       SVN_ERR(get_sync_editor(commit_editor, commit_baton, current - 1,
-                              start_rev, current, from_session_prop,
+                              start_rev, current, process_override, from_session_prop,
                               to_session_prop, default_process->data,
                               replace_externals, replace_license,
                               baton->to_url, &sync_editor, &sync_baton,
