@@ -35,7 +35,7 @@
 # define AF_INET6 23
 #endif
 
-#ifdef RT_OS_LINUX
+#if defined(RT_OS_LINUX) || defined(RT_OS_SOLARIS)
 # include <limits.h>
 #endif
 
