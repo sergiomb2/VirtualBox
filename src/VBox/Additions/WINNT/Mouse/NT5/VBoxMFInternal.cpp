@@ -212,19 +212,65 @@ VOID VBoxDrvNotifyServiceCB(PVBOXMOUSE_DEVEXT pDevExt, PMOUSE_INPUT_DATA InputDa
     KeAcquireSpinLock(&g_ctx.SyncLock, &Irql);
     if (pDevExt->pSCReq)
     {
-        int rc = VbglR0GRPerform(&pDevExt->pSCReq->header);
+        int rc = VbglR0GRPerform(&pDevExt->pSCReq->Core.header);
         if (RT_SUCCESS(rc))
         {
-            if (pDevExt->pSCReq->mouseFeatures & VMMDEV_MOUSE_HOST_WANTS_ABSOLUTE)
+            if (pDevExt->pSCReq->Core.mouseFeatures & VMMDEV_MOUSE_HOST_WANTS_ABSOLUTE)
             {
                 PMOUSE_INPUT_DATA pData = InputDataStart;
                 while (pData < InputDataEnd)
                 {
-                    pData->LastX = pDevExt->pSCReq->pointerXPos;
-                    pData->LastY = pDevExt->pSCReq->pointerYPos;
+                    pData->LastX = pDevExt->pSCReq->Core.pointerXPos;
+                    pData->LastY = pDevExt->pSCReq->Core.pointerYPos;
                     pData->Flags = MOUSE_MOVE_ABSOLUTE;
                     if (g_ctx.fIsNewProtEnabled)
                         pData->Flags |= MOUSE_VIRTUAL_DESKTOP;
+
+                    if (  pDevExt->bNeedFullStateProtocol
+                       && (pDevExt->pSCReq->Core.mouseFeatures & VMMDEV_MOUSE_HOST_SUPPORTS_FULL_STATE_PROTOCOL))
+                    {
+                        pData->Buttons = 0;
+
+                        const uint32_t fChangedButtons = pDevExt->pSCReq->fButtons ^ pDevExt->fLastButtons;
+                        pDevExt->fLastButtons = pDevExt->pSCReq->fButtons;
+
+                        if (fChangedButtons & VMMDEV_MOUSE_BUTTON_LEFT)
+                        {
+                            pData->ButtonFlags |= RT_BOOL(pDevExt->pSCReq->fButtons & VMMDEV_MOUSE_BUTTON_LEFT)
+                                                ? MOUSE_LEFT_BUTTON_DOWN : MOUSE_LEFT_BUTTON_UP;
+                        }
+                        if (fChangedButtons & VMMDEV_MOUSE_BUTTON_RIGHT)
+                        {
+                            pData->ButtonFlags |= RT_BOOL(pDevExt->pSCReq->fButtons & VMMDEV_MOUSE_BUTTON_RIGHT)
+                                                ? MOUSE_RIGHT_BUTTON_DOWN : MOUSE_RIGHT_BUTTON_UP;
+                        }
+                        if (fChangedButtons & VMMDEV_MOUSE_BUTTON_MIDDLE)
+                        {
+                            pData->ButtonFlags |= RT_BOOL(pDevExt->pSCReq->fButtons & VMMDEV_MOUSE_BUTTON_MIDDLE)
+                                                ? MOUSE_MIDDLE_BUTTON_DOWN : MOUSE_MIDDLE_BUTTON_UP;
+                        }
+                        if (fChangedButtons & VMMDEV_MOUSE_BUTTON_X1)
+                        {
+                            pData->ButtonFlags |= RT_BOOL(pDevExt->pSCReq->fButtons & VMMDEV_MOUSE_BUTTON_X1)
+                                                ? MOUSE_BUTTON_4_DOWN : MOUSE_BUTTON_4_UP;
+                        }
+                        if (fChangedButtons & VMMDEV_MOUSE_BUTTON_X2)
+                        {
+                            pData->ButtonFlags |= RT_BOOL(pDevExt->pSCReq->fButtons & VMMDEV_MOUSE_BUTTON_X2)
+                                                ? MOUSE_BUTTON_5_DOWN : MOUSE_BUTTON_5_UP;
+                        }
+                        if (pDevExt->pSCReq->dz)
+                        {
+                            pData->ButtonFlags |= MOUSE_WHEEL;
+                            pData->ButtonData = pDevExt->pSCReq->dz;
+                        }
+                        else if (pDevExt->pSCReq->dw) /* Note the 'else'. Seems to be no way to report both WHEEL and HWHEEL. */
+                        {
+                            pData->ButtonFlags |= MOUSE_HWHEEL;
+                            pData->ButtonData = pDevExt->pSCReq->dw;
+                        }
+                    }
+
                     pData++;
                 }
 
@@ -294,6 +340,7 @@ void VBoxDeviceAdded(PVBOXMOUSE_DEVEXT pDevExt)
 
     if (!vboxIsHostMouseFound())
     {
+#if defined(RT_ARCH_AMD64) || defined(RT_ARCH_X86)
         NTSTATUS rc;
         UCHAR buffer[512];
         CM_RESOURCE_LIST *pResourceList = (CM_RESOURCE_LIST *)&buffer[0];
@@ -357,6 +404,45 @@ void VBoxDeviceAdded(PVBOXMOUSE_DEVEXT pDevExt)
                 }
             }
         }
+#else
+        /* Look for the emulated input device on non-x86. */
+        BOOLEAN bDetected = FALSE;
+
+        ULONG cbProperty = 0;
+        NTSTATUS Status = IoGetDeviceProperty(pDevExt->pdoMain, DevicePropertyHardwareID,
+                                              0, NULL, &cbProperty);
+        if (cbProperty != 0 && Status == STATUS_BUFFER_TOO_SMALL)
+        {
+            WCHAR *pwszHardwareID = (WCHAR *)ExAllocatePoolZero(PagedPool, cbProperty, (ULONG)'FMBV');
+            if (pwszHardwareID)
+            {
+                Status = IoGetDeviceProperty(pDevExt->pdoMain, DevicePropertyHardwareID,
+                                             cbProperty, pwszHardwareID, &cbProperty);
+                if (Status == STATUS_SUCCESS)
+                {
+                    const WCHAR wszEmulatedID[] = L"HID\\VID_80EE";
+
+                    ULONG i = 0;
+                    for (; i < cbProperty / sizeof(WCHAR) && wszEmulatedID[i]; ++i)
+                    {
+                        if (wszEmulatedID[i] != pwszHardwareID[i])
+                            break;
+                    }
+
+                    if (wszEmulatedID[i] == 0)
+                    {
+                        /* Mouse integration requires VMMDEV_MOUSE_HOST_SUPPORTS_FULL_STATE_PROTOCOL
+                         * for emulated USB devices.
+                         */
+                        pDevExt->bNeedFullStateProtocol = TRUE;
+                        bDetected = TRUE;
+                    }
+                }
+
+                ExFreePoolWithTag(pwszHardwareID, (ULONG)'FMBV');
+            }
+        }
+#endif
 
         if (bDetected)
         {
@@ -386,8 +472,36 @@ void VBoxInformHost(PVBOXMOUSE_DEVEXT pDevExt)
         /* Do lazy callback installation. */
         vboxNewProtLazyRegister();
 
+        /* Set to false if the device needs full state protocol and the host does not support it,
+         * in which case the mouse filter driver leaves the emulated device alone.
+         */
+        BOOLEAN bHostMouse = pDevExt->bHostMouse;
+
+        /* If the emulated device requires the full state protocol and
+         * there is still something to do (inform host or allocate request),
+         * then check if the host supports full state protocol.
+         */
+        if (   pDevExt->bNeedFullStateProtocol
+            && bHostMouse
+            && (!vboxIsHostInformed() || !pDevExt->pSCReq))
+        {
+            uint32_t mouseFeatures = 0;
+
+            VMMDevReqMouseStatus *req = NULL;
+            int rc = VbglR0GRAlloc((VMMDevRequestHeader **)&req, sizeof(VMMDevReqMouseStatus), VMMDevReq_GetMouseStatus);
+            if (RT_SUCCESS(rc))
+            {
+                rc = VbglR0GRPerform(&req->header);
+                if (RT_SUCCESS(rc))
+                    mouseFeatures = req->mouseFeatures;
+                VbglR0GRFree(&req->header);
+            }
+
+            bHostMouse = RT_BOOL(mouseFeatures & VMMDEV_MOUSE_HOST_SUPPORTS_FULL_STATE_PROTOCOL);
+        }
+
         /* Inform host we support absolute coordinates */
-        if (pDevExt->bHostMouse && !vboxIsHostInformed())
+        if (bHostMouse && !vboxIsHostInformed())
         {
             VMMDevReqMouseStatus *req = NULL;
             int rc = VbglR0GRAlloc((VMMDevRequestHeader **)&req, sizeof(VMMDevReqMouseStatus), VMMDevReq_SetMouseStatus);
@@ -396,6 +510,8 @@ void VBoxInformHost(PVBOXMOUSE_DEVEXT pDevExt)
                 req->mouseFeatures = VMMDEV_MOUSE_GUEST_CAN_ABSOLUTE;
                 if (g_ctx.fIsNewProtEnabled)
                     req->mouseFeatures |= VMMDEV_MOUSE_NEW_PROTOCOL;
+                if (pDevExt->bNeedFullStateProtocol)
+                    req->mouseFeatures |= VMMDEV_MOUSE_GUEST_USES_FULL_STATE_PROTOCOL;
 
                 req->pointerXPos = 0;
                 req->pointerYPos = 0;
@@ -413,12 +529,22 @@ void VBoxInformHost(PVBOXMOUSE_DEVEXT pDevExt)
         }
 
         /* Preallocate request to be used in VBoxServiceCB*/
-        if (pDevExt->bHostMouse && !pDevExt->pSCReq)
+        if (bHostMouse && !pDevExt->pSCReq)
         {
-            VMMDevReqMouseStatus *req = NULL;
-            int rc = VbglR0GRAlloc((VMMDevRequestHeader **)&req, sizeof(VMMDevReqMouseStatus), VMMDevReq_GetMouseStatus);
+            /* Always allocate the extended request. */
+            VMMDevReqMouseStatusEx *req = NULL;
+            int rc = VbglR0GRAlloc((VMMDevRequestHeader **)&req, sizeof(VMMDevReqMouseStatusEx), VMMDevReq_GetMouseStatusEx);
             if (RT_SUCCESS(rc))
+            {
+                if (!pDevExt->bNeedFullStateProtocol)
+                {
+                    /* Use the legacy request. */
+                    req->Core.header.size = sizeof(VMMDevReqMouseStatus);
+                    req->Core.header.requestType = VMMDevReq_GetMouseStatus;
+                }
+
                 InterlockedExchangePointer((PVOID volatile *)&pDevExt->pSCReq, req);
+            }
             else
             {
                 WARN(("VbglR0GRAlloc for service callback failed with rc=%Rrc", rc));
@@ -471,10 +597,10 @@ VOID VBoxDeviceRemoved(PVBOXMOUSE_DEVEXT pDevExt)
      */
     KIRQL Irql;
     KeAcquireSpinLock(&g_ctx.SyncLock, &Irql);
-    VMMDevReqMouseStatus *pSCReq = ASMAtomicXchgPtrT(&pDevExt->pSCReq, NULL, VMMDevReqMouseStatus *);
+    VMMDevReqMouseStatusEx *pSCReq = ASMAtomicXchgPtrT(&pDevExt->pSCReq, NULL, VMMDevReqMouseStatusEx *);
     KeReleaseSpinLock(&g_ctx.SyncLock, Irql);
     if (pSCReq)
-        VbglR0GRFree(&pSCReq->header);
+        VbglR0GRFree(&pSCReq->Core.header);
 
     /*
      * Do init ref count handling.
