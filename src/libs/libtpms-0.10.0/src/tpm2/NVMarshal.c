@@ -4170,6 +4170,11 @@ PERSISTENT_DATA_PPList_Unmarshal(PERSISTENT_DATA *data, BYTE **buffer, INT32 *si
     if (rc == TPM_RC_SUCCESS) {
 #ifndef VBOX
         BYTE buf[array_size];
+#else
+        BYTE *buf = (BYTE *)RTMemTmpAlloc(array_size);
+        if (!buf)
+            return TPM_RC_SIZE;
+#endif
         rc = Array_Unmarshal(buf, array_size, buffer, size);
         if (rc == TPM_RC_SUCCESS) {
             if (blob_version <= 4) {
@@ -4182,16 +4187,9 @@ PERSISTENT_DATA_PPList_Unmarshal(PERSISTENT_DATA *data, BYTE **buffer, INT32 *si
                 memcpy(data->ppList, buf, array_size);
             }
         }
-#else
-        BYTE *pBuf = (BYTE *)RTMemTmpAlloc(array_size);
-        if (RT_LIKELY(pBuf))
-        {
-            rc = Array_Unmarshal(pBuf, array_size, buffer, size);
-            memcpy(data->ppList, pBuf, MIN(array_size, sizeof(data->ppList)));
-            RTMemTmpFree(pBuf);
-        }
-        else
-            rc = TPM_RC_SIZE;
+
+#ifdef VBOX
+        RTMemTmpFree(buf);
 #endif /* VBOX */
     }
     return rc;
