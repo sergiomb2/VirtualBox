@@ -493,7 +493,7 @@ static int vbclGetPidfileName(char *szBuf, size_t cbBuf, const char *szTemplate,
         RTStrCat(szBuf, cbBuf, fParentProcess ? "-control.pid" : "-service.pid");
 
     if (RT_FAILURE(rc))
-        VBClLogFatalError("%s: reating PID file path failed: %Rrc\n",
+        VBClLogFatalError("%s: creating PID file path failed: %Rrc\n",
                           g_Service.pDesc->pszDesc, rc);
 
     return rc;
