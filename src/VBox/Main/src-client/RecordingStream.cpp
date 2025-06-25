@@ -333,7 +333,7 @@ int RecordingStream::process(RecordingBlockSet &streamBlockSet, RecordingBlockMa
                 case RECORDINGFRAME_TYPE_CURSOR_SHAPE:
                 case RECORDINGFRAME_TYPE_CURSOR_POS:
                 {
-                    int vrc2 = recordingCodecEncodeFrame(&m_CodecVideo, pFrame, pFrame->msTimestamp, m_pCtx /* pvUser */);
+                    int const vrc2 = recordingCodecEncodeFrame(&m_CodecVideo, pFrame, pFrame->msTimestamp, m_pCtx /* pvUser */);
                     AssertRC(vrc2);
                     if (RT_SUCCESS(vrc))
                         vrc = vrc2;
@@ -342,7 +342,9 @@ int RecordingStream::process(RecordingBlockSet &streamBlockSet, RecordingBlockMa
 
                 case RECORDINGFRAME_TYPE_SCREEN_CHANGE:
                 {
-                    /* ignore rc */ recordingCodecScreenChange(&m_CodecVideo, &pFrame->u.ScreenInfo);
+                    int const vrc2 = recordingCodecScreenChange(&m_CodecVideo, &pFrame->u.ScreenInfo);
+                    if (RT_SUCCESS(vrc))
+                        vrc = vrc2;
                     break;
                 }
 
