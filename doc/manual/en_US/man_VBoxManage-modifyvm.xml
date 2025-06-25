@@ -516,7 +516,7 @@ time on documenting it. -->
         </group></arg>
       <arg>--recording-file=<replaceable>filename</replaceable></arg>
       <arg>--recording-max-size=<replaceable>MB</replaceable></arg>
-      <arg>--recording-max-time=<replaceable>msec</replaceable></arg>
+      <arg>--recording-max-time=<replaceable>seconds</replaceable></arg>
       <arg>--recording-opts= <arg choice="plain"><replaceable>key</replaceable>=<replaceable>value</replaceable>[,<replaceable>key</replaceable>=<replaceable>value</replaceable>...]</arg></arg>
       <arg>--recording-video-fps=<replaceable>fps</replaceable></arg>
       <arg>--recording-video-rate=<replaceable>rate</replaceable></arg>
