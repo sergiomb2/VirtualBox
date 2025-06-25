@@ -40,7 +40,7 @@
 #endif
 
 #ifndef LOG_GROUP
-# define LOG_GROUP LOG_GROUP_DRV_NAT
+# define LOG_GROUP LOG_GROUP_NAT_ENGINE
 #endif
 #include <VBox/log.h>
 

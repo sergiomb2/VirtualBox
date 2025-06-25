@@ -310,6 +310,7 @@ VBoxNetSlirpNAT::VBoxNetSlirpNAT()
     m_ProxyOptions.disable_dhcp = true;
     m_ProxyOptions.disable_host_loopback = false;
     m_ProxyOptions.disable_dns = false;
+    m_ProxyOptions.iSoMaxConn = 10;
 
     RT_ZERO(m_src4);
     RT_ZERO(m_src6);
@@ -694,20 +695,28 @@ int VBoxNetSlirpNAT::initIPv4()
     PCRTNETADDRIPV4 acNameservers = getHostNameservers();
     //populate only first entry
     /** @todo r=jack: fix that in libslirp. */
-    if (acNameservers != NULL)
+    if (acNameservers != NULL &&
+        !((acNameservers[0].u & RT_H2N_U32_C(IN_CLASSA_NET))
+          == RT_N2H_U32_C(INADDR_LOOPBACK & IN_CLASSA_NET)))
     {
         memcpy(&m_ProxyOptions.vnameserver, acNameservers, sizeof(RTNETADDRIPV4));
         // m_ProxyOptions.disable_dns = true;
     }
     else
     {
-        LogRel(("Failed to obtain IPv4 nameservers from host."
-                "Falling back to default libslirp virtual nameserver.\n"));
+        if((acNameservers[0].u & RT_H2N_U32_C(IN_CLASSA_NET))
+            == RT_N2H_U32_C(INADDR_LOOPBACK & IN_CLASSA_NET))
+            LogRel(("Nameserver is on 127/8 network."
+                    "Falling back to libslirp DNS proxy.\n"));
+        else
+            LogRel(("Failed to obtain IPv4 nameservers from host."
+                    "Falling back to libslirp DNS proxy.\n"));
 
         RTNETADDRIPV4 Nameserver4;
         Nameserver4.u = Net4.u | RT_H2N_U32_C(0x00000003);
 
         memcpy(&m_ProxyOptions.vnameserver, &Nameserver4, sizeof(in_addr));
+        LogRel(("nameserver: %u", Nameserver4.u));
     }
 
     if (acNameservers)
@@ -824,11 +833,9 @@ int VBoxNetSlirpNAT::initIPv6()
     Addr6.au8[15] = 0x01;
     memcpy(&m_ProxyOptions.vhost6, &Addr6, sizeof(RTNETADDRIPV6));
 
-#if 0
     /** @todo Verify DNS server default. */
-    Addr6.au8[15] = 0x02;
+    Addr6.au8[15] = 0x03;
     memcpy(&m_ProxyOptions.vnameserver6, &Addr6, sizeof(RTNETADDRIPV6));
-#endif
 
     /*
      * Should we advertise ourselves as default IPv6 route?  If the
@@ -860,14 +867,14 @@ int VBoxNetSlirpNAT::initIPv6()
         rc = RTNetStrToIPv6Addr(strSourceIp6.c_str(), &addr, &pszZone);
         if (RT_SUCCESS(rc))
         {
-            m_ProxyOptions.outbound_addr->sin_addr.s_addr = addr.u;
+            memcpy(&m_ProxyOptions.outbound_addr6->sin6_addr.s6_addr, &addr, sizeof(uint128_t));
 
-            LogRel(("Will use %RTnaipv4 as IPv4 source address\n",
-                    m_src4.sin_addr.s_addr));
+            LogRel(("Will use %RTnaipv6 as IPv6 source address\n",
+                    m_src6.sin6_addr.s6_addr));
         }
         else
         {
-            LogRel(("Failed to parse \"%s\" IPv4 source address specification\n",
+            LogRel(("Failed to parse \"%s\" IPv6 source address specification\n",
                     strSourceIp6.c_str()));
         }
     }
@@ -883,62 +890,6 @@ int VBoxNetSlirpNAT::initIPv6()
 
     return VINF_SUCCESS;
 }
-
-
-#if 0
-// /**
-//  * Create raw IPv6 socket for sending and snooping ICMP6.
-//  */
-// void VBoxNetSlirpNAT::initIPv6RawSock()
-// {
-//     SOCKET icmpsock6 = INVALID_SOCKET;
-
-// #ifndef RT_OS_DARWIN
-//     const int icmpstype = SOCK_RAW;
-// #else
-//     /* on OS X it's not privileged */
-//     const int icmpstype = SOCK_DGRAM;
-// #endif
-
-//     icmpsock6 = socket(AF_INET6, icmpstype, IPPROTO_ICMPV6);
-//     if (icmpsock6 == INVALID_SOCKET)
-//     {
-//         perror("IPPROTO_ICMPV6");
-// #ifdef VBOX_RAWSOCK_DEBUG_HELPER
-//         icmpsock6 = getrawsock(AF_INET6);
-// #endif
-//     }
-
-//     if (icmpsock6 != INVALID_SOCKET)
-//     {
-// #ifdef ICMP6_FILTER             // Windows doesn't support RFC 3542 API
-//         /*
-//          * XXX: We do this here for now, not in pxping.c, to avoid
-//          * name clashes between lwIP and system headers.
-//          */
-//         struct icmp6_filter flt;
-//         ICMP6_FILTER_SETBLOCKALL(&flt);
-
-//         ICMP6_FILTER_SETPASS(ICMP6_ECHO_REPLY, &flt);
-
-//         ICMP6_FILTER_SETPASS(ICMP6_DST_UNREACH, &flt);
-//         ICMP6_FILTER_SETPASS(ICMP6_PACKET_TOO_BIG, &flt);
-//         ICMP6_FILTER_SETPASS(ICMP6_TIME_EXCEEDED, &flt);
-//         ICMP6_FILTER_SETPASS(ICMP6_PARAM_PROB, &flt);
-
-//         int status = setsockopt(icmpsock6, IPPROTO_ICMPV6, ICMP6_FILTER,
-//                                 &flt, sizeof(flt));
-//         if (status < 0)
-//         {
-//             perror("ICMP6_FILTER");
-//         }
-// #endif
-//     }
-
-//     m_ProxyOptions.icmpsock6 = icmpsock6;
-// }
-#endif
-
 
 /**
  * Adapter for the ListenerImpl template.  It has to be a separate
@@ -1367,7 +1318,9 @@ HRESULT VBoxNetSlirpNAT::HandleEvent(VBoxEventType_T aEventType, IEvent *pEvent)
             PCRTNETADDRIPV4 acNameservers = getHostNameservers();
             //populate only first entry
             /** @todo r=jack: fix that in libslirp. */
-            if (acNameservers != NULL)
+            if (acNameservers != NULL &&
+                !((acNameservers[0].u & RT_H2N_U32_C(IN_CLASSA_NET))
+                  == RT_N2H_U32_C(INADDR_LOOPBACK & IN_CLASSA_NET)))
             {
                 memcpy(&m_ProxyOptions.vnameserver, acNameservers, sizeof(RTNETADDRIPV4));
                 slirp_set_vnameserver(m_pSlirp, m_ProxyOptions.vnameserver);
@@ -1376,8 +1329,13 @@ HRESULT VBoxNetSlirpNAT::HandleEvent(VBoxEventType_T aEventType, IEvent *pEvent)
             }
             else
             {
-                LogRel(("Failed to obtain IPv4 nameservers from host."
-                        "Falling back to default libslirp virtual nameserver.\n"));
+                if((acNameservers[0].u & RT_H2N_U32_C(IN_CLASSA_NET))
+                    == RT_N2H_U32_C(INADDR_LOOPBACK & IN_CLASSA_NET))
+                    LogRel(("Nameserver is on 127/8 network."
+                            "Falling back to libslirp DNS proxy.\n"));
+                else
+                    LogRel(("Failed to obtain IPv4 nameservers from host."
+                            "Falling back to libslirp DNS proxy.\n"));
 
                 RTNETADDRIPV4 Nameserver4;
                 Nameserver4.u = m_ProxyOptions.vnetwork.s_addr | RT_H2N_U32_C(0x00000003);

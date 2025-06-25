@@ -726,6 +726,8 @@ typedef enum VBOXLOGGROUP
     LOG_GROUP_MM_PHYS,
     /** MM Page pool group. */
     LOG_GROUP_MM_POOL,
+    /** Libslirp NAT Enginer */
+    LOG_GROUP_NAT_ENGINE,
     /** The NAT service group */
     LOG_GROUP_NAT_SERVICE,
     /** NEM group. */
@@ -1214,6 +1216,7 @@ typedef enum VBOXLOGGROUP
     "MM_HYPER_HEAP", \
     "MM_PHYS", \
     "MM_POOL", \
+    "NAT_ENGINE", \
     "NAT_SERVICE", \
     "NEM", \
     "NET_ADP_DRV", \
