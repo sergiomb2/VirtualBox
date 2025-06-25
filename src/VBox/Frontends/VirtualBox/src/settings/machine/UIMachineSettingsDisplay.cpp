@@ -122,13 +122,16 @@ struct UIDataSettingsMachineDisplay
     /** Returns whether the @a other passed data is different from this one. */
     bool operator!=(const UIDataSettingsMachineDisplay &other) const { return !equal(other); }
 
-    /** Recording options. */
+    /** Recording options. Serialized as a string ('key=value,key2=value2'). */
     enum RecordingOption
     {
         RecordingOption_Unknown,
+        /** @todo r=andy Deprecated since 7.0. Remove and use 'recording features' instead. */
         RecordingOption_AC,
+        /** @todo r=andy Deprecated since 7.0. Remove and use 'recording features' instead. */
         RecordingOption_VC,
         RecordingOption_AC_Profile
+        /** @todo r=andy Add RecordingOption_VC_Quality ('vc_quality' in recording options) handling. */
     };
 
     /** Returns enum value corresponding to passed @a strKey. */
@@ -136,9 +139,12 @@ struct UIDataSettingsMachineDisplay
     {
         /* Compare case-sensitive: */
         QMap<QString, RecordingOption> keys;
+        /** @todo r=andy Deprecated since 7.0. Remove and use 'recording features' instead. */
         keys["ac_enabled"] = RecordingOption_AC;
+        /** @todo r=andy Deprecated since 7.0. Remove and use 'recording features' instead. */
         keys["vc_enabled"] = RecordingOption_VC;
         keys["ac_profile"] = RecordingOption_AC_Profile;
+        /** @todo r=andy Add RecordingOption_VC_Quality ('vc_quality' in recording options) handling. */
         /* Return known value or RecordingOption_Unknown otherwise: */
         return keys.value(strKey, RecordingOption_Unknown);
     }
@@ -148,9 +154,12 @@ struct UIDataSettingsMachineDisplay
     {
         /* Compare case-sensitive: */
         QMap<RecordingOption, QString> values;
+        /** @todo r=andy Deprecated since 7.0. Remove and use 'recording features' instead. */
         values[RecordingOption_AC] = "ac_enabled";
+        /** @todo r=andy Deprecated since 7.0. Remove and use 'recording features' instead. */
         values[RecordingOption_VC] = "vc_enabled";
         values[RecordingOption_AC_Profile] = "ac_profile";
+        /** @todo r=andy Add RecordingOption_VC_Quality ('vc_quality' in recording options) handling. */
         /* Return known value or QString() otherwise: */
         return values.value(enmKey);
     }
@@ -206,6 +215,8 @@ struct UIDataSettingsMachineDisplay
             return true;
         return false;
     }
+
+    /** @todo r=andy Add getVideoQualityFromOptions() via 'vc_quality'. */
 
     /** Searches for ac_profile and return 1 for "low", 2 for "med", and 3 for "high". Returns 2
         if ac_profile is missing */
