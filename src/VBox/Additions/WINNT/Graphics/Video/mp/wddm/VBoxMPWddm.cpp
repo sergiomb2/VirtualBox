@@ -5583,8 +5583,12 @@ DriverEntry(
 
     AssertRelease(!NT_SUCCESS(Status));
 
-    PRTLOGGER pLogger = RTLogSetDefaultInstance(NULL);
-
+    PRTLOGGER pLogger = RTLogRelSetDefaultInstance(NULL);
+    if (pLogger)
+    {
+        RTLogDestroy(pLogger);
+    }
+    pLogger = RTLogSetDefaultInstance(NULL);
     if (pLogger)
     {
         RTLogDestroy(pLogger);
