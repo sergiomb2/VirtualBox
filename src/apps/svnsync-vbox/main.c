@@ -353,7 +353,7 @@ get_props_sync(svn_ra_session_t *session,
       /* Exact match of the primary process override directory: process */
       if (nodekind == svn_node_dir && !strcmp((*po)->paths[0], path))
       {
-	*proc = TRUE;
+        *proc = TRUE;
         break;
       }
       size_t pathlen = strlen((*po)->paths[0]);
@@ -365,8 +365,8 @@ get_props_sync(svn_ra_session_t *session,
         {
           if (nodekind == svn_node_dir && !strcmp(*ps, path))
           {
-	    *proc = TRUE;
-	    pathmatch = TRUE;
+            *proc = TRUE;
+            pathmatch = TRUE;
             break;
           }
           pathlen = strlen(*ps);
@@ -376,7 +376,7 @@ get_props_sync(svn_ra_session_t *session,
             break;
           }
         }
-	if (!pathmatch)
+        if (!pathmatch)
           *proc = FALSE;
         break;
       }
