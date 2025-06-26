@@ -2820,6 +2820,8 @@ static DECLCALLBACK(int) gicSetSpi(PVMCC pVM, uint32_t uSpiIntId, bool fAsserted
     PVMCPU pVCpu = VMMGetCpuById(pVM, 0);
     STAM_COUNTER_INC(&pVCpu->gic.s.StatSetSpi);
     PGICCPU pGicCpu = VMCPU_TO_GICCPU(pVCpu);
+    AssertCompile(RT_ELEMENTS(pGicCpu->bmIntrConfig) == RT_ELEMENTS(pGicCpu->bmIntrPending));
+    AssertCompile(sizeof(pGicCpu->bmIntrConfig) == sizeof(pGicCpu->bmIntrPending));
 #endif
     STAM_PROFILE_START(&pGicCpu->StatProfSetSpi, a);
 
@@ -2830,8 +2832,6 @@ static DECLCALLBACK(int) gicSetSpi(PVMCC pVM, uint32_t uSpiIntId, bool fAsserted
     AssertMsgReturn(idxIntr < sizeof(pGicDev->bmIntrPending) * 8,
                     ("out-of-range SPI interrupt ID %RU32 (%RU32)\n", uIntId, uSpiIntId),
                     VERR_INVALID_PARAMETER);
-    AssertCompile(RT_ELEMENTS(pGicCpu->bmIntrConfig) == RT_ELEMENTS(pGicCpu->bmIntrPending));
-    AssertCompile(sizeof(pGicCpu->bmIntrConfig) == sizeof(pGicCpu->bmIntrPending));
     Assert(GIC_IS_INTR_SPI(uIntId) || GIC_IS_INTR_EXT_SPI(uIntId));
 
     GIC_CRIT_SECT_ENTER(pDevIns);
