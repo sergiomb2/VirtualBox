@@ -432,8 +432,20 @@ g_dSpecFeatToCpumFeat = {
     'FEAT_WFxT':                    'fWfxt',
     'FEAT_XNX':                     'fXnx',
     'FEAT_XS':                      'fXs',
+
+    ## @todo
+    'FEAT_SRMASK':                  False,
 };
 
+
+#
+# Misc Helpers for decoding ARM specs and JSON.
+#
+def assertJsonAttribsInSet(dJson, oAttribSet):
+    """ Checks that the JSON element has all the attributes in the set and nothing else. """
+    #assert set(dJson) == oAttribSet, '%s - %s' % (set(dJson) ^ oAttribSet, dJson,);
+    assert len(dJson) == len(oAttribSet) and sum(sKey in oAttribSet for sKey in dJson), \
+           '%s - %s' % (set(dJson) ^ oAttribSet, dJson,);
 
 
 #
@@ -477,16 +489,11 @@ class ArmAstBase(object):
     def __init__(self, sType):
         self.sType = sType;
 
-    @staticmethod
-    def assertAttribsInSet(oJson, oAttribSet):
-        """ Checks that the JSON element has all the attributes in the set and nothing else. """
-        assert set(oJson) == oAttribSet, '%s - %s' % (set(oJson) ^ oAttribSet, oJson,);
-
     kAttribSetBinaryOp = frozenset(['_type', 'left', 'op', 'right']);
     @staticmethod
     def fromJsonBinaryOp(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetBinaryOp);
+        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetBinaryOp);
         return ArmAstBinaryOp(ArmAstBase.fromJson(oJson['left'], sMode),
                               oJson['op'],
                               ArmAstBase.fromJson(oJson['right'], sMode),
@@ -496,21 +503,21 @@ class ArmAstBase(object):
     @staticmethod
     def fromJsonUnaryOp(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetUnaryOp);
+        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetUnaryOp);
         return ArmAstUnaryOp(oJson['op'], ArmAstBase.fromJson(oJson['expr'], sMode));
 
     kAttribSetSlice = frozenset(['_type', 'left', 'right']);
     @staticmethod
     def fromJsonSlice(oJson, sMode):
         assert sMode in (ArmAstBase.ksModeAccessor, ArmAstBase.ksModeAccessorCond);
-        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetSlice);
+        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetSlice);
         return ArmAstSlice(ArmAstBase.fromJson(oJson['left'], sMode), ArmAstBase.fromJson(oJson['right'], sMode));
 
     kAttribSetSquareOp = frozenset(['_type', 'var', 'arguments']);
     @staticmethod
     def fromJsonSquareOp(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetSquareOp);
+        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetSquareOp);
         return ArmAstSquareOp(ArmAstBase.fromJson(oJson['var'], sMode),
                               [ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['arguments']]);
 
@@ -518,63 +525,63 @@ class ArmAstBase(object):
     @staticmethod
     def fromJsonTuple(oJson, sMode):
         assert sMode == ArmAstBase.ksModeAccessor;
-        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetTuple);
+        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetTuple);
         return ArmAstTuple([ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['values']]);
 
     kAttribSetDotAtom = frozenset(['_type', 'values']);
     @staticmethod
     def fromJsonDotAtom(oJson, sMode):
         assert sMode in (ArmAstBase.ksModeConstraints, ArmAstBase.ksModeAccessor, ArmAstBase.ksModeAccessorCond);
-        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetDotAtom);
+        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetDotAtom);
         return ArmAstDotAtom([ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['values']]);
 
     kAttribSetConcat = frozenset(['_type', 'values']);
     @staticmethod
     def fromJsonConcat(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetConcat);
+        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetConcat);
         return ArmAstConcat([ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['values']]);
 
     kAttribSetFunction = frozenset(['_type', 'name', 'arguments']);
     @staticmethod
     def fromJsonFunction(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetFunction);
+        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetFunction);
         return ArmAstFunction(oJson['name'], [ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['arguments']]);
 
     kAttribSetIdentifier = frozenset(['_type', 'value']);
     @staticmethod
     def fromJsonIdentifier(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetIdentifier);
+        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetIdentifier);
         return ArmAstIdentifier(oJson['value'], sMode == ArmAstBase.ksModeConstraints);
 
     kAttribSetBool = frozenset(['_type', 'value']);
     @staticmethod
     def fromJsonBool(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetBool);
+        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetBool);
         return ArmAstBool(oJson['value']);
 
     kAttribSetInteger = frozenset(['_type', 'value']);
     @staticmethod
     def fromJsonInteger(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetInteger);
+        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetInteger);
         return ArmAstInteger(oJson['value']);
 
     kAttribSetSet = frozenset(['_type', 'values']);
     @staticmethod
     def fromJsonSet(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetSet);
+        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetSet);
         return ArmAstSet([ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['values']]);
 
     kAttribSetValue = frozenset(['_type', 'value', 'meaning']);
     @staticmethod
     def fromJsonValue(oJson, sMode):
         _ = sMode;
-        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetValue);
+        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetValue);
         return ArmAstValue(oJson['value']);
 
     kAttribSetEquationValue      = frozenset(['_type', 'value', 'meaning', 'slice']);
@@ -582,18 +589,18 @@ class ArmAstBase(object):
     @staticmethod
     def fromJsonEquationValue(dJson, sMode):
         assert sMode == ArmAstBase.ksModeValuesOnly;
-        ArmAstBase.assertAttribsInSet(dJson, ArmAstBase.kAttribSetEquationValue);
+        assertJsonAttribsInSet(dJson, ArmAstBase.kAttribSetEquationValue);
         assert len(dJson['slice']) == 1;
         dSlice = dJson['slice'][0];
         assert dSlice['_type'] == 'Range';
-        ArmAstBase.assertAttribsInSet(dSlice, ArmAstBase.kAttribSetEquationValueRange);
+        assertJsonAttribsInSet(dSlice, ArmAstBase.kAttribSetEquationValueRange);
         return ArmAstEquationValue(dJson['value'], int(dSlice['start']), int(dSlice['width']));
 
     kAttribSetValuesGroup = frozenset(['_type', 'value', 'meaning', 'values']);
     @staticmethod
     def fromJsonValuesGroup(dJson, sMode):
         assert sMode == ArmAstBase.ksModeValuesOnly;
-        ArmAstBase.assertAttribsInSet(dJson, ArmAstBase.kAttribSetValuesGroup);
+        assertJsonAttribsInSet(dJson, ArmAstBase.kAttribSetValuesGroup);
         assert dJson['values']['_type'] == 'Valuesets.Values';
         assert len(dJson['values']['values']) == 0;
         return ArmAstValuesGroup(dJson['value']);
@@ -603,7 +610,7 @@ class ArmAstBase(object):
     def fromJsonString(oJson, sMode):
         assert sMode in (ArmAstBase.ksModeConstraints, # Seen in register as 'input' to ImpDefBool.
                          ArmAstBase.ksModeAccessorCond);
-        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetField);
+        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetField);
         return ArmAstString(oJson['value']);
 
     kAttribSetField = frozenset(['_type', 'value']);
@@ -611,9 +618,9 @@ class ArmAstBase(object):
     @staticmethod
     def fromJsonField(oJson, sMode):
         assert sMode in (ArmAstBase.ksModeConstraints, ArmAstBase.ksModeAccessor, ArmAstBase.ksModeAccessorCond);
-        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetField);
+        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetField);
         dJsonValue = oJson['value'];
-        ArmAstBase.assertAttribsInSet(dJsonValue, ArmAstBase.kAttribSetFieldValue);
+        assertJsonAttribsInSet(dJsonValue, ArmAstBase.kAttribSetFieldValue);
         return ArmAstField(dJsonValue['field'], dJsonValue['name'], dJsonValue['state'],
                            dJsonValue['slices'], dJsonValue['instance']);
 
@@ -622,37 +629,37 @@ class ArmAstBase(object):
     @staticmethod
     def fromJsonRegisterType(oJson, sMode):
         assert sMode in (ArmAstBase.ksModeConstraints, ArmAstBase.ksModeAccessorCond);
-        ArmAstBase.assertAttribsInSet(oJson, ArmAstBase.kAttribSetRegisterType);
+        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetRegisterType);
         dJsonValue = oJson['value'];
-        ArmAstBase.assertAttribsInSet(dJsonValue, ArmAstBase.kAttribSetRegisterTypeValue);
+        assertJsonAttribsInSet(dJsonValue, ArmAstBase.kAttribSetRegisterTypeValue);
         return ArmAstRegisterType(dJsonValue['name'], dJsonValue['state'], dJsonValue['slices'], dJsonValue['instance']);
 
     kAttribSetType = frozenset(['_type', 'name']);
     @staticmethod
     def fromJsonType(dJson, sMode):
         assert sMode == ArmAstBase.ksModeAccessor;
-        ArmAstBase.assertAttribsInSet(dJson, ArmAstBase.kAttribSetType);
+        assertJsonAttribsInSet(dJson, ArmAstBase.kAttribSetType);
         return ArmAstType(ArmAstBase.fromJson(dJson['name'], sMode));
 
     kAttribSetTypeAnnotation = frozenset(['_type', 'type', 'var']);
     @staticmethod
     def fromJsonTypeAnnotation(dJson, sMode):
         assert sMode == ArmAstBase.ksModeAccessor;
-        ArmAstBase.assertAttribsInSet(dJson, ArmAstBase.kAttribSetTypeAnnotation);
+        assertJsonAttribsInSet(dJson, ArmAstBase.kAttribSetTypeAnnotation);
         return ArmAstTypeAnnotation(ArmAstBase.fromJson(dJson['var'], sMode), ArmAstBase.fromJson(dJson['type'], sMode));
 
     kAttribSetAssignment = frozenset(['_type', 'val', 'var']);
     @staticmethod
     def fromJsonAssignment(dJson, sMode):
         assert sMode == ArmAstBase.ksModeAccessor;
-        ArmAstBase.assertAttribsInSet(dJson, ArmAstBase.kAttribSetAssignment);
+        assertJsonAttribsInSet(dJson, ArmAstBase.kAttribSetAssignment);
         return ArmAstAssignment(ArmAstBase.fromJson(dJson['var'], sMode), ArmAstBase.fromJson(dJson['val'], sMode));
 
     kAttribSetReturn = frozenset(['_type', 'val']);
     @staticmethod
     def fromJsonReturn(dJson, sMode):
         assert sMode == ArmAstBase.ksModeAccessor;
-        ArmAstBase.assertAttribsInSet(dJson, ArmAstBase.kAttribSetReturn);
+        assertJsonAttribsInSet(dJson, ArmAstBase.kAttribSetReturn);
         return ArmAstReturn(ArmAstBase.fromJson(dJson['val'], sMode) if dJson['val'] else None);
 
     kfnTypeMap = {
@@ -681,17 +688,10 @@ class ArmAstBase(object):
     };
 
     @staticmethod
-    def fromJson(oJson, sMode = ksModeConditions):
+    def fromJson(dJson, sMode = ksModeConditions):
         """ Decodes an AST/Values expression. """
-        #print('debug ast: %s' % oJson['_type'])
-        return ArmAstBase.kfnTypeMap[oJson['_type']](oJson, sMode);
-
-    def isBoolAndTrue(self):
-        """ Check if this is a boolean with the value True. """
-        #return isinstance(self, ArmAstBool) and self.fValue is True;
-        if isinstance(self, ArmAstBool):
-            return self.fValue is True;
-        return False;
+        #print('debug ast: %s' % dJson['_type'])
+        return ArmAstBase.kfnTypeMap[dJson['_type']](dJson, sMode);
 
     def toString(self):
         return 'todo<%s>' % (self.sType,);
@@ -701,6 +701,68 @@ class ArmAstBase(object):
 
     def __repr__(self):
         return self.toString();
+
+    #
+    # Convenience matching routines, matching node type and type specific value.
+    #
+
+    def isBoolAndTrue(self):
+        """ Checks if this is a boolean with the value True. """
+        # This is overridden by ArmAstBool.
+        return False;
+
+    def isBoolAndFalse(self):
+        """ Checks if this is a boolean with the value False. """
+        # This is overridden by ArmAstBool.
+        return False;
+
+    def isMatchingIdentifier(self, sName):
+        """ Checks if this is an identifier with the given name. """
+        # This is overridden by ArmAstIdentifier.
+        _ = sName;
+        return False;
+
+    def getIdentifierName(self):
+        """ If this is an identifier, its name is return, otherwise None. """
+        # This is overridden by ArmAstIdentifier.
+        return None;
+
+    def isMatchingDotAtom(self, *asElements):
+        """ Checks if this is a dot atom node with the given list of string identifiers. """
+        # This is overridden by ArmAstDotAtom.
+        _ = asElements;
+        return False;
+
+    def isMatchingInteger(self, iValue):
+        """ Checks if this is an integer node with the given value. """
+        # This is overridden by ArmAstInteger.
+        _ = iValue;
+        return False;
+
+    def isMatchingSquareOp(self, sVar, *aoValueMatches):
+        """
+        Checks if this is a square op node with the given variable and values.
+        Values are mapped as following:
+            - int value to ArmAstInteger.
+            - str value to ArmAstIdentifier.
+            - None matches anything..
+        """
+        # This is overridden by ArmAstSquareOp.
+        _ = sVar; _ = aoValueMatches;
+        return False;
+
+    def isMatchingFunctionCall(self, sFunctionName, *aoArgMatches):
+        """
+        Checks if this is a function (call) node with the given name and arguments.
+        Values are mapped as following:
+            - int value to ArmAstInteger.
+            - str value to the toString result.
+            - None matches anything..
+        """
+        # This is overridden by ArmAstFunction.
+        _ = sFunctionName; _ = aoArgMatches;
+        return False;
+
 
 
 class ArmAstBinaryOp(ArmAstBase):
@@ -775,6 +837,29 @@ class ArmAstBinaryOp(ArmAstBase):
                         return True;
             ## @todo switch sides and whatnot.
         return False;
+
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        # Recurse first.
+        fChildElimination = ArmAstBinaryOp.kdOps[self.sOp] in (ArmAstBinaryOp.kOpTypeLogical,);
+        self.oLeft  = self.oLeft.transform(fnCallback, fChildElimination, oCallbackArg);
+        self.oRight = self.oRight.transform(fnCallback, fChildElimination, oCallbackArg);
+
+        if not fChildElimination:
+            assert self.oLeft and self.oRight;
+            return fnCallback(self, fEliminationAllowed, oCallbackArg);
+
+        if self.oLeft and self.oRight:
+            return fnCallback(self, fEliminationAllowed, oCallbackArg);
+
+        if self.sOp == '||':
+            ## @todo ensure boolean return?
+            if self.oLeft:
+                return self.oLeft;
+            if self.oRight:
+                return self.oRight;
+        else:
+            assert self.sOp == '&&';
+        return fnCallback(ArmAstBool(False), fEliminationAllowed, oCallbackArg) if not fEliminationAllowed else None;
 
     @staticmethod
     def needParentheses(oNode, sOp = '&&'):
@@ -907,6 +992,17 @@ class ArmAstUnaryOp(ArmAstBase):
                     return True;
         return False;
 
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        fChildElimination = ArmAstUnaryOp.kdOps[self.sOp] in (ArmAstUnaryOp.kOpTypeLogical,);
+        self.oExpr = self.oExpr.transform(fnCallback, fChildElimination, oCallbackArg);
+        if self.oExpr:
+            return fnCallback(self, fEliminationAllowed, oCallbackArg);
+        assert fChildElimination;
+        if fEliminationAllowed:
+            return None;
+        assert self.sOp == '!';
+        return fnCallback(ArmAstBool(True), fEliminationAllowed, oCallbackArg);
+
     @staticmethod
     def needParentheses(oNode):
         return isinstance(oNode, ArmAstBinaryOp)
@@ -943,6 +1039,12 @@ class ArmAstSlice(ArmAstBase):
                     return True;
         return False;
 
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        self.oFrom = self.oFrom.transform(fnCallback, False, oCallbackArg);
+        self.oTo   = self.oTo.transform(fnCallback, False, oCallbackArg);
+        assert self.oFrom and self.oTo;
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
+
     def toString(self):
         return '[%s:%s]' % (self.oFrom.toString(), self.oTo.toString());
 
@@ -975,6 +1077,17 @@ class ArmAstSquareOp(ArmAstBase):
                     return True;
         return False;
 
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        self.oVar = self.oVar.transform(fnCallback, fEliminationAllowed, oCallbackArg);
+        if self.oVar:
+            self.aoValues = [oValue.transform(fnCallback, False, oCallbackArg) for oValue in self.aoValues];
+            for oValue in self.aoValues:
+                assert oValue;
+            return fnCallback(self, fEliminationAllowed, oCallbackArg);
+        assert fEliminationAllowed;
+        return None;
+
+
     def toString(self):
         return '%s[%s]' % (self.oVar.toString(), ','.join([oValue.toString() for oValue in self.aoValues]),);
 
@@ -985,6 +1098,21 @@ class ArmAstSquareOp(ArmAstBase):
     def getWidth(self, oHelper):
         _ = oHelper;
         return -1;
+
+    def isMatchingSquareOp(self, sVar, *aoValueMatches):
+        if self.oVar.isMatchingIdentifier(sVar):
+            if len(self.aoValues) == len(aoValueMatches):
+                for i, oValue in enumerate(self.aoValues):
+                    if isinstance(aoValueMatches[i], int):
+                        if not oValue.isMatchingInteger(aoValueMatches[i]):
+                            return False;
+                    elif isinstance(aoValueMatches[i], str):
+                        if not oValue.isMatchingIdentifier(aoValueMatches[i]):
+                            return False;
+                    elif aoValueMatches[i] is not None:
+                        raise Exception('Unexpected #%u: %s' % (i, aoValueMatches[i],));
+                return True;
+        return False;
 
 
 class ArmAstTuple(ArmAstBase):
@@ -1003,6 +1131,12 @@ class ArmAstTuple(ArmAstBase):
                         return False;
                 return True;
         return False;
+
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        self.aoValues = [oValue.transform(fnCallback, False, oCallbackArg) for oValue in self.aoValues];
+        for oValue in self.aoValues:
+            assert oValue;
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
     def toString(self):
         return '(%s)' % (','.join([oValue.toString() for oValue in self.aoValues]),);
@@ -1033,6 +1167,12 @@ class ArmAstDotAtom(ArmAstBase):
                 return True;
         return False;
 
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        self.aoValues = [oValue.transform(fnCallback, False, oCallbackArg) for oValue in self.aoValues];
+        for oValue in self.aoValues:
+            assert oValue;
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
+
     def toString(self):
         return '.'.join([oValue.toString() for oValue in self.aoValues]);
 
@@ -1049,6 +1189,13 @@ class ArmAstDotAtom(ArmAstBase):
         _ = oHelper;
         return -1;
 
+    def isMatchingDotAtom(self, *asElements):
+        if len(asElements) == len(self.aoValues):
+            for idx, sName in enumerate(asElements):
+                if not self.aoValues[idx].isMatchingIdentifier(sName):
+                    return False;
+            return True;
+        return False;
 
 class ArmAstConcat(ArmAstBase):
     def __init__(self, aoValues):
@@ -1066,6 +1213,12 @@ class ArmAstConcat(ArmAstBase):
                         return False;
                 return True;
         return False;
+
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        self.aoValues = [oValue.transform(fnCallback, False, oCallbackArg) for oValue in self.aoValues];
+        for oValue in self.aoValues:
+            assert oValue;
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
     def toString(self):
         sRet = '';
@@ -1129,6 +1282,12 @@ class ArmAstFunction(ArmAstBase):
                     return True;
         return False;
 
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        self.aoArgs = [oArgs.transform(fnCallback, False, oCallbackArg) for oArgs in self.aoArgs];
+        for oArgs in self.aoArgs:
+            assert oArgs;
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
+
     def toString(self):
         return '%s(%s)' % (self.sName, ','.join([oArg.toString() for oArg in self.aoArgs]),);
 
@@ -1138,6 +1297,21 @@ class ArmAstFunction(ArmAstBase):
     def getWidth(self, oHelper):
         _ = oHelper;
         return -1;
+
+    def isMatchingFunctionCall(self, sFunctionName, *aoArgMatches):
+        if self.sName == sFunctionName:
+            if len(self.aoArgs) == len(aoArgMatches):
+                for i, oArg in enumerate(self.aoArgs):
+                    if isinstance(aoArgMatches[i], int):
+                        if not oArg.isMatchingInteger(aoArgMatches[i]):
+                            return False;
+                    elif isinstance(aoArgMatches[i], str):
+                        if not oArg.toString() != aoArgMatches[i]:
+                            return False;
+                    elif aoArgMatches[i] is not None:
+                        raise Exception('Unexpected #%u: %s' % (i, aoArgMatches[i],));
+                return True;
+        return False;
 
 
 class ArmAstIdentifier(ArmAstBase):
@@ -1159,6 +1333,9 @@ class ArmAstIdentifier(ArmAstBase):
                 return True;
         return False;
 
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
+
     def toString(self):
         return self.sName;
 
@@ -1169,6 +1346,12 @@ class ArmAstIdentifier(ArmAstBase):
     def getWidth(self, oHelper):
         (_, cBitsWidth) = oHelper.getFieldInfo(self.sName);
         return cBitsWidth;
+
+    def isMatchingIdentifier(self, sName):
+        return self.sName == sName;
+
+    def getIdentifierName(self):
+        return self.sName;
 
 
 class ArmAstBool(ArmAstBase):
@@ -1186,6 +1369,9 @@ class ArmAstBool(ArmAstBase):
                 return True;
         return False;
 
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
+
     def toString(self):
         return 'true' if self.fValue is True else 'false';
 
@@ -1196,6 +1382,12 @@ class ArmAstBool(ArmAstBase):
     def getWidth(self, oHelper):
         _ = oHelper;
         return 1;
+
+    def isBoolAndTrue(self):
+        return self.fValue is True;
+
+    def isBoolAndFalse(self):
+        return self.fValue is False;
 
 
 class ArmAstInteger(ArmAstBase):
@@ -1212,6 +1404,9 @@ class ArmAstInteger(ArmAstBase):
                 return True;
         return False;
 
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
+
     def toString(self):
         return '%#x' % (self.iValue,);
 
@@ -1226,6 +1421,9 @@ class ArmAstInteger(ArmAstBase):
     def getWidth(self, oHelper):
         _ = oHelper;
         return self.iValue.bit_length() + (self.iValue < 0)
+
+    def isMatchingInteger(self, iValue):
+        return self.iValue == iValue;
 
 
 class ArmAstSet(ArmAstBase):
@@ -1244,6 +1442,12 @@ class ArmAstSet(ArmAstBase):
                         return False;
                 return True;
         return False;
+
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        self.aoValues = [oValue.transform(fnCallback, False, oCallbackArg) for oValue in self.aoValues];
+        for oValue in self.aoValues:
+            assert oValue;
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
     def toString(self):
         return '(%s)' % (', '.join([oValue.toString() for oValue in self.aoValues]),);
@@ -1272,6 +1476,9 @@ class ArmAstValue(ArmAstBase):
             if self.sValue == oOther.sValue:
                 return True;
         return False;
+
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
     def toString(self):
         return self.sValue;
@@ -1313,6 +1520,9 @@ class ArmAstEquationValue(ArmAstBase):
                     if self.cBitsWidth == oOther.cBitsWidth:
                         return True;
         return False;
+
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
     def toString(self):
         if self.s_oSimpleName.match(self.sValue):
@@ -1378,6 +1588,12 @@ class ArmAstValuesGroup(ArmAstBase):
                 return True;
         return False;
 
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        self.aoValues = [oValue.transform(fnCallback, False, oCallbackArg) for oValue in self.aoValues];
+        for oValue in self.aoValues:
+            assert oValue;
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
+
     def toString(self):
         return ':'.join([oValue.toString() for oValue in self.aoValues]);
 
@@ -1402,6 +1618,9 @@ class ArmAstString(ArmAstBase):
             if self.sValue == oOther.sValue:
                 return True;
         return False;
+
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
     def toString(self):
         return '"' + self.sValue + '"';
@@ -1438,6 +1657,9 @@ class ArmAstField(ArmAstBase):
                             if self.sInstance == oOther.sInstance:
                                 return True;
         return False;
+
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
     def toString(self):
         return '%s.%s.%s' % (self.sState, self.sName, self.sField,);
@@ -1476,6 +1698,9 @@ class ArmAstRegisterType(ArmAstBase):
     def toString(self):
         return '%s.%s' % (self.sState, self.sName,);
 
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
+
     def toCExpr(self, oHelper):
         #(sCName, _) = oHelper.getFieldInfo(None, self.sName, self.sState);
         #return sCName;
@@ -1501,6 +1726,11 @@ class ArmAstType(ArmAstBase):
             if self.oName.isSame(oOther.oName):
                 return True;
         return False;
+
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        self.oName = self.oName.transform(fnCallback, False, oCallbackArg);
+        assert self.oName;
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
     def toString(self):
         return self.oName.toString();
@@ -1530,6 +1760,13 @@ class ArmAstTypeAnnotation(ArmAstBase):
                     return True;
         return False;
 
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        self.oVar = self.oVar.transform(fnCallback, False, oCallbackArg);
+        assert self.oVar;
+        self.oType = self.oType.transform(fnCallback, False, oCallbackArg);
+        assert self.oType;
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
+
     def toString(self):
         return '(%s) %s' % (self.oType.toString(), self.oVar.toString(),);
 
@@ -1547,7 +1784,7 @@ class ArmAstStatementBase(ArmAstBase):
     """
     Base class for statements.
 
-    This adds the toStringList method.
+    This adds the toStringList method and blocks the toCExpr and getWidth methods.
     """
     def __init__(self, sType):
         ArmAstBase.__init__(self, sType);
@@ -1555,9 +1792,46 @@ class ArmAstStatementBase(ArmAstBase):
     def toString(self):
         return '\n'.join(self.toStringList());
 
-    def toStringList(self, sIndent = ''):
-        _ = sIndent;
-        raise Exception('Not implemented');
+    def toStringList(self, sIndent = '', sLang = None):
+        _ = sIndent; _ = sLang;
+        raise Exception('not implemented');
+
+    def toCExpr(self, oHelper):
+        _ = oHelper;
+        raise Exception('not implemented');
+
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        raise Exception('not implemented');
+
+    def isNop(self):
+        """ Checks if this is a NOP statement. """
+        return isinstance(self, ArmAstNop);
+
+
+class ArmAstNop(ArmAstStatementBase):
+    """
+    NOP statement.
+    Not part of ARM spec. We need it for transformations.
+    """
+    def __init__(self):
+        ArmAstStatementBase.__init__(self, 'AST.Nop');
+
+    def clone(self):
+        return ArmAstNop();
+
+    def isSame(self, oOther):
+        return isinstance(oOther, ArmAstNop);
+
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
+
+    def toString(self):
+        return 'NOP();';
+
+    def toStringList(self, sIndent = '', sLang = None):
+        return [ 'NOP();', ];
+
 
 
 class ArmAstAssignment(ArmAstStatementBase):
@@ -1578,19 +1852,21 @@ class ArmAstAssignment(ArmAstStatementBase):
                     return True;
         return False;
 
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        self.oVar = self.oVar.transform(fnCallback, fEliminationAllowed, oCallbackArg);
+        if self.oVar:
+            self.oValue = self.oValue.transform(fnCallback, False, oCallbackArg);
+            assert self.oValue;
+            return fnCallback(self, fEliminationAllowed, oCallbackArg);
+        assert fEliminationAllowed;
+        return None;
+
     def toString(self):
         return '%s = %s;' % (self.oVar.toString(), self.oValue.toString());
 
-    def toStringList(self, sIndent = ''):
+    def toStringList(self, sIndent = '', sLang = None):
+        _ = sLang;
         return [ sIndent + self.toString(), ];
-
-    def toCExpr(self, oHelper):
-        _ = oHelper;
-        raise Exception('not implemented');
-
-    def getWidth(self, oHelper):
-        _ = oHelper;
-        raise Exception('not implemented');
 
 
 class ArmAstReturn(ArmAstStatementBase):
@@ -1598,10 +1874,10 @@ class ArmAstReturn(ArmAstStatementBase):
 
     def __init__(self, oValue):
         ArmAstStatementBase.__init__(self, ArmAstBase.ksTypeReturn);
-        self.oValue    = oValue;
+        self.oValue = oValue;
 
     def clone(self):
-        return ArmAstReturn(self.oValue.clone());
+        return ArmAstReturn(self.oValue.clone() if self.oValue else None);
 
     def isSame(self, oOther):
         if isinstance(oOther, ArmAstReturn):
@@ -1609,22 +1885,85 @@ class ArmAstReturn(ArmAstStatementBase):
                 return True;
         return False;
 
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        if self.oValue:
+            self.oValue = self.oValue.transform(fnCallback, False, oCallbackArg);
+            assert self.oValue;
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
+
     def toString(self):
         if self.oValue:
             return 'return %s;' % (self.oValue.toString(),);
         return 'return;';
 
-    def toStringList(self, sIndent = ''):
+    def toStringList(self, sIndent = '', sLang = None):
+        _ = sLang;
         return [ sIndent + self.toString(), ];
+
+
+#
+# Some quick C++ AST nodes.
+#
+
+class ArmAstCppExpr(ArmAstBase):
+    """ C++ AST node. """
+    def __init__(self, sExpr, cBitsWidth = -1):
+        ArmAstBase.__init__(self, 'C++');
+        self.sExpr      = sExpr;
+        self.cBitsWidth = cBitsWidth;
+
+    def clone(self):
+        return ArmAstCppExpr(self.sExpr, self.cBitsWidth);
+
+    def isSame(self, oOther):
+        if isinstance(oOther, ArmAstCppExpr):
+            if self.sExpr == oOther.sExpr:
+                if self.cBitsWidth == oOther.cBitsWidth:
+                    return True;
+        return False;
+
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
+
+    def toString(self):
+        return self.sExpr;
 
     def toCExpr(self, oHelper):
         _ = oHelper;
-        raise Exception('not implemented');
+        return self.sExpr;
 
     def getWidth(self, oHelper):
         _ = oHelper;
-        raise Exception('not implemented');
+        return self.cBitsWidth;
 
+
+class ArmAstCppStmt(ArmAstStatementBase):
+    """ C++ AST statement node. """
+    def __init__(self, *asStmts):
+        ArmAstStatementBase.__init__(self, 'C++');
+        self.asStmts = list(asStmts);
+
+    def clone(self):
+        return ArmAstCppStmt(*self.asStmts);
+
+    def isSame(self, oOther):
+        if isinstance(oOther, ArmAstCppStmt):
+            if len(self.asStmts) == len(oOther.asStmts):
+                for i, sMyStmt in enumerate(self.asStmts):
+                    if sMyStmt != oOther.asStmts[i]:
+                        return False;
+                return True;
+        return False;
+
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
+
+    def toString(self):
+        return '\n'.join(self.asStmts);
+
+    def toStringList(self, sIndent = '', sLang = None):
+        _ = sLang;
+        return [ sIndent + sStmt for sStmt in self.asStmts ];
 
 
 #
@@ -2227,11 +2566,6 @@ class ArmFieldsBase(object):
 
 
     @staticmethod
-    def assertAttribsInSet(dJson, oAttribSet):
-        """ Checks that the JSON element has all the attributes in the set and nothing else. """
-        assert set(dJson) == oAttribSet, '%s - %s' % (set(dJson) ^ oAttribSet, dJson,);
-
-    @staticmethod
     def rangesFromJson(adJson):
         """ Converts the rangeset array to a list of ranges. """
         aoRet = [];
@@ -2244,7 +2578,7 @@ class ArmFieldsBase(object):
     kAttribSetReserved = frozenset(['_type', 'description', 'rangeset', 'value']);
     @staticmethod
     def fromJsonReserved(dJson, oParent):
-        ArmFieldsBase.assertAttribsInSet(dJson, ArmFieldsBase.kAttribSetReserved);
+        assertJsonAttribsInSet(dJson, ArmFieldsBase.kAttribSetReserved);
         return ArmFieldsReserved(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']));
 
 
@@ -2252,7 +2586,7 @@ class ArmFieldsBase(object):
                                                  'rangeset', 'resets', 'volatile']);
     @staticmethod
     def fromJsonImplementationDefined(dJson, oParent):
-        ArmFieldsBase.assertAttribsInSet(dJson, ArmFieldsBase.kAttribSetImplementationDefined);
+        assertJsonAttribsInSet(dJson, ArmFieldsBase.kAttribSetImplementationDefined);
         return ArmFieldsImplementationDefined(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name']);
 
 
@@ -2260,7 +2594,7 @@ class ArmFieldsBase(object):
                                  'rangeset', 'resets', 'values', 'volatile']);
     @staticmethod
     def fromJsonField(dJson, oParent):
-        ArmFieldsBase.assertAttribsInSet(dJson, ArmFieldsBase.kAttribSetField);
+        assertJsonAttribsInSet(dJson, ArmFieldsBase.kAttribSetField);
         return ArmFieldsField(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name']);
 
 
@@ -2269,11 +2603,11 @@ class ArmFieldsBase(object):
     kAttribSetConditionalFieldEntry = frozenset(['condition', 'field']);
     @staticmethod
     def fromJsonConditionalField(dJson, oParent):
-        ArmFieldsBase.assertAttribsInSet(dJson, ArmFieldsBase.kAttribSetConditionalField);
+        assertJsonAttribsInSet(dJson, ArmFieldsBase.kAttribSetConditionalField);
         atCondFields = [];
         oNew = ArmFieldsConditionalField(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name'], atCondFields);
         for dJsonField in dJson['fields']:
-            ArmFieldsBase.assertAttribsInSet(dJsonField, ArmFieldsBase.kAttribSetConditionalFieldEntry);
+            assertJsonAttribsInSet(dJsonField, ArmFieldsBase.kAttribSetConditionalFieldEntry);
             atCondFields.append((ArmAstBase.fromJson(dJsonField['condition'], ArmAstBase.ksModeConstraints),
                                  ArmFieldsBase.fromJson(dJsonField['field'], oNew)));
         return oNew;
@@ -2282,7 +2616,7 @@ class ArmFieldsBase(object):
     kAttribSetConstantField = frozenset(['_type', 'access', 'description', 'name', 'rangeset', 'value']);
     @staticmethod
     def fromJsonConstantField(dJson, oParent):
-        ArmFieldsBase.assertAttribsInSet(dJson, ArmFieldsBase.kAttribSetConstantField);
+        assertJsonAttribsInSet(dJson, ArmFieldsBase.kAttribSetConstantField);
         return ArmFieldsConstantField(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name']);
 
 
@@ -2290,7 +2624,7 @@ class ArmFieldsBase(object):
                                  'rangeset', 'resets' , 'values', 'volatile']);
     @staticmethod
     def fromJsonArray(dJson, oParent):
-        ArmFieldsBase.assertAttribsInSet(dJson, ArmFieldsBase.kAttribSetArray);
+        assertJsonAttribsInSet(dJson, ArmFieldsBase.kAttribSetArray);
         aoIndexes = ArmFieldsArray.Index.fromJsonArray(dJson['indexes']);
         aoRanges  = ArmFieldsBase.rangesFromJson(dJson['rangeset']);
         assert len(aoIndexes) <= len(aoRanges), \
@@ -2307,7 +2641,7 @@ class ArmFieldsBase(object):
     kAttribSetVector = frozenset(['reserved_type', 'size',]) | kAttribSetArray;
     @staticmethod
     def fromJsonVector(dJson, oParent):
-        ArmFieldsBase.assertAttribsInSet(dJson, ArmFieldsBase.kAttribSetVector);
+        assertJsonAttribsInSet(dJson, ArmFieldsBase.kAttribSetVector);
         aoIndexes = ArmFieldsArray.Index.fromJsonArray(dJson['indexes']);
         aoRanges  = ArmFieldsBase.rangesFromJson(dJson['rangeset']);
         assert len(aoIndexes) <= len(aoRanges), \
@@ -2330,7 +2664,7 @@ class ArmFieldsBase(object):
     kAttribSetDynamic = frozenset(['_type', 'description', 'display', 'instances', 'name', 'rangeset', 'resets', 'volatile']);
     @staticmethod
     def fromJsonDynamic(dJson, oParent):
-        ArmFieldsBase.assertAttribsInSet(dJson, ArmFieldsBase.kAttribSetDynamic);
+        assertJsonAttribsInSet(dJson, ArmFieldsBase.kAttribSetDynamic);
         return ArmFieldsDynamic(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name'],
                                 [ArmFieldset.fromJson(dJsonFieldSet) for dJsonFieldSet in dJson['instances']]);
 
@@ -2454,20 +2788,55 @@ class ArmFieldset(object):
 class ArmRegEncoding(object):
     """ Register encoding. """
 
+    kdSortOrder = {
+        'op0': 1,
+        'op1': 2,
+        'CRn': 3,
+        'CRm': 4,
+        'op2': 5,
+    };
+
     def __init__(self, sAsmValue, dNamedValues):
         self.sAsmValue    = sAsmValue;
-        self.dNamedValues = dNamedValues;
+        self.dNamedValues = collections.OrderedDict();
+        self.fHasWildcard = False;
+        self.fHasIndex    = False;
+        for sKey in sorted(dNamedValues, key = lambda s: ArmRegEncoding.kdSortOrder.get(s, 9)):
+            oValue = dNamedValues[sKey];
+            self.dNamedValues[sKey] = oValue;
+            self.fHasWildcard |= 'x' in oValue.sValue;
+            self.fHasIndex    |= '[' in oValue.sValue;
 
     def toString(self):
         return '%s={%s}' \
              % (self.sAsmValue, ', '.join(['%s=%s' % (sKey, oValue.toString()) for sKey, oValue in self.dNamedValues.items()]),);
+
+    def __str__(self):
+        return self.toString();
+
+    def __repr__(self):
+        return self.toString();
+
+    def getSysRegIdCreate(self):
+        """ Returns the corresponding ARMV8_AARCH64_SYSREG_ID_CREATE invocation. """
+        assert len(self.dNamedValues) == len(ArmRegEncoding.kdSortOrder), '%s: %s' % (self.sAsmValue, self.dNamedValues,);
+        asArgs = [];
+        for sKey in ArmRegEncoding.kdSortOrder:
+            (fValue, _, fWildcard, _) = ArmEncodesetField.parseValue(self.dNamedValues[sKey].sValue, 0);
+            if fWildcard == 0:
+                asArgs.append('%s' % (fValue,));
+            else:
+                oXcpt = Exception('wildcard encoding for %s: %s:%s' % (self.sAsmValue, sKey, self.dNamedValues[sKey],));
+                print('wtf: %s' % (oXcpt,))
+                raise oXcpt;
+        return 'ARMV8_AARCH64_SYSREG_ID_CREATE(' + ','.join(asArgs) + ')';
 
     kAttribSet = frozenset(['_type', 'asmvalue', 'encodings']);
     @staticmethod
     def fromJson(dJson):
         """ Decodes a register encoding object. """
         assert dJson['_type'] == 'Encoding';
-        assert set(dJson) == ArmRegEncoding.kAttribSet, '%s - %s' % (set(dJson) ^ ArmRegEncoding.kAttribSet, dJson,);
+        assertJsonAttribsInSet(dJson, ArmRegEncoding.kAttribSet);
         dNamedValues = collections.OrderedDict();
         for sName, dValue in dJson['encodings'].items():
             dNamedValues[sName] = ArmAstBase.fromJson(dValue, ArmAstBase.ksModeValuesOnly);
@@ -2484,17 +2853,12 @@ class ArmAccessorPermissionBase(object):
         self.oCondition = oCondition;
 
 
-    @staticmethod
-    def assertAttribsInSet(dJson, oAttribSet):
-        """ Checks that the JSON element has all the attributes in the set and nothing else. """
-        assert set(dJson) == oAttribSet, '%s - %s' % (set(dJson) ^ oAttribSet, dJson,);
-
     kAttribSetMemory = frozenset(['_type', 'access', 'condition',]);
     @staticmethod
     def fromJsonMemory(dJson, fNested):
         _ = fNested;
         assert dJson['_type'] == 'Accessors.Permission.MemoryAccess';
-        ArmAccessorPermissionBase.assertAttribsInSet(dJson, ArmAccessorPermissionBase.kAttribSetMemory);
+        assertJsonAttribsInSet(dJson, ArmAccessorPermissionBase.kAttribSetMemory);
         oCondition = ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints)
         # The 'access' attribute comes in three variations: Accessors.Permission.MemoryAccess list,
         # Accessors.Permission.AccessTypes.Memory.ReadWriteAccess and
@@ -2534,8 +2898,7 @@ class ArmAccessorPermissionMemReadWriteAccess(object):
     @staticmethod
     def fromJson(dJson):
         assert dJson['_type'] == 'Accessors.Permission.AccessTypes.Memory.ReadWriteAccess';
-        assert set(dJson) == ArmAccessorPermissionMemReadWriteAccess.kAttribSet, \
-               '%s - %s' % (set(dJson) ^ ArmAccessorPermissionMemReadWriteAccess.kAttribSet, dJson,);
+        assertJsonAttribsInSet(dJson, ArmAccessorPermissionMemReadWriteAccess.kAttribSet);
         return ArmAccessorPermissionMemReadWriteAccess(dJson['read'], dJson['write']);
 
 
@@ -2578,7 +2941,7 @@ class ArmAstIfList(ArmAstStatementBase):
             action3;
     """
 
-    def __init__(self, aoIfConditions, aoIfStatements, oElseStatement, uDepth = 0):
+    def __init__(self, aoIfConditions, aoIfStatements, oElseStatement):
         ArmAstStatementBase.__init__(self, 'Accessors.Permission.MemoryAccess');
         # The if/elif condition expressions.
         self.aoIfConditions  = aoIfConditions   # type: List[ArmAstBase]
@@ -2586,7 +2949,6 @@ class ArmAstIfList(ArmAstStatementBase):
         self.aoIfStatements  = aoIfStatements   # type: List[ArmAstBase]
         # The else statement - optional.  ArmAstIfList allowed.
         self.oElseStatement  = oElseStatement   # type: ArmAstBase
-        self.uDepth          = uDepth;
 
         # Assert sanity.
         assert len(aoIfConditions) == len(aoIfStatements);
@@ -2598,8 +2960,7 @@ class ArmAstIfList(ArmAstStatementBase):
     def clone(self):
         return ArmAstIfList([oIfCond.clone() for oIfCond in self.aoIfConditions],
                             [oIfStmt.clone() for oIfStmt in self.aoIfStatements],
-                            self.oElseStatement.clone() if self.oElseStatement else None,
-                            self.uDepth);
+                            self.oElseStatement.clone() if self.oElseStatement else None);
 
     def isSame(self, oOther):
         if isinstance(oOther, ArmAstIfList):
@@ -2612,18 +2973,46 @@ class ArmAstIfList(ArmAstStatementBase):
                 if (self.oElseStatement is None) == (oOther.oElseStatement is None):
                     if self.oElseStatement and not self.oElseStatement.isSame(oOther.oElseStatement):
                         return False;
-                if self.uDepth == oOther.uDepth:
                     return True;
         return False;
 
-    def toStringList(self, sIndent = ''):
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        aoNewIfConditions = [];
+        aoNewIfStatements = [];
+        for idxIf, oIfCond in enumerate(self.aoIfConditions):
+            oIfCond = oIfCond.transform(fnCallback, True, oCallbackArg);
+            if oIfCond and not oIfCond.isBoolAndFalse():
+                oIfStmt = self.aoIfStatements[idxIf].transform(fnCallback, True, oCallbackArg);
+                assert oIfStmt;
+                aoNewIfConditions.append(oIfCond);
+                aoNewIfStatements.append(oIfStmt);
+        oNewElseStatement = self.oElseStatement.transform(fnCallback, True, oCallbackArg) if self.oElseStatement else None;
+
+        if aoNewIfConditions:
+            self.aoIfConditions = aoNewIfConditions;
+            self.aoIfStatements = aoNewIfStatements;
+            self.oElseStatement = oNewElseStatement;
+            return fnCallback(self, fEliminationAllowed, oCallbackArg);
+        if oNewElseStatement:
+            return oNewElseStatement;
+        if fEliminationAllowed:
+            return None;
+        return fnCallback(ArmAstNop(), fEliminationAllowed, oCallbackArg);
+
+    def toStringList(self, sIndent = '', sLang = None):
         asLines = [];
         sNextIndent = sIndent + '    ';
         for i, oIfCond in enumerate(self.aoIfConditions):
             asLines.append('%s%sif (%s)' % (sIndent, 'else ' if i > 0 else '', oIfCond.toString(),));
             oIfStmt = self.aoIfStatements[i];
             if isinstance(oIfStmt, ArmAstStatementBase):
-                asLines.extend(oIfStmt.toStringList(sNextIndent));
+                asStmts = oIfStmt.toStringList(sNextIndent, sLang);
+                if sLang == 'C' and len(asStmts) != 1:
+                    asLines.append(sIndent + '{');
+                    asLines.extend(asStmts);
+                    asLines.append(sIndent + '}');
+                else:
+                    asLines.extend(asStmts);
             else:
                 asLines.append(sNextIndent + oIfStmt.toString());
 
@@ -2633,17 +3022,17 @@ class ArmAstIfList(ArmAstStatementBase):
             else:
                 sNextIndent = sIndent; # Trick.
             if isinstance(self.oElseStatement, ArmAstStatementBase):
-                asLines.extend(self.oElseStatement.toStringList(sNextIndent));
+                asStmts = self.oElseStatement.toStringList(sNextIndent, sLang);
+                if sLang == 'C' and len(asStmts) != 1:
+                    asLines.append(sIndent + '{');
+                    asLines.extend(asStmts);
+                    asLines.append(sIndent + '}');
+                else:
+                    asLines.extend(asStmts);
             else:
                 asLines.append(sNextIndent + self.oElseStatement.toString());
         return asLines;
 
-    def toCExpr(self, oHelper):
-        raise Exception('not implemented');
-
-    def getWidth(self, oHelper):
-        _ = oHelper;
-        return -1;
 
     kAttribSet = frozenset(['_type', 'access', 'condition',]);
     @staticmethod
@@ -2652,7 +3041,8 @@ class ArmAstIfList(ArmAstStatementBase):
         # There are two variants of this object.
         #
         if dJson['_type'] != 'Accessors.Permission.SystemAccess': raise Exception('wrong type: %s' % (dJson['_type'],));
-        ArmAstBase.assertAttribsInSet(dJson, ArmAstIfList.kAttribSet);
+        assertJsonAttribsInSet(dJson, ArmAstIfList.kAttribSet);
+
         oCondition = ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeAccessorCond);
 
         #
@@ -2664,7 +3054,7 @@ class ArmAstIfList(ArmAstStatementBase):
                 assert isinstance(oStmt, (ArmAstStatementBase, ArmAstFunction)); ## @todo may need a wrapper.
                 #print('debug/IfList/%u:%s 1a. oStmt=%s' % (uDepth, ' '*uDepth, oStmt,));
                 return oStmt;
-            oRet = ArmAstIfList([oCondition], [oStmt], None, uDepth);
+            oRet = ArmAstIfList([oCondition], [oStmt], None);
             #print('debug/IfList/%u:%s 1b. oRet=\n%s' % (uDepth, ' '*uDepth, oRet,));
             return oRet;
 
@@ -2686,7 +3076,7 @@ class ArmAstIfList(ArmAstStatementBase):
                     #print('debug/IfList/%u:%s 2a. oChild=%s' % (uDepth, ' '*uDepth, oChild,));
                     return oChild;
                 #print('debug/IfList/%u:%s 2b. oCondition=%s oChild=%s' % (uDepth, ' '*uDepth, oCondition, oChild,));
-                return ArmAstIfList([oCondition], aoChildren, None, uDepth);
+                return ArmAstIfList([oCondition], aoChildren, None);
 
             # If our condition is a dummy one, return the child.
             if oCondition.isBoolAndTrue():
@@ -2720,12 +3110,11 @@ class ArmAstIfList(ArmAstStatementBase):
         #print('debug/IfList/%u:%s 2x. oElseStmt=%s' % (uDepth, ' '*uDepth, oElseStmt));
 
         # Twist: Eliminate this level if the current condition is just 'true'.
-        ## @todo correct uDepth?
         if oCondition.isBoolAndTrue():
-            oRet = ArmAstIfList(aoIfConds, aoIfStmts, oElseStmt, uDepth);
+            oRet = ArmAstIfList(aoIfConds, aoIfStmts, oElseStmt);
             #print('debug/IfList/%u:%s 2y. oRet=\n%s\n' % (uDepth, ' '*uDepth, oRet));
         else:
-            oRet = ArmAstIfList([oCondition], [ArmAstIfList(aoIfConds, aoIfStmts, oElseStmt, uDepth + 1)], None, uDepth);
+            oRet = ArmAstIfList([oCondition], [ArmAstIfList(aoIfConds, aoIfStmts, oElseStmt)], None);
             #print('debug/IfList/%u:%s 2z. oRet=\n%s\n' % (uDepth, ' '*uDepth, oRet));
         return oRet;
 
@@ -2739,16 +3128,10 @@ class ArmAccessorBase(object):
         self.dJson = dJson;
         self.oCondition = oCondition;
 
-    @staticmethod
-    def assertAttribsInSet(dJson, oAttribSet):
-        """ Checks that the JSON element has all the attributes in the set and nothing else. """
-        assert set(dJson) == oAttribSet, '%s - %s' % (set(dJson) ^ oAttribSet, dJson,);
-
-
     kAttribSetBlockAccess = frozenset(['_type', 'access', 'condition']);
     @staticmethod
     def fromJsonBlockAccess(dJson):
-        ArmAccessorBase.assertAttribsInSet(dJson, ArmAccessorBase.kAttribSetBlockAccess);
+        assertJsonAttribsInSet(dJson, ArmAccessorBase.kAttribSetBlockAccess);
         return ArmAccessorBlockAccess(dJson, ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints));
 
 
@@ -2756,7 +3139,7 @@ class ArmAccessorBase(object):
                                             'offset', 'references']);
     @staticmethod
     def fromJsonBlockAccessArray(dJson):
-        ArmAccessorBase.assertAttribsInSet(dJson, ArmAccessorBase.kAttribSetBlockAccessArray);
+        assertJsonAttribsInSet(dJson, ArmAccessorBase.kAttribSetBlockAccessArray);
         return ArmAccessorBlockAccessArray(dJson, ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints));
 
 
@@ -2764,7 +3147,7 @@ class ArmAccessorBase(object):
                                          'power_domain', 'range']);
     @staticmethod
     def fromJsonExternalDebug(dJson):
-        ArmAccessorBase.assertAttribsInSet(dJson, ArmAccessorBase.kAttribSetExternalDebug);
+        assertJsonAttribsInSet(dJson, ArmAccessorBase.kAttribSetExternalDebug);
         return ArmAccessorExternalDebug(dJson, ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints));
 
 
@@ -2772,14 +3155,14 @@ class ArmAccessorBase(object):
                                         'power_domain', 'range']);
     @staticmethod
     def fromJsonMemoryMapped(dJson):
-        ArmAccessorBase.assertAttribsInSet(dJson, ArmAccessorBase.kAttribSetMemoryMapped);
+        assertJsonAttribsInSet(dJson, ArmAccessorBase.kAttribSetMemoryMapped);
         return ArmAccessorExternalDebug(dJson, ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints));
 
 
     kAttribSetSystem = frozenset(['_type', 'access', 'condition', 'encoding', 'name']);
     @staticmethod
     def fromJsonSystem(dJson):
-        ArmAccessorBase.assertAttribsInSet(dJson, ArmAccessorBase.kAttribSetSystem);
+        assertJsonAttribsInSet(dJson, ArmAccessorBase.kAttribSetSystem);
         assert len(dJson['encoding']) == 1;
         sName     = dJson['name']; # For exception listing
         oEncoding = ArmRegEncoding.fromJson(dJson['encoding'][0]);
@@ -2791,7 +3174,7 @@ class ArmAccessorBase(object):
     kAttribSetSystemArray = frozenset(['_type', 'access', 'condition', 'encoding', 'index_variable', 'indexes', 'name']);
     @staticmethod
     def fromJsonSystemArray(dJson):
-        ArmAccessorBase.assertAttribsInSet(dJson, ArmAccessorBase.kAttribSetSystemArray);
+        assertJsonAttribsInSet(dJson, ArmAccessorBase.kAttribSetSystemArray);
         assert len(dJson['encoding']) == 1;
         oEncoding = ArmRegEncoding.fromJson(dJson['encoding'][0]);
         oAccess   = ArmAstIfList.fromJson(dJson['access']) if dJson['access'] else None;
@@ -2843,8 +3226,8 @@ class ArmAccessorSystem(ArmAccessorBase):
     def __init__(self, dJson, oCondition, sName, oEncoding, oAccess):
         ArmAccessorBase.__init__(self, dJson, oCondition);
         self.sName     = sName;
-        self.oEncoding = oEncoding;
-        self.oAccess   = oAccess    # Type: ArmAccessorPermissionSystemAccessList # Can be None!
+        self.oEncoding = oEncoding  # Type: ArmRegEncoding
+        self.oAccess   = oAccess    # Type: ArmAstIfList # Can be None!
 
 
 class ArmAccessorSystemArray(ArmAccessorSystem):
@@ -3563,7 +3946,7 @@ def PrintSpecs(oOptions):
                     print('                     name=%s' % (oAccessor.sName,));
                     if not ArmAstBool.isBoolAndTrue(oAccessor.oCondition):
                         print('                     condition=%s' % (oAccessor.oCondition.toString(),));
-                    if oAccessor.oAccess: # ArmAccessorPermissionSystemAccessList
+                    if oAccessor.oAccess: # ArmAstIfList
                         asLines = oAccessor.oAccess.toStringList('                         ');
                         print('\n'.join(asLines));
                 else:
@@ -4741,6 +5124,335 @@ class IEMArmGenerator(object):
         return (True, asLines);
 
 
+    #
+    # System registers
+    #
+
+    class SysRegAccessorInfo(object):
+        """ Info about an accessor we're emitting code for. """
+        def __init__(self, oAccessor, oReg, sEnc):
+            self.oAccessor  = oAccessor     # type: ArmAccessorSystem
+            self.oReg       = oReg;
+            self.sEnc       = sEnc;
+            self.oCode      = None;
+            # Stats for the code generator.
+            self.cCallsToIsFeatureImplemented = 0;
+
+
+    class SysRegGeneratorBase(object):
+        """ Base class for the system register access code generators. """
+        def __init__(self, sInstr):
+            self.sInstr     = sInstr;
+            self.aoInfo     = []           # type: List[SysRegAccessorInfo]
+
+        def generateOneHandler(self, oInfo):
+            return [ '', '/// @todo %s / %s' % (self.sInstr, oInfo.sEnc,) ];
+
+        def generateMainFunction(self):
+            return [ '', '/// @todo %s main function' % (self.sInstr,) ];
+
+        kdAstForFunctionsWithoutArguments = {
+            'EL2Enabled': # HaveEL(EL2) && (!Have(EL3) || SCR_curr[].NS || IsSecureEL2Enabled())
+            ArmAstBinaryOp(ArmAstFunction('HaveEL', [ArmAstIdentifier('EL2'),]),
+                                         '&&',
+                                         ArmAstBinaryOp.orListToTree([
+                ArmAstUnaryOp('!', ArmAstFunction('HaveEL', [ArmAstIdentifier('EL3'),])),
+                ArmAstDotAtom([ArmAstIdentifier('SCR_curr'), ArmAstIdentifier('NS')]), # SCR_curr is SCR or SCR_EL3.
+                ArmAstFunction('IsSecureEL2Enabled', []),
+            ])),
+        };
+
+        def transformCodePass1Callback(self, oNode, fEliminationAllowed, oInfo):
+            """ Callback for pass 1: Code flow adjustments; Optimizations. """
+            _ = fEliminationAllowed; _ = oInfo;
+            if isinstance(oNode, ArmAstIfList):
+                # If we have a complete series of PSTATE.EL == ELx checks,
+                # turn the final one into an else case to help compilers make
+                # better sense of the code flow.
+                if len(oNode.aoIfConditions) >= 4 and not oNode.oElseStatement:
+                    aidxEl = [-1, -1, -1, -1];
+                    for idxCond, oCond in enumerate(oNode.aoIfConditions):
+                        if isinstance(oCond, ArmAstBinaryOp):
+                            if oCond.sOp == '==':
+                                if oCond.oLeft.isMatchingDotAtom('PSTATE', 'EL'):
+                                    idxEl = ('EL0', 'EL1', 'EL2', 'EL3').index(oCond.oRight.getIdentifierName());
+                                    if idxEl >= 0:
+                                        assert aidxEl[idxEl] == -1;
+                                        aidxEl[idxEl] = idxCond;
+                    if aidxEl[0] >= 0 and aidxEl[1] >= 0 and aidxEl[2] >= 0 and aidxEl[3] >= 0:
+                        # We've found checks for each of the 4 EL levels.  Convert the last one into the else.
+                        idxLast = max(aidxEl);
+                        assert idxLast + 1 == len(oNode.aoIfStatements); # There shall not be anything after the final EL check.
+                        oNode.oElseStatement = oNode.aoIfStatements[idxLast];
+                        oNode.aoIfConditions = oNode.aoIfConditions[:idxLast];
+                        oNode.aoIfStatements = oNode.aoIfStatements[:idxLast];
+
+            elif isinstance(oNode, ArmAstFunction):
+                # Since we don't implement any external debug state (no EDSCR.STATUS),
+                # the Halted() function always returns False.  Eliminate it.
+                if oNode.isMatchingFunctionCall('Halted'):
+                    return None;
+
+                # The EL3SDDUndefPriority() and EL3SDDUndef() can likewise be eliminated,
+                # as they requires Halted() to be true and EDSCR.SDD to be set.
+                if oNode.isMatchingFunctionCall('EL3SDDUndefPriority') or oNode.isMatchingFunctionCall('EL3SDDUndef'):
+                    return None;
+
+                # The HaveAArch64() must be true if we're in a A64 instruction handler.
+                if oNode.isMatchingFunctionCall('HaveAArch64'):
+                    if self.sInstr.startswith('A64'):
+                        return ArmAstBool(True);
+                    return ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_AA64')]);
+
+                # Translate HaveEL(ELx) call into the corresponding feature checks.
+                if oNode.sName == 'HaveEL' and len(oNode.aoArgs) == 1:
+                    if oNode.aoArgs[0].isMatchingIdentifier('EL3'):
+                        return ArmAstBinaryOp.orListToTree([
+                            ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_AA64EL3')]),
+                            ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_AA32EL3')]),
+                        ]);
+                    if oNode.aoArgs[0].isMatchingIdentifier('EL2'):
+                        return ArmAstBinaryOp.orListToTree([
+                            ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_AA64EL2')]),
+                            ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_AA32EL2')]),
+                        ]);
+                    if oNode.aoArgs[0].isMatchingIdentifier('EL1') or oNode.aoArgs[0].isMatchingIdentifier('EL0'):
+                        return ArmAstBool(True); # EL0 and EL1 are mandatory.
+                    raise Exception('Unexpected HaveEL argument: %s' % (oNode.aoArgs[0],));
+
+                # Generic mapping of functions without any arguments:
+                if len(oNode.aoArgs) == 0 and oNode.sName in self.kdAstForFunctionsWithoutArguments:
+                    oNode = self.kdAstForFunctionsWithoutArguments[oNode.sName].clone();
+                    return self.transformCodePass1(oInfo, oNode);
+
+            return oNode;
+
+        def transformCodePass1(self, oInfo, oCode):
+            """ Code transformation pass 1: Code flow adjustments; Optimizations. """
+            return oCode.transform(self.transformCodePass1Callback, True, oInfo);
+
+        def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo):
+            """ Callback for pass 2: C++ translation. """
+            if isinstance(oNode, ArmAstFunction):
+                # Undefined() -> return iemRaiseUndefined(pVCpu);
+                if oNode.isMatchingFunctionCall('Undefined'):
+                    return ArmAstCppStmt('return iemRaiseUndefined(pVCpu);');
+
+                # IsFeatureImplemented(FEAT_xxxx) -> pGstFeat->fXxxx:
+                if oNode.sName == 'IsFeatureImplemented':
+                    if len(oNode.aoArgs) != 1 or not isinstance(oNode.aoArgs[0], ArmAstIdentifier):
+                        raise Exception('Unexpected IsFeatureImplemented arguments: %s' % (oNode.aoArgs,));
+                    sFeatureNm   = oNode.aoArgs[0].sName;
+                    sCpumFeature = g_dSpecFeatToCpumFeat.get(sFeatureNm, None);
+                    if sCpumFeature is None:
+                        raise Exception('Unknown IsFeatureImplemented parameter: %s (see g_dSpecFeatToCpumFeat)' % (sFeatureNm));
+                    if not isinstance(sCpumFeature, str):
+                        return ArmAstCppExpr('false /** @todo pGstFeats->%s*/' % (sFeatureNm,));
+                    oInfo.cCallsToIsFeatureImplemented += 1;
+                    return ArmAstCppExpr('pGstFeats->%s' % (sCpumFeature,));
+
+            elif isinstance(oNode, ArmAstBinaryOp):
+                # PSTATE.EL == EL0 and similar:
+                if oNode.oLeft.isMatchingDotAtom('PSTATE', 'EL'):
+                    idxEl = ('EL0', 'EL1', 'EL2', 'EL3').index(oNode.oRight.getIdentifierName());
+                    if idxEl >= 0:
+                        oNode.oLeft  = ArmAstCppExpr('IEM_F_MODE_ARM_GET_EL(pVCpu->iem.s.fExec)');
+                        oNode.oRight = ArmAstInteger(idxEl);
+                    return oNode;
+
+            _ = fEliminationAllowed;
+            _ = oInfo;
+            return oNode;
+
+        def transformCodePass2(self, oInfo, oCode):
+            """ Code transformation pass 2: C++ translation. """
+            return oCode.transform(self.transformCodePass2Callback, True, oInfo);
+
+        def morphCodeToC(self, oInfo):
+            """ Morphs the accessor code and assigns the result to self.oCode """
+            assert oInfo.oCode is None;
+            oInfo.oCode = self.transformCodePass2(oInfo, self.transformCodePass1(oInfo, oInfo.oAccessor.oAccess.clone()));
+            return True;
+
+
+    class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
+        def __init__(self):
+            IEMArmGenerator.SysRegGeneratorBase.__init__(self, 'A64.MRS');
+
+        def generateOneHandler(self, oInfo):
+            """ Generates one register access for A64.MRS. """
+            asLines = [
+                '',
+                '/**',
+                ' * %s - %s' % (oInfo.oAccessor.oEncoding.sAsmValue, oInfo.oAccessor.oEncoding.dNamedValues,),
+                ' */',
+                'static VBOXSTRICTRC iemCImplA64_mrs_%s(PVMCPU pVCpu, uint64_t *puDst)' % (oInfo.oAccessor.oEncoding.sAsmValue,),
+                '{',
+            ];
+            if oInfo.cCallsToIsFeatureImplemented > 0:
+                asLines.append('    const CPUMFEATURESARMV8 * const pGstFeats = IEM_GET_GUEST_CPU_FEATURES(pVCpu);');
+            if oInfo.oCode:
+                asLines.extend(oInfo.oCode.toStringList('    ', 'C'));
+
+            asLines.append('    /* -------- Original code specification: -------- */');
+            asLines.extend(oInfo.oAccessor.oAccess.toStringList('    // '));
+            asLines += [
+                '    return VERR_IEM_ASPECT_NOT_IMPLEMENTED;',
+                '}',
+            ];
+            return asLines;
+
+        def generateMainFunction(self):
+            """ Generates the CIMPL function for A64.MRS. """
+            asLines = [
+                '',
+                '/**',
+                ' * Implements the MRS instruction.',
+                ' *',
+                ' * @returns Strict VBox status code.',
+                ' * @param   pVCpu       The cross context virtual CPU structure of the',
+                ' *                      calling thread.',
+                ' * @param   idSysReg    The system register to read from (IPRT format).',
+                ' * @param   puDst       Where to return the value.',
+                ' * @todo    Place this in CPUM and return status codes rather than raising exceptions.',
+                ' */',
+                'DECLHIDDEN(VBOXSTRICT) iemCImplA64_mrs_generic(PVMCPU pVCpu, uint32_t idSysReg, uint64_t *puDst)',
+                '{',
+                '    uint64_t         uZeroDummy;',
+                '    uint64_t * const puDst = idGprDst < ARMV8_A64_REG_XZR',
+                '                           ? &pVCpu->cpum.GstCtx.aGRegs[idGprDst].x : &uZeroDummy;',
+                '    switch (idSysReg)',
+                '    {',
+            ];
+            for oInfo in self.aoInfo:
+                if oInfo.sEnc[0] == 'A':
+                    asLines.append('        case %s: %sreturn iemCImplA64_mrs_%s(pVCpu, puDst);'
+                                   % (oInfo.sEnc, ' ' * (45 - len(oInfo.sEnc)), oInfo.oAccessor.oEncoding.sAsmValue));
+            asLines += [
+                '    }',
+                '    /* Fall back on handcoded handler. */',
+                '    return iemCImplA64_mrs_fallback(pVCpu, idGprDst, idSysReg);',
+                '}',
+                '',
+                '/**',
+                ' * Implements the MRS instruction.',
+                ' *',
+                ' * @param   idSysReg    The system register to read from.',
+                ' * @param   idGprDst    The destination GPR register number (IPRT format).',
+                ' */',
+                'IEM_CIMPL_DEF_2(iemCImplA64_mrs, uint32_t, idSysReg, uint8_t, idGprDst)',
+                '{',
+                '    uint64_t         uZeroDummy;',
+                '    uint64_t * const puDst = idGprDst < ARMV8_A64_REG_XZR',
+                '                           ? &pVCpu->cpum.GstCtx.aGRegs[idGprDst].x : &uZeroDummy;',
+                '    return iemCImplA64_mrs_generic(pVCpu, idSysReg, puDst);',
+                '}',
+            ];
+            return asLines;
+
+
+        def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo):
+            """ Callback used by the second pass."""
+            if oNode.isMatchingSquareOp('X', 't', 64):
+                return ArmAstCppExpr('*puDst', 64);
+
+            return super().transformCodePass2Callback(oNode, fEliminationAllowed, oInfo);
+
+
+    def generateCImplSysRegCpp(self, sInstrSet, sState):
+        """ Worker for generateA64CImplSysRegCpp. """
+        _ = sInstrSet;
+
+        #
+        # Gather the relevant system register access code.
+        #
+        dAccessors = {
+            'A64.MRS':          IEMArmGenerator.SysRegGeneratorA64Mrs(),
+            'A64.MSRregister':  IEMArmGenerator.SysRegGeneratorBase('A64.MSRregister'),
+            'A64.MSRimmediate': IEMArmGenerator.SysRegGeneratorBase('A64.MSRimmediate'),
+            'A64.MRRS':         IEMArmGenerator.SysRegGeneratorBase('A64.MRRS'),
+            'A64.MSRRregister': IEMArmGenerator.SysRegGeneratorBase('A64.MSRRregister'),
+        } # type: Dict[str,SysRegGeneratorBase]
+
+        for oReg in g_daoAllArmRegistersByState[sState]: # type: ArmRegister
+            assert oReg.sState == sState;
+            for oAccessor in oReg.aoAccessors:  # type: ArmAccessorBase
+                if isinstance(oAccessor, ArmAccessorSystem) and oAccessor.sName in dAccessors:
+                    sEncSortKey = 'encoding=%s' % (oAccessor.oEncoding.dNamedValues,);
+                    if (    not isinstance(oAccessor, ArmAccessorSystemArray)
+                        and not oAccessor.oEncoding.fHasWildcard
+                        and not oAccessor.oEncoding.fHasIndex
+                        and oAccessor.sName in ('A64.MRS', 'A64.MSRregister')):
+                        sEncSortKey = oAccessor.oEncoding.getSysRegIdCreate();
+                    dAccessors[oAccessor.sName].aoInfo.append(self.SysRegAccessorInfo(oAccessor, oReg, sEncSortKey));
+
+        for sKey, oGenerator in dAccessors.items():
+            assert sKey == oGenerator.sInstr;
+            oGenerator.aoInfo.sort(key = operator.attrgetter('sEnc'));
+
+        #
+        # File header.
+        #
+        asLines = self.generateLicenseHeader(g_oArmRegistersVerInfo);
+        asLines += [
+            '#define LOG_GROUP LOG_GROUP_IEM',
+            '#define VMCPU_INCL_CPUM_GST_CTX',
+            '#include "IEMInternal.h"',
+            '#include <VBox/vmm/vm.h>',
+            '#include "VBox/err.h"',
+            '',
+            '#include "iprt/armv8.h"',
+            '',
+            '#include "IEMMc.h"',
+            '#include "IEMInline-armv8.h"',
+            '',
+            '',
+        ];
+
+        #
+        # Generate the real code, accessor type by accessor type.
+        #
+        for oGenerator in dAccessors.values():
+            asLines += [
+                '',
+                '',
+                '',
+                '/*',
+                ' * %s - %u registers' % (oGenerator.sInstr, len(oGenerator.aoInfo),),
+                ' */',
+            ];
+
+            # Individual handler functions.
+            for oInfo in oGenerator.aoInfo:
+                asLines.append('');
+                if oInfo.sEnc[0] == 'A':
+                    oGenerator.morphCodeToC(oInfo);
+                    asLines += oGenerator.generateOneHandler(oInfo);
+                else:
+                    asLines += [
+                        '// %s' % (oInfo.oAccessor.oEncoding.sAsmValue,),
+                        '// %s' % (oInfo.sEnc,),
+                    ];
+                    if oInfo.oAccessor.oAccess:
+                        asLines.extend(oInfo.oAccessor.oAccess.toStringList('//    '));
+                    else:
+                        asLines.append('// access is None!');
+
+            # Main switch function.
+            asLines += oGenerator.generateMainFunction();
+
+        return (True, asLines);
+
+    def generateA64CImplSysRegCpp(self, sFilename, iPartNo):
+        """ Generates the IEMAllCImplA64SysReg-armv8.cpp file. """
+        _ = sFilename; _ = iPartNo;
+        return self.generateCImplSysRegCpp('A64', 'AArch64');
+
+
+    #
+    # Features
+    #
+
     def generateFeaturesHdr(self, sFilename, iPartNo):
         _ = iPartNo;
 
@@ -5040,6 +5752,12 @@ Then add @hints.rsp to the command line to make use of them.''');
                                 action  = 'store',
                                 default = None,
                                 help    = 'The output header file for the implementation stubs.');
+        oArgParser.add_argument('--out-cimpl-sysreg-cpp',
+                                metavar = 'file-cimpl-sysreg.cpp',
+                                dest    = 'sFileCImplSysRegCpp',
+                                action  = 'store',
+                                default = None,
+                                help    = 'The output C++ file for system register handling (MRS, MSR, ++).');
         oArgParser.add_argument('--out-features-hdr',
                                 metavar = 'file-features.h',
                                 dest    = 'sFileFeaturesHdr',
@@ -5142,6 +5860,7 @@ Then add @hints.rsp to the command line to make use of them.''');
                  ( oOptions.sFileDecoderCpp,      self.generateA64DecoderCpp,            0, 1, ),
                  ( oOptions.sFileDecoderHdr,      self.generateDecoderHdr,               0, 1, ), # after generateA64DecoderCpp!
                  ( oOptions.sFileStubHdr,         self.generateA64ImplementationStubHdr, 0, 1, ),
+                 ( oOptions.sFileCImplSysRegCpp,  self.generateA64CImplSysRegCpp,        0, 0, ),
                  ( oOptions.sFileFeaturesHdr,     self.generateFeaturesHdr,              0, 0, ),
             ];
 
@@ -5165,21 +5884,19 @@ Then add @hints.rsp to the command line to make use of them.''');
                 for sOutFile, fnGenMethod, iPartNo, _ in aaoOutputFiles:
                     if not sOutFile:
                         continue;
-                    if sOutFile == '-':
-                        oOut = sys.stdout;
-                    else:
-                        try:
-                            oOut = open(sOutFile, 'w');                 # pylint: disable=consider-using-with,unspecified-encoding
-                        except Exception as oXcpt:
-                            print('error! Failed open "%s" for writing: %s' % (sOutFile, oXcpt,), file = sys.stderr);
-                            return 1;
-
                     (fRc2, asLines) = fnGenMethod(sOutFile, iPartNo);
                     fRc = fRc2 and fRc;
 
-                    oOut.write('\n'.join(asLines));
-                    if oOut != sys.stdout:
-                        oOut.close();
+                    if sOutFile == '-':
+                        sys.stdout.write('\n'.join(asLines));
+                    else:
+                        try:
+                            oOut = open(sOutFile, 'w', encoding = 'utf-8', errors = 'strict');
+                        except Exception as oXcpt:
+                            print('error! Failed open "%s" for writing: %s' % (sOutFile, oXcpt,), file = sys.stderr);
+                            return 1;
+                        with oOut:
+                            oOut.write('\n'.join(asLines));
             if fRc:
                 return 0;
 
@@ -5223,7 +5940,7 @@ def printException(oXcpt):
 
 
 if __name__ == '__main__':
-    fProfileIt = False; #True;
+    fProfileIt = 'VBOX_PROFILE_PYTHON' in os.environ;
     oProfiler = cProfile.Profile() if fProfileIt else None;
     try:
         if not oProfiler:

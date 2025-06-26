@@ -143,6 +143,8 @@ RT_C_DECLS_BEGIN
     VBOXSTRICTRC a_Name(__VA_ARGS__) RT_NOEXCEPT; \
     DECL_NO_RETURN(void) RT_CONCAT(a_Name,Jmp)(__VA_ARGS__) IEM_NOEXCEPT_MAY_LONGJMP
 
+IEM_RAISE_PROTOS(iemRaiseUndefined, PVMCPUCC pVCpu);
+
 IEM_RAISE_PROTOS(iemRaiseDataAbortFromWalk,
                  PVMCPUCC pVCpu, RTGCPTR GCPtrMem, uint32_t cbMem, uint32_t fAccess, int rc, PCPGMPTWALKFAST pWalkFast);
 

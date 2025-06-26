@@ -38,6 +38,21 @@
 #include <VBox/err.h>
 
 
+VBOXSTRICTRC
+iemRaiseUndefined(PVMCPUCC pVCpu) RT_NOEXCEPT
+{
+    RT_NOREF(pVCpu);
+    AssertFailedReturn(VERR_IEM_ASPECT_NOT_IMPLEMENTED);
+}
+
+
+DECL_NO_RETURN(void)
+iemRaiseUndefinedJmp(PVMCPUCC pVCpu) IEM_NOEXCEPT_MAY_LONGJMP
+{
+    VBOXSTRICTRC const rcStrict = iemRaiseUndefined(pVCpu);
+    IEM_DO_LONGJMP(pVCpu, VBOXSTRICTRC_VAL(rcStrict));
+}
+
 
 VBOXSTRICTRC
 iemRaiseDataAbortFromWalk(PVMCPUCC pVCpu, RTGCPTR GCPtrMem, uint32_t cbMem, uint32_t fAccess, int rc,
