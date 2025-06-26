@@ -633,8 +633,18 @@
       <topicref href="topics/iscsi-intnet.dita"/>
     </topicref>
     <topicref href="topics/privacy.dita"/>
+   </chapter>
+
    <!-- Change Log -->
+   <chapter href="topics/ChangeLog.dita" chunk="to-content">
+      <!-- This map file and all the topics it is referencing is generated from user_ChangeLogImpl.xml. -->
+      <topicref format="ditamap" href="topics/changelog-versions.ditamap"/>
+      <topicref href="topics/changelog-older.dita"/>
+   </chapter>
+
    <!-- Third Party Licenses-->
+   <chapter href="topics/licensing/licensing_chapter.dita" chunk="to-content">
+      <topicref format="ditamap" href="topics/licensing/licensing.ditamap"/>
    </chapter>
 
 </bookmap>
