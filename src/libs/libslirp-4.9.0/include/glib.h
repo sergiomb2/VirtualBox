@@ -33,8 +33,8 @@
  * SPDX-License-Identifier: GPL-3.0-only OR CDDL-1.0
  */
 
-#ifndef INCLUDED_glib_h
-#define INCLUDED_glib_h
+#ifndef VBOX_INCLUDED_SRC_include_glib_h
+#define VBOX_INCLUDED_SRC_include_glib_h
 #ifndef RT_WITHOUT_PRAGMA_ONCE
 # pragma once
 #endif
@@ -423,4 +423,4 @@ DECLINLINE(bool) g_spawn_async_with_fds(const char *working_directory, char **ar
 
 /** @} */
 
-#endif
+#endif /* !VBOX_INCLUDED_SRC_include_glib_h */

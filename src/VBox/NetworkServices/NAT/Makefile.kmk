@@ -139,8 +139,6 @@ ifdef VBOX_WITH_LWIP_NAT
  	$(LIB_RUNTIME)
  VBoxNetNAT_LIBS.solaris += socket nsl
 
- VBoxNetNAT_LDFLAGS.win = /SUBSYSTEM:windows
-
  # ifeq ($(VBOX_WITH_HARDENING),)
  #  ifn1of ($(KBUILD_TARGET), darwin win)
  #   # helper for debugging unprivileged
@@ -148,20 +146,21 @@ ifdef VBOX_WITH_LWIP_NAT
  #   VBoxNetNAT_SOURCES += getrawsock.c
  #  endif
  # endif
-else
+
+else # !VBOX_WITH_LWIP_NAT
 
  VBoxNetNAT_DEFS.win = VBOX_COM_OUTOFPROC_MODULE
 
  VBoxNetNAT_INCS += \
- 	$(PATH_ROOT)/src/libs/libslirp-4.9.0/src \
- 	$(PATH_OUT)/obj/VBox-libslirp
+ 	$(PATH_ROOT)/src/libs/libslirp-4.9.0/include \
+ 	$(PATH_OUT)/obj/VBox-libslirp # for libslirp-version.h
 
  VBoxNetNAT_SOURCES = \
  	VBoxNetSlirpNAT.cpp \
  	../NetLib/IntNetIf.cpp \
  	../NetLib/VBoxNetPortForwardString.cpp
 
- VBoxNetNAT_SOURCES.win    += \
+ VBoxNetNAT_SOURCES.win += \
  	RTWinPoll.cpp \
  	RTWinSocketPair.cpp
 
@@ -171,8 +170,8 @@ else
  VBoxNetNAT_LIBS.solaris += socket nsl
  VBoxNetNAT_LIBS.darwin += resolv
 
+endif # !VBOX_WITH_LWIP_NAT
  VBoxNetNAT_LDFLAGS.win = /SUBSYSTEM:windows
-endif # VBOX_WITH_LWIP_NAT
 
 ifdef VBOX_WITH_HARDENING
  $(call VBOX_SET_VER_INFO_DLL,VBoxNetNAT,VirtualBox NAT Engine (dll),$(VBOX_WINDOWS_ICON_FILE)) # Version info / description.

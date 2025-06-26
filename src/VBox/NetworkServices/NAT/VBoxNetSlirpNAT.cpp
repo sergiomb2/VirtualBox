@@ -103,7 +103,7 @@
 #include "../NetLib/IntNetIf.h"
 #include "../NetLib/VBoxPortForwardString.h"
 
-#include <libslirp.h>
+#include <slirp/libslirp.h>
 
 #ifdef VBOX_RAWSOCK_DEBUG_HELPER
 #if    defined(VBOX_WITH_HARDENING) /* obviously */     \
