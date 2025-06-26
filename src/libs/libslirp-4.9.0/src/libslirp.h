@@ -34,14 +34,16 @@ typedef ssize_t slirp_ssize_t;
 #define SLIRP_EXPORT
 #endif
 
-#ifdef VBOX
-# include <iprt/types.h> /* for ssize_t on windows */
-# include <iprt/net.h> /* for RTNETADDRIPV4 in slirp_set_vnameserver */
-# define __STDC_LIMIT_MACROS
-# define __STDC_CONSTANT_MACROS
-#endif
-
+#ifndef VBOX
 #include "libslirp-version.h"
+#else
+# include <slirp/libslirp-version.h>    /* VBox: it's in the wrapper directory now. */
+
+# include <iprt/types.h>                /* for ssize_t on windows */
+# include <iprt/net.h>                  /* for RTNETADDRIPV4 in slirp_set_vnameserver */
+# define __STDC_LIMIT_MACROS            /** @todo r=bird: These two are surely defined too late, since they apply to stdint.h  */
+# define __STDC_CONSTANT_MACROS         /** @todo r=bird: ... So presumably, they're not required. */
+#endif
 
 #ifdef __cplusplus
 extern "C" {

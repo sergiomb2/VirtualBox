@@ -152,8 +152,7 @@ else # !VBOX_WITH_LWIP_NAT
  VBoxNetNAT_DEFS.win = VBOX_COM_OUTOFPROC_MODULE
 
  VBoxNetNAT_INCS += \
- 	$(PATH_ROOT)/src/libs/libslirp-4.9.0/include \
- 	$(PATH_OUT)/obj/VBox-libslirp # for libslirp-version.h
+ 	$(PATH_ROOT)/src/libs/libslirp-4.9.0/include
 
  VBoxNetNAT_SOURCES = \
  	VBoxNetSlirpNAT.cpp \
@@ -171,7 +170,7 @@ else # !VBOX_WITH_LWIP_NAT
  VBoxNetNAT_LIBS.darwin += resolv
 
 endif # !VBOX_WITH_LWIP_NAT
- VBoxNetNAT_LDFLAGS.win = /SUBSYSTEM:windows
+VBoxNetNAT_LDFLAGS.win = /SUBSYSTEM:windows
 
 ifdef VBOX_WITH_HARDENING
  $(call VBOX_SET_VER_INFO_DLL,VBoxNetNAT,VirtualBox NAT Engine (dll),$(VBOX_WINDOWS_ICON_FILE)) # Version info / description.

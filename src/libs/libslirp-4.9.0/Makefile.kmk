@@ -33,17 +33,13 @@ include $(KBUILD_PATH)/subheader.kmk
 #
 # Windows warnings:
 #	socket.c(131): warning C4388: '>': signed/unsigned mismatch
+#	arp_table.c(37,10): warning C4101: 'ethaddr_str': unreferenced local variable
 #
 LIBRARIES += VBox-libslirp
 VBox-libslirp_TEMPLATE := VBoxR3DllNonPedantic
 VBox-libslirp_CFLAGS.win = -wd4388 -wd4101
 VBox-libslirp_INCS = \
-	include \
-	$(VBox-libslirp_0_OUTDIR)
-VBox-libslirp_INTERMEDIATES = \
-	$(VBox-libslirp_0_OUTDIR)/libslirp-version.h
-VBox-libslirp_CLEAN = \
-	$(VBox-libslirp_0_OUTDIR)/libslirp-version.h
+	include
 VBox-libslirp_SOURCES = \
 	src/arp_table.c \
 	src/bootp.c \
@@ -77,14 +73,17 @@ VBox-libslirp_SOURCES = \
 	src/version.c \
 	src/vmstate.c
 
-## UPGRADE: Must update version here! (Use/see git-version-gen.)
-$$(VBox-libslirp_0_OUTDIR)/libslirp-version.h: $(PATH_SUB_CURRENT)/src/libslirp-version.h.in | $$(dir $$@)
-	$(call MSG_GENERATE,,$@)
+## UPGRADE: Must update include/slirp/libslirp-version.h
+OTHERS      += $(VBox-libslirp_0_OUTDIR)/libslirp-version.h-check
+OTHER_CLEAN += $(VBox-libslirp_0_OUTDIR)/libslirp-version.h-check
+VBOX_LIBSLIRP_BASE_VERSION := $(patsubst libslirp-%,%,$(notdir $(PATH_SUB_CURRENT)))
+$$(VBox-libslirp_0_OUTDIR)/libslirp-version.h-check: $(PATH_SUB_CURRENT)/include/slirp/libslirp-version.h | $$(dir $$@)
+	$(call MSG_L2,Checking that libslirp-version.h is up-to-date)
 	$(SED) \
-		-e 's/@SLIRP_MAJOR_VERSION@/4/g' \
-		-e 's/@SLIRP_MINOR_VERSION@/9/g' \
-		-e 's/@SLIRP_MICRO_VERSION@/0/g' \
-		-e 's/@SLIRP_VERSION_STRING@/"4.9.0.51-0dd7"/g' \
-               --output "$@" $<
+		-e '/define  *SLIRP_VERSION_STRING /!d' \
+		-e '/ SLIRP_VERSION_STRING *["]$(subst .,[.],$(VBOX_LIBSLIRP_BASE_VERSION))[.]/d' \
+		-e 'q1' \
+               $<
+	$(TOUCH) $@
 
 include $(FILE_KBUILD_SUB_FOOTER)
