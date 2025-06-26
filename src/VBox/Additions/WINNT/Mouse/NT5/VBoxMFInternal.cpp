@@ -261,13 +261,14 @@ VOID VBoxDrvNotifyServiceCB(PVBOXMOUSE_DEVEXT pDevExt, PMOUSE_INPUT_DATA InputDa
                         }
                         if (pDevExt->pSCReq->dz)
                         {
+                            /** @todo Both dz and dw movements are too slow without the magic '120' from GUI. */
                             pData->ButtonFlags |= MOUSE_WHEEL;
-                            pData->ButtonData = pDevExt->pSCReq->dz;
+                            pData->ButtonData = -pDevExt->pSCReq->dz * 120;
                         }
                         else if (pDevExt->pSCReq->dw) /* Note the 'else'. Seems to be no way to report both WHEEL and HWHEEL. */
                         {
                             pData->ButtonFlags |= MOUSE_HWHEEL;
-                            pData->ButtonData = pDevExt->pSCReq->dw;
+                            pData->ButtonData = -pDevExt->pSCReq->dw * 120;
                         }
                     }
 
