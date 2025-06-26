@@ -2340,6 +2340,26 @@ DECLINLINE(uint8_t) bs3CpuInstrXMemOpSize(uint8_t cbOperand, uint8_t enmRm)
 }
 
 
+/** @todo r=bela decide whether bs3-cpu-instr3 should also do this */
+/*
+ * When a particular instruction test is failing, it may fail hundreds of
+ * thousands of times, making overall test execution unacceptably slow.
+ * We do not need to see every failure: as soon as any failure is seen, a
+ * human investigation is needed; the human will fix something and iterate.
+ * So, terminate each test mode after just a few failures.
+ */
+static uint32_t g_cFails = 0;
+
+/* Terminate mode after this many initial failures */
+#define BS3_FAIL_THRESHOLD    10
+
+/* Terminate mode after too many initial failures */
+static bool bs3CpuInstrX_SkipDueToFails(void)
+{
+    return (g_cFails >= BS3_FAIL_THRESHOLD);
+}
+
+
 #include <iprt/asm-amd64-x86.h>
 #include <iprt/asm-math.h>
 
@@ -2415,8 +2435,8 @@ static unsigned g_cSeen, g_cSkipped;
 
 static void bs3CpuInstrX_ShowTallies(bool always)
 {
-    if (!g_cSkipped && !always) return;
-    Bs3TestPrintf("Micro-tests %d: tested %d / skipped %d\n", g_cSeen, g_cSeen - g_cSkipped, g_cSkipped);
+    if (g_cSkipped || always)
+        Bs3TestPrintf("Micro-tests %d: tested %d / skipped %d\n", g_cSeen, g_cSeen - g_cSkipped, g_cSkipped);
 }
 
 # ifdef BS3_SKIPIT_DO_ARGS
@@ -2429,6 +2449,9 @@ static bool bs3CpuInstrX_SkipIt(void)
 {
     static unsigned s_uTimes = 0;
     bool fSkip;
+
+    if (bs3CpuInstrX_SkipDueToFails())
+        return true;
 
     /* Cache calls to the relatively expensive random routine */
     if (!s_uTimes)
@@ -3038,6 +3061,7 @@ static void bs3CpuInstr4_WorkerTestType1_Inner(uint8_t bMode, PBS3CPUINSTR4_TEST
 #define PUMEMOP_MAXSIZE sizeof("puMemOp=0x0123456789abcdef, cbMemOp=256, ")
             char szPuMemOpStr[PUMEMOP_MAXSIZE] = "";
 
+            g_cFails++;
             if (!pTestCtx->pConfig->fAligned)
                 Bs3StrPrintf(szPuMemOpStr, PUMEMOP_MAXSIZE, "puMemOp=%p, cbMemOp=%u, ", puMemOp, cbMemOp);
             Bs3TestFailedF("%s/%s failed (bXcptExpect=%u %s, %s%s-%u)",
@@ -3098,6 +3122,8 @@ static uint8_t bs3CpuInstr4_WorkerTestType1_P(uint8_t bMode, unsigned cTests, BS
     Bs3RegCtxSaveForMode(&Ctx, bMode, 1024);
     bs3CpuInstr4SetupSseAndAvx(&Ctx, pExtCtx);
 
+    g_cFails = 0;
+
     /*
      * Run the tests in all rings since alignment issues may behave
      * differently in ring-3 compared to ring-0.
@@ -3144,6 +3170,10 @@ static uint8_t bs3CpuInstr4_WorkerTestType1_P(uint8_t bMode, unsigned cTests, BS
                     unsigned         cRecompRuns    = 0;
                     unsigned const   cMaxRecompRuns = g_cBs3ThresholdNativeRecompiler + cValues;
                     unsigned         iVal;
+
+                    /* Terminate early if all the tests are going to be skipped anyway */
+                    if (bs3CpuInstrX_SkipDueToFails())
+                        continue;
 
                     /* Some tests are for specific modes only. */
                     if (!pfnWorker)
@@ -3231,6 +3261,8 @@ static uint8_t bs3CpuInstr4_WorkerTestType1_P(uint8_t bMode, unsigned cTests, BS
             break;
         Bs3RegCtxConvertToRingX(&Ctx, bRing);
     }
+    if (bs3CpuInstrX_SkipDueToFails())
+        Bs3TestPrintf("Terminate mode '%s' after %d (BS3_FAIL_THRESHOLD) failures\n\n", pszMode, BS3_FAIL_THRESHOLD);
 
     /*
      * Cleanup.
