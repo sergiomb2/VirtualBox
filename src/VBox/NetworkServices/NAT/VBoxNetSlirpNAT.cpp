@@ -2165,8 +2165,8 @@ VBoxNetSlirpNAT::processFrame(void *pvUser, void *pvFrame, uint32_t cbFrame)
     if (!pvBuf)
         return;
 
-    int rc = RTReqQueueCallEx(pThis->m_hSlirpReqQueue, NULL /*ppReq*/, (RTMSINTERVAL)0 /*cMillies*/, RTREQFLAGS_VOID | RTREQFLAGS_NO_WAIT,
-                              (PFNRT)pThis->slirpSendWorker, 3, pThis, pvBuf, cbFrame);
+    int rc = RTReqQueueCallEx(pThis->m_hSlirpReqQueue, NULL /*ppReq*/, 0 /*cMillies*/, RTREQFLAGS_VOID | RTREQFLAGS_NO_WAIT,
+                              (PFNRT)pThis->slirpSendWorker, 3, pThis, pvBuf, (size_t)cbFrame);
     if (RT_SUCCESS(rc))
     {
         pThis->slirpNotifyPollThread("processFrame");
