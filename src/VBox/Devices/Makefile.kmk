@@ -769,8 +769,8 @@ if !defined(VBOX_ONLY_EXTPACKS) && "$(intersects $(KBUILD_TARGET_ARCH),$(VBOX_SU
   VBoxDD_SOURCES.win += \
   	Network/RTWinSocketPair.cpp
   Network/DrvNATlibslirp.cpp_INCS   += \
-  	$(PATH_ROOT)/src/libs/libslirp-4.9.0/src \
-  	$(PATH_OUT)/obj/VBox-libslirp
+  	$(PATH_ROOT)/src/libs/libslirp-4.9.0/include \
+  	$(PATH_OUT)/obj/VBox-libslirp # for libslirp-version.h
  endif
 
  # --- WARNING! SLIRP MESS AHEAD! ;-) ---

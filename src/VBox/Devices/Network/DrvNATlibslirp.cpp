@@ -41,7 +41,7 @@
 # define AF_INET6 23
 #endif
 
-#include <libslirp.h>
+#include <slirp/libslirp.h>
 
 #include <VBox/vmm/dbgf.h>
 #include <VBox/vmm/pdmdrv.h>
