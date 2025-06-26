@@ -203,21 +203,41 @@ static const char *gicDistGetRegDescription(uint16_t offReg)
 
 
 /**
- * Gets alternate bits (starting at and including bit 1 to bit 63) from a 64-bit
- * source into a 32-bit value.
+ * Packs alternate bits (starting at and including bit 1 to bit 31) from a
+ * 32-bit source into a 32-bit value.
  *
- * @returns The 32-bit result with alternate bits from the 64-bit source.
- * @param uLo    The low 32-bits of the source value.
- * @param uHi    The high 32-bits of the source value.
+ * @returns The 32-bit result with alternate bits from the 32-bit source.
+ * @param uSrc      The 32-bit input.
+ * @remarks It is intentional that this function doesn't return a 16-bit value
+ *          since all callers would explicitly need to typecast it to 32-bit
+ *          anyway.
  */
-DECL_FORCE_INLINE(uint32_t) gicGetAltBits(uint32_t uLo, uint32_t uHi)
+DECL_FORCE_INLINE(uint32_t) gicPackAltBits(uint32_t uSrc)
 {
-    /** @todo There are many faster ways of doing this, but that is for later. */
-    uint64_t const uVal = RT_MAKE_U64(uLo, uHi);
-    uint32_t uConfig = 0;
-    for (unsigned i = 1; i < sizeof(uint64_t) * 8; i += 2)
-        uConfig |= ((uVal >> i) & 1) << (i / 2);
-    return uConfig;
+    /** @todo There are faster ways of doing this, but that is for later. */
+    uint32_t       uOut = 0;
+    unsigned const cBits = sizeof(uSrc) << 3;
+    for (unsigned i = 1; i < cBits; i += 2)
+        uOut |= ((uSrc & RT_BIT(i)) >> i) << (i / 2);
+    return uOut;
+}
+
+
+/**
+ * Unpacks every bit from a 32-bit source into alternate bit positions (starting at
+ * and including 1 to bit 63) into a 64-bit result.
+ *
+ * @returns The 64-bit result with alternate bits from the 32-bit source.
+ * @param uSrc      The 32-bit input.
+ */
+DECL_FORCE_INLINE(uint64_t) gicUnpackAltBits(uint32_t uSrc)
+{
+    /** @todo There are faster ways of doing this, but that is for later. */
+    uint64_t       uOut  = 0;
+    unsigned const cBits = sizeof(uSrc) << 3;
+    for (unsigned i = 0; i < cBits; i++)
+        uOut |= (((uint64_t)uSrc & RT_BIT_64(i)) >> i) << (i * 2 + 1);
+    return uOut;
 }
 
 
@@ -541,9 +561,9 @@ static bool gicReDistIsSufficientPriority(PCGICCPU pGicCpu, uint8_t bIntrPriorit
 DECL_FORCE_INLINE(uint32_t) gicDistGetPendingIntrAt(PCGICDEV pGicDev, uint16_t idxReg)
 {
     Assert(idxReg < RT_ELEMENTS(pGicDev->bmIntrPending));
-    Assert(2U * idxReg + 1U < RT_ELEMENTS(pGicDev->bmIntrConfig));
-    uint32_t const bmIntrConfig   = gicGetAltBits(pGicDev->bmIntrConfig[2U * idxReg], pGicDev->bmIntrConfig[2U * idxReg + 1U]);
-    uint32_t const bmLevelPending = pGicDev->bmIntrLevel[idxReg]   & ~bmIntrConfig;
+    AssertCompile(RT_ELEMENTS(pGicDev->bmIntrConfig) == RT_ELEMENTS(pGicDev->bmIntrPending));
+    AssertCompile(sizeof(pGicDev->bmIntrConfig) == sizeof(pGicDev->bmIntrPending));
+    uint32_t const bmLevelPending = pGicDev->bmIntrLevel[idxReg]   & ~pGicDev->bmIntrConfig[idxReg];
     uint32_t const bmIntrPending  = pGicDev->bmIntrPending[idxReg] | bmLevelPending;
     return bmIntrPending;
 }
@@ -559,9 +579,9 @@ DECL_FORCE_INLINE(uint32_t) gicDistGetPendingIntrAt(PCGICDEV pGicDev, uint16_t i
 DECL_FORCE_INLINE(uint32_t) gicReDistGetPendingIntrAt(PCGICCPU pGicCpu, uint16_t idxReg)
 {
     Assert(idxReg < RT_ELEMENTS(pGicCpu->bmIntrPending));
-    Assert(2U * idxReg + 1U < RT_ELEMENTS(pGicCpu->bmIntrConfig));
-    uint32_t const bmIntrConfig   = gicGetAltBits(pGicCpu->bmIntrConfig[2U * idxReg], pGicCpu->bmIntrConfig[2U * idxReg + 1U]);
-    uint32_t const bmLevelPending = pGicCpu->bmIntrLevel[idxReg]   & ~bmIntrConfig;
+    AssertCompile(RT_ELEMENTS(pGicCpu->bmIntrConfig) == RT_ELEMENTS(pGicCpu->bmIntrPending));
+    AssertCompile(sizeof(pGicCpu->bmIntrConfig) == sizeof(pGicCpu->bmIntrPending));
+    uint32_t const bmLevelPending = pGicCpu->bmIntrLevel[idxReg]   & ~pGicCpu->bmIntrConfig[idxReg];
     uint32_t const bmIntrPending  = pGicCpu->bmIntrPending[idxReg] | bmLevelPending;
     return bmIntrPending;
 }
@@ -1360,12 +1380,13 @@ static VBOXSTRICTRC gicDistReadIntrConfigReg(PCGICDEV pGicDev, uint16_t idxReg, 
     Assert(pGicDev->fAffRoutingEnabled);
     if (idxReg >= 2)
     {
-        Assert(idxReg < RT_ELEMENTS(pGicDev->bmIntrConfig));
-        *puValue = pGicDev->bmIntrConfig[idxReg];
+        Assert(idxReg / 2 < RT_ELEMENTS(pGicDev->bmIntrConfig));
+        uint64_t const bmIntrConfig = gicUnpackAltBits(pGicDev->bmIntrConfig[idxReg / 2]);
+        *puValue = bmIntrConfig >> (32 * (idxReg % 2));
+        LogFlowFunc(("idxReg=%#x read %#x\n", idxReg, *puValue));
     }
     else
         AssertReleaseMsgFailed(("Unexpected (but not illegal) read to SGI/PPI register in distributor\n"));
-    LogFlowFunc(("idxReg=%#x read %#x\n", idxReg, pGicDev->bmIntrConfig[idxReg]));
     return VINF_SUCCESS;
 }
 
@@ -1384,12 +1405,17 @@ static VBOXSTRICTRC gicDistWriteIntrConfigReg(PGICDEV pGicDev, uint16_t idxReg, 
     Assert(pGicDev->fAffRoutingEnabled);
     if (idxReg >= 2)
     {
-        Assert(idxReg < RT_ELEMENTS(pGicDev->bmIntrConfig));
-        pGicDev->bmIntrConfig[idxReg] = uValue & 0xaaaaaaaa;
+        /* Only the lower or higher 16-bits of the 32-bits should be updated, retaining other bits. */
+        Assert(idxReg / 2 < RT_ELEMENTS(pGicDev->bmIntrConfig));
+        static uint32_t const s_afRetainMasks[] = { 0xffff0000, 0x0000ffff };
+        uint8_t const  idxUpdate          = idxReg % 2;
+        uint32_t const fUpdate            = gicPackAltBits(uValue & 0xaaaaaaaa) << (16 * idxUpdate);
+        uint32_t const fRetain            = pGicDev->bmIntrConfig[idxReg / 2] & s_afRetainMasks[idxUpdate];
+        pGicDev->bmIntrConfig[idxReg / 2] = fUpdate | fRetain;
+        LogFlowFunc(("idxReg=%#x written %#x\n", idxReg, pGicDev->bmIntrConfig[idxReg / 2]));
     }
     else
         AssertReleaseMsgFailed(("Unexpected (but not illegal) write to SGI/PPI register in distributor\n"));
-    LogFlowFunc(("idxReg=%#x written %#x\n", idxReg, pGicDev->bmIntrConfig[idxReg]));
     return VINF_SUCCESS;
 }
 
@@ -1694,10 +1720,12 @@ static VBOXSTRICTRC gicReDistReadIntrConfigReg(PCGICDEV pGicDev, PGICCPU pGicCpu
 {
     /* When affinity routing is disabled, reads return 0. */
     Assert(pGicDev->fAffRoutingEnabled); RT_NOREF(pGicDev);
-    Assert(idxReg < RT_ELEMENTS(pGicCpu->bmIntrConfig));
-    *puValue = pGicCpu->bmIntrConfig[idxReg];
+    Assert(idxReg / 2 < RT_ELEMENTS(pGicCpu->bmIntrConfig));
+    uint64_t const bmIntrConfig = gicUnpackAltBits(pGicCpu->bmIntrConfig[idxReg / 2]);
+    *puValue = bmIntrConfig >> (32 * (idxReg % 2));
+
     /* Ensure SGIs are read-only and remain configured as edge-triggered. */
-    Assert(idxReg > 0 || *puValue == 0xaaaaaaaa);
+    AssertMsg(idxReg > 0 || *puValue == 0xaaaaaaaa, ("uValue=%#RX32 Src=%#RX32\\n", *puValue, pGicCpu->bmIntrConfig[idxReg / 2]));
     LogFlowFunc(("idxReg=%#x read %#x\n", idxReg, *puValue));
     return VINF_SUCCESS;
 }
@@ -1719,16 +1747,21 @@ static VBOXSTRICTRC gicReDistWriteIntrConfigReg(PCGICDEV pGicDev, PVMCPUCC pVCpu
     PGICCPU pGicCpu = VMCPU_TO_GICCPU(pVCpu);
     if (idxReg > 0)
     {
-        Assert(idxReg < RT_ELEMENTS(pGicCpu->bmIntrConfig));
-        pGicCpu->bmIntrConfig[idxReg] = uValue & 0xaaaaaaaa;
+        /* Only the lower or higher 16-bits of the 32-bits should be updated, retaining other bits. */
+        Assert(idxReg / 2 < RT_ELEMENTS(pGicCpu->bmIntrConfig));
+        static uint32_t const s_afRetainMasks[] = { 0xffff0000, 0x0000ffff };
+        uint8_t const  idxUpdate          = idxReg % 2;
+        uint32_t const fUpdate            = gicPackAltBits(uValue & 0xaaaaaaaa) << (16 * idxUpdate);
+        uint32_t const fRetain            = pGicCpu->bmIntrConfig[idxReg / 2] & s_afRetainMasks[idxUpdate];
+        pGicCpu->bmIntrConfig[idxReg / 2] = fUpdate | fRetain;
+        LogFlowFunc(("idxReg=%#x written %#x\n", idxReg, pGicCpu->bmIntrConfig[idxReg / 2]));
     }
     else
     {
         /* SGIs are always edge-triggered ignore writes. Windows 11 (24H2) arm64 guests writes these. */
         Assert(uValue == 0xaaaaaaaa);
-        Assert(pGicCpu->bmIntrConfig[0] == uValue);
+        Assert((pGicCpu->bmIntrConfig[0] & UINT32_C(0xffff)) == UINT32_C(0xffff));
     }
-    LogFlowFunc(("idxReg=%#x written %#x\n", idxReg, pGicCpu->bmIntrConfig[idxReg]));
     return VINF_SUCCESS;
 }
 
@@ -1916,8 +1949,8 @@ static uint16_t gicAckHighestPriorityPendingIntr(PGICDEV pGicDev, PVMCPUCC pVCpu
         ASMBitSet(&pGicCpu->bmIntrActive[0], idxIntr);
 
         /* If it is an edge-triggered interrupt, mark it as no longer pending. */
-        AssertRelease(UINT32_C(2) * idxIntr + 1 < sizeof(pGicCpu->bmIntrConfig) * 8);
-        bool const fEdgeTriggered = ASMBitTest(&pGicCpu->bmIntrConfig[0], 2 * idxIntr + 1);
+        AssertMsg(idxIntr < sizeof(pGicCpu->bmIntrConfig) * 8, ("idxIntr=%u\n", idxIntr));
+        bool const fEdgeTriggered = ASMBitTest(&pGicCpu->bmIntrConfig[0], idxIntr);
         if (fEdgeTriggered)
             ASMBitClear(&pGicCpu->bmIntrPending[0], idxIntr);
 
@@ -1965,8 +1998,8 @@ static uint16_t gicAckHighestPriorityPendingIntr(PGICDEV pGicDev, PVMCPUCC pVCpu
         ASMBitSet(&pGicDev->bmIntrActive[0], idxIntr);
 
         /* If it is an edge-triggered interrupt, mark it as no longer pending. */
-        AssertRelease(UINT32_C(2) * idxIntr + 1 < sizeof(pGicDev->bmIntrConfig) * 8);
-        bool const fEdgeTriggered = ASMBitTest(&pGicDev->bmIntrConfig[0], 2 * idxIntr + 1);
+        AssertMsg(idxIntr < sizeof(pGicDev->bmIntrConfig) * 8, ("idxIntr=%u\n", idxIntr));
+        bool const fEdgeTriggered = ASMBitTest(&pGicDev->bmIntrConfig[0], idxIntr);
         if (fEdgeTriggered)
             ASMBitClear(&pGicDev->bmIntrPending[0], idxIntr);
 
@@ -2797,12 +2830,14 @@ static DECLCALLBACK(int) gicSetSpi(PVMCC pVM, uint32_t uSpiIntId, bool fAsserted
     AssertMsgReturn(idxIntr < sizeof(pGicDev->bmIntrPending) * 8,
                     ("out-of-range SPI interrupt ID %RU32 (%RU32)\n", uIntId, uSpiIntId),
                     VERR_INVALID_PARAMETER);
+    AssertCompile(RT_ELEMENTS(pGicCpu->bmIntrConfig) == RT_ELEMENTS(pGicCpu->bmIntrPending));
+    AssertCompile(sizeof(pGicCpu->bmIntrConfig) == sizeof(pGicCpu->bmIntrPending));
     Assert(GIC_IS_INTR_SPI(uIntId) || GIC_IS_INTR_EXT_SPI(uIntId));
 
     GIC_CRIT_SECT_ENTER(pDevIns);
 
     /* For edge-triggered we should probably only update on 0 to 1 transition. */
-    bool const fEdgeTriggered = ASMBitTest(&pGicDev->bmIntrConfig[0], 2 * idxIntr + 1);
+    bool const fEdgeTriggered = ASMBitTest(&pGicDev->bmIntrConfig[0], idxIntr);
     Assert(!fEdgeTriggered); NOREF(fEdgeTriggered);
 
     /* Update the interrupt level state. */
@@ -2839,12 +2874,14 @@ static DECLCALLBACK(int) gicSetPpi(PVMCPUCC pVCpu, uint32_t uPpiIntId, bool fAss
     AssertMsgReturn(idxIntr < sizeof(pGicCpu->bmIntrPending) * 8,
                     ("out-of-range PPI interrupt ID %RU32 (%RU32)\n", uIntId, uPpiIntId),
                     VERR_INVALID_PARAMETER);
+    AssertCompile(RT_ELEMENTS(pGicCpu->bmIntrConfig) == RT_ELEMENTS(pGicCpu->bmIntrPending));
+    AssertCompile(sizeof(pGicCpu->bmIntrConfig) == sizeof(pGicCpu->bmIntrPending));
     Assert(GIC_IS_INTR_PPI(uIntId) || GIC_IS_INTR_EXT_PPI(uIntId));
 
     GIC_CRIT_SECT_ENTER(pDevIns);
 
     /* For edge-triggered we should probably only update on 0 to 1 transition. */
-    bool const fEdgeTriggered = ASMBitTest(&pGicCpu->bmIntrConfig[0], 2 * idxIntr + 1);
+    bool const fEdgeTriggered = ASMBitTest(&pGicCpu->bmIntrConfig[0], idxIntr);
     Assert(!fEdgeTriggered); NOREF(fEdgeTriggered);
 
     /* Update the interrupt level state. */
@@ -3332,7 +3369,7 @@ static void gicInitCpu(PPDMDEVINS pDevIns, PVMCPUCC pVCpu)
     RT_ZERO(pGicCpu->bmIntrGroup);
     RT_ZERO(pGicCpu->bmIntrConfig);
     /* SGIs are always edge-triggered, writes to GICR_ICFGR0 are to be ignored. */
-    pGicCpu->bmIntrConfig[0] = 0xaaaaaaaa;
+    pGicCpu->bmIntrConfig[0] = 0xffff;
     RT_ZERO(pGicCpu->bmIntrEnabled);
     RT_ZERO(pGicCpu->bmIntrPending);
     RT_ZERO(pGicCpu->bmIntrActive);
