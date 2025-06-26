@@ -73,7 +73,7 @@ Rules for adding a changelog entry to make them look more uniform:
                            So, we use chapter and xpointer="xpointer(/chapter/)" with xi:include. -->
   <sect1>
 
-    <title>Version X.Y.Z (date tbd)</title>
+    <title>Version 7.2.0_BETA2 (date tbd)</title>
 
     <para>This is a maintenance release. The following items were fixed and/or
       added:</para>
@@ -81,15 +81,119 @@ Rules for adding a changelog entry to make them look more uniform:
     <itemizedlist>
 
       <listitem>
-        <para></para>
+        <para>VMM: Improved x86_64 and Arm CPU feature reporting when using
+          Windows Hyper-V as the virtualization engine</para>
+      </listitem>
+
+      <listitem>
+        <para>VMM: Added xsave/xrestor instruction handling when using
+          Windows/x86_64 Hyper-V as the virtualization engine, offering the
+          x86_64-v3 instruction set extensions (including AVX and AVX2) on
+          recent CPUs</para>
+      </listitem>
+
+      <listitem>
+        <para>VMM/HM: Fixed Nested Virtualization feature on Intel CPUs</para>
+      </listitem>
+
+      <listitem>
+        <para>GUI: Polished Preferences and Settings pages, NLS fixing</para>
+      </listitem>
+
+      <listitem>
+        <para>GUI: Improved handling of keyboard LEDs in the Soft Keyboard</para>
+      </listitem>
+
+      <listitem>
+        <para>GUI: Removed IO-APIC from Arm VM settings</para>
+      </listitem>
+
+      <listitem>
+        <para>Graphics: Avoid assertion when guest tries to use VMSVGA 3D
+          functions when the feature is disabled</para>
+      </listitem>
+
+      <listitem>
+        <para>VBoxManage: Document currently unavailable NAT options</para>
+      </listitem>
+
+      <listitem>
+        <para>NAT: Multiple fixes and improvements, for example better DNS
+          server handling, saving of the VM settings and genertating a
+          boot file name which stays within the length limit</para>
+      </listitem>
+
+      <listitem>
+        <para>NAT Network: Use the (almost) same code as for NAT, unifying
+          behavior and features</para>
+      </listitem>
+
+      <listitem>
+        <para>TPM: Fixed save state load failures</para>
+      </listitem>
+
+      <listitem>
+        <para>Storage: Fixed corruption of VMDK images when resizing</para>
+      </listitem>
+
+      <listitem>
+        <para>Video Recording: Fixed frame synchronization, a small memory leak
+          and other bugs</para>
+      </listitem>
+
+      <listitem>
+        <para>Linux host and guest: Initial support for kernel version 6.16</para>
+      </listitem>
+
+      <listitem>
+        <para>Linux/Solaris host: Fixed swapped scan code for Pause and Num Lock
+          keys in the table used when relying on Xkb for translation</para>
+      </listitem>
+
+      <listitem>
+        <para>Linux guest: Fixed handling of (long optional) vboxvideo kernel
+          module in init script</para>
+      </listitem>
+
+      <listitem>
+        <para>Linux guest: Fixed start failure of VBoxClient with kernel from
+          the 2.6 series or older</para>
+      </listitem>
+
+      <listitem>
+        <para>Windows host: Removed release assertion causing crash of VBoxUsbMon
+          driver if unloading fails</para>
+      </listitem>
+
+      <listitem>
+        <para>Windows/Arm guest: Added WDDM Graphics driver, so far tested in 2D
+          mode only</para>
+      </listitem>
+
+      <listitem>
+        <para>Windows/Arm guest: Added Shared Folder feature</para>
+      </listitem>
+
+      <listitem>
+        <para>UEFI: Added workaround for Grub bug causing guest OS crashes</para>
+      </listitem>
+
+      <listitem>
+        <para>BIOS: Fixed keyboard translation, added and updated several entries
+          and do not report keypresses when scan code and ASCII code are both zero</para>
+      </listitem>
+
+      <listitem>
+        <para>BIOS: Fixed error reporting fo single sided floppy disks</para>
       </listitem>
 
     </itemizedlist>
+
   </sect1>
 
   <sect1>
 
-    <title>Version 7.2.0 (2025-05-27)</title>
+    <title>Version 7.2.0_BETA1 (2025-05-27)</title>
 
     <para>This is a major update. The following new features were added:</para>
 
@@ -147,6 +251,7 @@ Rules for adding a changelog entry to make them look more uniform:
       </listitem>
 
     </itemizedlist>
+
   </sect1>
 
 </chapter>
