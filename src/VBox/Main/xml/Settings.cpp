@@ -2972,7 +2972,7 @@ RecordingScreen::~RecordingScreen()
 const char *RecordingScreen::getDefaultOptions(void)
 {
     /* Note: Needs to be kept in sync with FE/Qt's UIMachineSettingsDisplay::putToCache()! */
-    return "vc_enabled=true,ac_enabled=false,ac_profile=med";
+    return "ac_profile=med";
 }
 
 /**
