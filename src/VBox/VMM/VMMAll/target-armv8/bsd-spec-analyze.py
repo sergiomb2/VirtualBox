@@ -49,9 +49,19 @@ import traceback;
 import cProfile;
 import pstats
 
-# Our imports (a bit brute force):
-from ArmAst import *;     # pylint: disable=wildcard-import,unused-wildcard-import
-from ArmBsdSpec import *; # pylint: disable=wildcard-import,unused-wildcard-import
+# Our imports:
+from ArmAst import ArmAstBinaryOp
+from ArmAst import ArmAstUnaryOp
+from ArmAst import ArmAstDotAtom
+from ArmAst import ArmAstFunction
+from ArmAst import ArmAstIdentifier
+from ArmAst import ArmAstBool
+from ArmAst import ArmAstInteger
+from ArmAst import ArmAstValue
+from ArmAst import ArmAstField
+from ArmAst import ArmAstReturn
+from ArmAst import ArmAstIfList
+from ArmAst import ArmAstCppExpr
 import ArmBsdSpec as spec;
 
 
@@ -1147,7 +1157,8 @@ class IEMArmGenerator(object):
 
         # Organize this by instruction set, groups and instructions.
         sPrevCategory = '';
-        for oInstr in sorted(spec.g_dArmInstructionSets[sInstrSet].aoAllInstructions, key = ArmInstruction.getSetAndGroupNames):
+        for oInstr in sorted(spec.g_dArmInstructionSets[sInstrSet].aoAllInstructions,
+                             key = spec.ArmInstruction.getSetAndGroupNames):
             # New group/category?
             sCategory = ' / '.join(oInstr.getSetAndGroupNames(),);
             if sCategory != sPrevCategory:
@@ -1571,7 +1582,7 @@ class IEMArmGenerator(object):
         """ Generates the decoder header file. """
         _ = iPartNo;
 
-        asLines = self.generateLicenseHeader(g_oArmInstructionVerInfo);
+        asLines = self.generateLicenseHeader(spec.g_oArmInstructionVerInfo);
         sBlockerName = re.sub('[.-]', '_', os.path.basename(sFilename));
         asLines += [
             '#ifndef VMM_INCLUDED_SRC_VMMAll_target_armv8_%s' % (sBlockerName,),
@@ -1925,9 +1936,9 @@ class IEMArmGenerator(object):
         for oReg in spec.g_daoAllArmRegistersByState[sState]: # type: ArmRegister
             assert oReg.sState == sState;
             for oAccessor in oReg.aoAccessors:  # type: ArmAccessorBase
-                if isinstance(oAccessor, ArmAccessorSystem) and oAccessor.sName in dAccessors:
+                if isinstance(oAccessor, spec.ArmAccessorSystem) and oAccessor.sName in dAccessors:
                     sEncSortKey = 'encoding=%s' % (oAccessor.oEncoding.dNamedValues,);
-                    if (    not isinstance(oAccessor, ArmAccessorSystemArray)
+                    if (    not isinstance(oAccessor, spec.ArmAccessorSystemArray)
                         and not oAccessor.oEncoding.fHasWildcard
                         and not oAccessor.oEncoding.fHasIndex
                         and oAccessor.sName in ('A64.MRS', 'A64.MSRregister')):
@@ -2062,7 +2073,7 @@ class IEMArmGenerator(object):
                                         % (sName, sNamespace, sVar, oField.aoRanges,));
                     iFirstBit  = oField.aoRanges[0].iFirstBit;
                     cBitsWidth = oField.aoRanges[0].cBitsWidth;
-                    if oField.oParent and isinstance(oField.oParent, ArmFieldsConditionalField): # Relative to parent range.
+                    if oField.oParent and isinstance(oField.oParent, spec.ArmFieldsConditionalField): # Relative to parent range.
                         if len(oField.oParent.aoRanges) != 1:
                             raise Exception('TODO: Using complicated conditional field %s in register %s.%s: %s'
                                             % (sName, sNamespace, sVar, oField.oParent.aoRanges,));
@@ -2399,21 +2410,21 @@ Then add @hints.rsp to the command line to make use of them.''');
         # Load the specification.
         #
         if oOptions.sTarFile:
-            fRc = LoadArmOpenSourceSpecificationFromTar(oOptions.sTarFile, oOptions.sFileInstructions,
-                                                        oOptions.sFileFeatures, oOptions.sFileRegisters);
+            fRc = spec.LoadArmOpenSourceSpecificationFromTar(oOptions.sTarFile, oOptions.sFileInstructions,
+                                                             oOptions.sFileFeatures, oOptions.sFileRegisters);
         elif oOptions.sSpecDir:
-            fRc = LoadArmOpenSourceSpecificationFromDir(oOptions.sSpecDir, oOptions.sFileInstructions,
-                                                        oOptions.sFileFeatures, oOptions.sFileRegisters);
+            fRc = spec.LoadArmOpenSourceSpecificationFromDir(oOptions.sSpecDir, oOptions.sFileInstructions,
+                                                             oOptions.sFileFeatures, oOptions.sFileRegisters);
         else:
-            fRc = LoadArmOpenSourceSpecificationFromFiles(oOptions.sFileInstructions, oOptions.sFileFeatures,
-                                                          oOptions.sFileRegisters);
+            fRc = spec.LoadArmOpenSourceSpecificationFromFiles(oOptions.sFileInstructions, oOptions.sFileFeatures,
+                                                               oOptions.sFileRegisters);
         if fRc:
-            PrintSpecs(fPrintInstructions               = oOptions.fPrintInstructions,
-                       fPrintInstructionsWithEncoding   = oOptions.fPrintInstructionsWithEncoding,
-                       fPrintInstructionsWithConditions = oOptions.fPrintInstructionsWithConditions,
-                       fPrintFixedMaskStats             = oOptions.fPrintFixedMaskStats,
-                       fPrintFixedMaskTop10             = oOptions.fPrintFixedMaskTop10,
-                       fPrintSysRegs                    = oOptions.fPrintSysRegs);
+            spec.PrintSpecs(fPrintInstructions               = oOptions.fPrintInstructions,
+                            fPrintInstructionsWithEncoding   = oOptions.fPrintInstructionsWithEncoding,
+                            fPrintInstructionsWithConditions = oOptions.fPrintInstructionsWithConditions,
+                            fPrintFixedMaskStats             = oOptions.fPrintFixedMaskStats,
+                            fPrintFixedMaskTop10             = oOptions.fPrintFixedMaskTop10,
+                            fPrintSysRegs                    = oOptions.fPrintSysRegs);
 
             #
             # Check if we're generating any output before constructing the decoder.

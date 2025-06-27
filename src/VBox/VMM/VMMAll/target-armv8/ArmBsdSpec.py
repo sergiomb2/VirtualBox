@@ -44,7 +44,19 @@ import tarfile;
 import time;
 
 # AST imports:
-from ArmAst import *; # pylint: disable=wildcard-import,unused-wildcard-import
+from ArmAst import assertJsonAttribsInSet
+from ArmAst import ArmAstBase
+from ArmAst import ArmAstBinaryOp
+from ArmAst import ArmAstDotAtom
+from ArmAst import ArmAstConcat
+from ArmAst import ArmAstFunction
+from ArmAst import ArmAstIdentifier
+from ArmAst import ArmAstBool
+from ArmAst import ArmAstInteger
+from ArmAst import ArmAstSet
+from ArmAst import ArmAstValue
+from ArmAst import ArmAstField
+from ArmAst import ArmAstIfList
 
 
 #
