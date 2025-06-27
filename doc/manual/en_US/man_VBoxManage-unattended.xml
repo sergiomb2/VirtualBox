@@ -58,7 +58,6 @@
         <arg choice="plain"><replaceable>vmname</replaceable></arg>
       </group>
       <arg choice="req">--iso=<replaceable>install-iso</replaceable></arg>
-      <arg>--iso=<replaceable>install-iso</replaceable></arg>
       <arg>--user=<replaceable>login</replaceable></arg>
       <arg>--user-password=<replaceable>password</replaceable></arg>
       <arg>--user-password-file=<replaceable>file</replaceable></arg>
