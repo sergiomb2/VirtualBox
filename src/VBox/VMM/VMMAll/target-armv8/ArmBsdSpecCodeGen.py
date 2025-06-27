@@ -43,10 +43,6 @@ import os;
 import re;
 import sys;
 import time;
-import traceback;
-# profiling:
-import cProfile;
-import pstats
 
 # Our imports:
 from ArmAst import ArmAstBinaryOp
@@ -62,6 +58,10 @@ from ArmAst import ArmAstReturn
 from ArmAst import ArmAstIfList
 from ArmAst import ArmAstCppExpr
 import ArmBsdSpec as spec;
+
+# Imports from the parent directory.
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))));
+import PyCommonVmm as pycmn;
 
 
 ## Program start time for logging.
@@ -2474,71 +2474,6 @@ Then add @hints.rsp to the command line to make use of them.''');
 
         return 1;
 
-def printException(oXcpt):
-    print('----- Exception Caught! -----', flush = True);
-    cMaxLines = 1;
-    try:    cchMaxLen = os.get_terminal_size()[0] * cMaxLines;
-    except: cchMaxLen = 80 * cMaxLines;
-    cchMaxLen -= len('     =  ...');
-
-    oTB = traceback.TracebackException.from_exception(oXcpt, limit = None, capture_locals = True);
-    # No locals for the outer frame.
-    oTB.stack[0].locals = {};
-    # Suppress insanely long variable values.
-    for oFrameSummary in oTB.stack:
-        if oFrameSummary.locals:
-            #for sToDelete in ['ddAsmRules', 'aoInstructions',]:
-            #    if sToDelete in oFrameSummary.locals:
-            #        del oFrameSummary.locals[sToDelete];
-            for sKey, sValue in oFrameSummary.locals.items():
-                if len(sValue) > cchMaxLen - len(sKey):
-                    sValue = sValue[:cchMaxLen - len(sKey)] + ' ...';
-                if '\n' in sValue:
-                    sValue = sValue.split('\n')[0] + ' ...';
-                oFrameSummary.locals[sKey] = sValue;
-    idxFrame = 0;
-    asFormatted = [];
-    oReFirstFrameLine = re.compile(r'^  File ".*", line \d+, in ')
-    for sLine in oTB.format():
-        if oReFirstFrameLine.match(sLine):
-            idxFrame += 1;
-        asFormatted.append(sLine);
-    for sLine in asFormatted:
-        if oReFirstFrameLine.match(sLine):
-            idxFrame -= 1;
-            sLine = '#%u %s' % (idxFrame, sLine.lstrip());
-        print(sLine);
-    print('----', flush = True);
-
-
 if __name__ == '__main__':
-    g_fProfileIt = 'VBOX_PROFILE_PYTHON' in os.environ;
-    g_oProfiler = cProfile.Profile() if g_fProfileIt else None;
-    try:
-        if not g_oProfiler:
-            g_iRcExit = IEMArmGenerator().main(sys.argv);
-        else:
-            g_iRcExit = g_oProfiler.runcall(IEMArmGenerator().main, sys.argv);
-    except Exception as oXcptOuter:
-        printException(oXcptOuter);
-        g_iRcExit = 2;
-    except KeyboardInterrupt as oXcptOuter:
-        printException(oXcptOuter);
-        g_iRcExit = 2;
-    if g_oProfiler:
-        g_sProfileSort = 'tottime'; g_iSortColumn = 1;
-        #g_sProfileSort = 'cumtime'; g_iSortColumn = 3;
-        if not g_oProfiler:
-            g_oProfiler.print_stats(sort = g_sProfileSort);
-        else:
-            oStringStream = io.StringIO();
-            pstats.Stats(g_oProfiler, stream = oStringStream).strip_dirs().sort_stats(g_sProfileSort).print_stats(64);
-            for iStatLine, sStatLine in enumerate(oStringStream.getvalue().split('\n')):
-                if iStatLine > 20:
-                    asStatWords = sStatLine.split();
-                    if (    len(asStatWords) > g_iSortColumn
-                        and asStatWords[g_iSortColumn] in { '0.000', '0.001', '0.002', '0.003', '0.004', '0.005' }):
-                        break;
-                print(sStatLine);
-    sys.exit(g_iRcExit);
+    sys.exit(pycmn.mainWrapperCatchXcptAndDoProfiling(IEMArmGenerator().main));
 
