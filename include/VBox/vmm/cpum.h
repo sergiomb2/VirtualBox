@@ -985,6 +985,11 @@ typedef struct CPUMFEATURESARMV8
     /** Supports AArch32 in EL3 (FEAT_AA32EL3). */
     uint32_t        fAa32El3 : 1;
 
+    /** Supports EL2 (FEAT_EL2). */
+    uint32_t        fEl2 : 1;
+    /** Supports EL3 (FEAT_EL3). */
+    uint32_t        fEl3 : 1;
+
     /** @name Granule sizes supported.
      * @{ */
     /** 4KiB stage 1 translation granule size supported (FEAT_TGran4K). */

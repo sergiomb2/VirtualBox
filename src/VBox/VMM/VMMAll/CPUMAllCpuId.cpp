@@ -2563,6 +2563,12 @@ static int cpumCpuIdExplodeFeaturesArmV8Handcoded(PCSUPARMSYSREGVAL paSysRegs, u
         pFeatures->cWatchpoints = 0;
     }
 
+    /*
+     * Set the EL2 and EL3 support indicators (EL0 & EL1 are mandatory).
+     */
+    pFeatures->fEl2 = pFeatures->fAa64El2 | pFeatures->fAa32El2;
+    pFeatures->fEl3 = pFeatures->fAa64El3 | pFeatures->fAa32El3;
+
     return rc;
 }
 
