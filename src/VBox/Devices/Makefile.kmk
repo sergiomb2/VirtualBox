@@ -351,6 +351,7 @@ if !defined(VBOX_ONLY_EXTPACKS) && "$(intersects $(KBUILD_TARGET_ARCH),$(VBOX_SU
   	Graphics/DevVGA-SVGA3d-savedstate.cpp
   ifdef VBOX_WITH_VMSVGA3D_DX
    VBoxDD_DEFS          += VMSVGA3D_DX
+   VBoxDD_DEFS          += $(if $(VBOX_WITH_DXVK),VBOX_WITH_DXVK,)
    VBoxDD_SOURCES       += \
    	Graphics/DevVGA-SVGA3d-dx.cpp \
    	Graphics/DevVGA-SVGA3d-dx-savedstate.cpp \
@@ -358,6 +359,8 @@ if !defined(VBOX_ONLY_EXTPACKS) && "$(intersects $(KBUILD_TARGET_ARCH),$(VBOX_SU
    if "$(KBUILD_TARGET)" == "win" || defined(VBOX_WITH_DXVK)
     VBoxDD_SDKS.linux   += VBoxDxVk
     VBoxDD_SDKS.darwin  += VBoxDxVk
+    # DXVK is not used on Windows however VBOX_WITH_DXVK can be enabled for development purposes
+    VBoxDD_SDKS.win     += $(if $(VBOX_WITH_DXVK),VBoxDxVk,)
     VBoxDD_DEFS         += VMSVGA3D_DX_BACKEND
     VBoxDD_SOURCES      += \
     	Graphics/DevVGA-SVGA3d-dx-dx11.cpp

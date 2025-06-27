@@ -65,12 +65,6 @@
 #endif
 
 
-#ifdef RT_OS_WINDOWS
-# define VBOX_D3D11_LIBRARY_NAME "d3d11"
-#else
-# define VBOX_D3D11_LIBRARY_NAME "VBoxDxVk"
-#endif
-
 /* One ID3D11Device object is used for all VMSVGA guest contexts because the VGPU design makes resources
  * independent from rendering contexts. I.e. multiple guest contexts freely access a surface.
  *
@@ -392,6 +386,26 @@ static void dxDestroyVideoDecoder(DXVIDEODECODER *pDXVideoDecoder);
 
 static HRESULT BlitInit(D3D11BLITTER *pBlitter, ID3D11Device1 *pDevice, ID3D11DeviceContext1 *pImmediateContext);
 static void BlitRelease(D3D11BLITTER *pBlitter);
+
+
+static int dxLoadD3D11Library(RTLDRMOD *phD3D11)
+{
+#if defined(VBOX_WITH_DXVK)
+    RTERRINFOSTATIC ErrInfo;
+    int rc = SUPR3HardenedLdrLoadAppPriv("VBoxDxVk", phD3D11, RTLDRLOAD_FLAGS_LOCAL, RTErrInfoInitStatic(&ErrInfo));
+    if (RT_FAILURE(rc))
+    {
+        LogRel(("VMSVGA: Failed to load dxvk: %Rrc\n", rc));
+        if (RTErrInfoIsSet(&ErrInfo.Core))
+            LogRel(("VMSVGA: %#RTeic\n", &ErrInfo.Core));
+    }
+    return rc;
+#elif defined(RT_OS_WINDOWS)
+    return RTLdrLoadSystem("d3d11", /* fNoUnload = */ true, phD3D11);
+#else
+# error "No D3D11 library"
+#endif
+}
 
 
 /* This is not available with the DXVK headers for some reason. */
@@ -3376,7 +3390,7 @@ static DECLCALLBACK(int) vmsvga3dBackInit(PPDMDEVINS pDevIns, PVGASTATE pThis, P
     AssertReturn(pBackend, VERR_NO_MEMORY);
     pThisCC->svga.p3dState->pBackend = pBackend;
 
-    rc = RTLdrLoadSystem(VBOX_D3D11_LIBRARY_NAME, /* fNoUnload = */ true, &pBackend->hD3D11);
+    rc = dxLoadD3D11Library(&pBackend->hD3D11);
     AssertRC(rc);
     if (RT_SUCCESS(rc))
     {
@@ -3384,6 +3398,7 @@ static DECLCALLBACK(int) vmsvga3dBackInit(PPDMDEVINS pDevIns, PVGASTATE pThis, P
         AssertRC(rc);
     }
 
+#ifdef RT_OS_WINDOWS
     if (RT_SUCCESS(rc))
     {
         /* Failure to load the shader disassembler is ignored. */
@@ -3392,6 +3407,7 @@ static DECLCALLBACK(int) vmsvga3dBackInit(PPDMDEVINS pDevIns, PVGASTATE pThis, P
             rc2 = RTLdrGetSymbol(pBackend->hD3DCompiler, "D3DDisassemble", (void **)&pBackend->pfnD3DDisassemble);
         Log6Func(("Load D3DDisassemble: %Rrc\n", rc2));
     }
+#endif
 
     vmsvga3dDXInitContextMobData(&pBackend->svgaDXContext);
 //DEBUG_BREAKPOINT_TEST();
