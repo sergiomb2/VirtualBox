@@ -4,7 +4,7 @@
 # pylint: disable=invalid-name,too-many-lines
 
 """
-ARM BSD specification analyser.
+ARM BSD / OpenSource specification reader - AST related bits.
 """
 
 from __future__ import print_function;
