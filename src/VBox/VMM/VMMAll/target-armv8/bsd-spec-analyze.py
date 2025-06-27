@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # $Id$
-# pylint: disable=invalid-name,too-many-lines
+# pylint: disable=invalid-name
 
 """
 ARM BSD / OpenSource specification code generator.
@@ -2331,7 +2331,7 @@ Then add @hints.rsp to the command line to make use of them.''');
                                 default = False,
                                 help    = 'List the instructions after loading.');
         oArgParser.add_argument('--print-instructions-with-conditions',
-                                dest    = 'fPrintInstructionsWithConditions',
+                                dest    = 'fPrintInstructionsWithConds',
                                 action  = 'store_true',
                                 default = False,
                                 help    = 'List the instructions and conditions after loading.');
@@ -2410,18 +2410,18 @@ Then add @hints.rsp to the command line to make use of them.''');
         # Load the specification.
         #
         if oOptions.sTarFile:
-            fRc = spec.LoadArmOpenSourceSpecificationFromTar(oOptions.sTarFile, oOptions.sFileInstructions,
+            fRc = spec.loadArmOpenSourceSpecificationFromTar(oOptions.sTarFile, oOptions.sFileInstructions,
                                                              oOptions.sFileFeatures, oOptions.sFileRegisters);
         elif oOptions.sSpecDir:
-            fRc = spec.LoadArmOpenSourceSpecificationFromDir(oOptions.sSpecDir, oOptions.sFileInstructions,
+            fRc = spec.loadArmOpenSourceSpecificationFromDir(oOptions.sSpecDir, oOptions.sFileInstructions,
                                                              oOptions.sFileFeatures, oOptions.sFileRegisters);
         else:
-            fRc = spec.LoadArmOpenSourceSpecificationFromFiles(oOptions.sFileInstructions, oOptions.sFileFeatures,
+            fRc = spec.loadArmOpenSourceSpecificationFromFiles(oOptions.sFileInstructions, oOptions.sFileFeatures,
                                                                oOptions.sFileRegisters);
         if fRc:
-            spec.PrintSpecs(fPrintInstructions               = oOptions.fPrintInstructions,
+            spec.printSpecs(fPrintInstructions               = oOptions.fPrintInstructions,
                             fPrintInstructionsWithEncoding   = oOptions.fPrintInstructionsWithEncoding,
-                            fPrintInstructionsWithConditions = oOptions.fPrintInstructionsWithConditions,
+                            fPrintInstructionsWithConds      = oOptions.fPrintInstructionsWithConds,
                             fPrintFixedMaskStats             = oOptions.fPrintFixedMaskStats,
                             fPrintFixedMaskTop10             = oOptions.fPrintFixedMaskTop10,
                             fPrintSysRegs                    = oOptions.fPrintSysRegs);

@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # $Id$
-# pylint: disable=invalid-name,too-many-lines
 
 """
 ARM BSD / OpenSource specification reader - AST related bits.
@@ -89,177 +88,177 @@ class ArmAstBase(object):
     def __init__(self, sType):
         self.sType = sType;
 
-    kAttribSetBinaryOp = frozenset(['_type', 'left', 'op', 'right']);
+    khAttribSetBinaryOp = frozenset(['_type', 'left', 'op', 'right']);
     @staticmethod
     def fromJsonBinaryOp(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetBinaryOp);
+        assertJsonAttribsInSet(oJson, ArmAstBase.khAttribSetBinaryOp);
         return ArmAstBinaryOp(ArmAstBase.fromJson(oJson['left'], sMode),
                               oJson['op'],
                               ArmAstBase.fromJson(oJson['right'], sMode),
                               sMode == ArmAstBase.ksModeConstraints);
 
-    kAttribSetUnaryOp = frozenset(['_type', 'op', 'expr']);
+    khAttribSetUnaryOp = frozenset(['_type', 'op', 'expr']);
     @staticmethod
     def fromJsonUnaryOp(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetUnaryOp);
+        assertJsonAttribsInSet(oJson, ArmAstBase.khAttribSetUnaryOp);
         return ArmAstUnaryOp(oJson['op'], ArmAstBase.fromJson(oJson['expr'], sMode));
 
-    kAttribSetSlice = frozenset(['_type', 'left', 'right']);
+    khAttribSetSlice = frozenset(['_type', 'left', 'right']);
     @staticmethod
     def fromJsonSlice(oJson, sMode):
         assert sMode in (ArmAstBase.ksModeAccessor, ArmAstBase.ksModeAccessorCond);
-        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetSlice);
+        assertJsonAttribsInSet(oJson, ArmAstBase.khAttribSetSlice);
         return ArmAstSlice(ArmAstBase.fromJson(oJson['left'], sMode), ArmAstBase.fromJson(oJson['right'], sMode));
 
-    kAttribSetSquareOp = frozenset(['_type', 'var', 'arguments']);
+    khAttribSetSquareOp = frozenset(['_type', 'var', 'arguments']);
     @staticmethod
     def fromJsonSquareOp(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetSquareOp);
+        assertJsonAttribsInSet(oJson, ArmAstBase.khAttribSetSquareOp);
         return ArmAstSquareOp(ArmAstBase.fromJson(oJson['var'], sMode),
                               [ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['arguments']]);
 
-    kAttribSetTuple = frozenset(['_type', 'values']);
+    khAttribSetTuple = frozenset(['_type', 'values']);
     @staticmethod
     def fromJsonTuple(oJson, sMode):
         assert sMode == ArmAstBase.ksModeAccessor;
-        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetTuple);
+        assertJsonAttribsInSet(oJson, ArmAstBase.khAttribSetTuple);
         return ArmAstTuple([ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['values']]);
 
-    kAttribSetDotAtom = frozenset(['_type', 'values']);
+    khAttribSetDotAtom = frozenset(['_type', 'values']);
     @staticmethod
     def fromJsonDotAtom(oJson, sMode):
         assert sMode in (ArmAstBase.ksModeConstraints, ArmAstBase.ksModeAccessor, ArmAstBase.ksModeAccessorCond);
-        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetDotAtom);
+        assertJsonAttribsInSet(oJson, ArmAstBase.khAttribSetDotAtom);
         return ArmAstDotAtom([ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['values']]);
 
-    kAttribSetConcat = frozenset(['_type', 'values']);
+    khAttribSetConcat = frozenset(['_type', 'values']);
     @staticmethod
     def fromJsonConcat(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetConcat);
+        assertJsonAttribsInSet(oJson, ArmAstBase.khAttribSetConcat);
         return ArmAstConcat([ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['values']]);
 
-    kAttribSetFunction = frozenset(['_type', 'name', 'arguments']);
+    khAttribSetFunction = frozenset(['_type', 'name', 'arguments']);
     @staticmethod
     def fromJsonFunction(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetFunction);
+        assertJsonAttribsInSet(oJson, ArmAstBase.khAttribSetFunction);
         return ArmAstFunction(oJson['name'], [ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['arguments']]);
 
-    kAttribSetIdentifier = frozenset(['_type', 'value']);
+    khAttribSetIdentifier = frozenset(['_type', 'value']);
     @staticmethod
     def fromJsonIdentifier(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetIdentifier);
+        assertJsonAttribsInSet(oJson, ArmAstBase.khAttribSetIdentifier);
         return ArmAstIdentifier(oJson['value'], sMode == ArmAstBase.ksModeConstraints);
 
-    kAttribSetBool = frozenset(['_type', 'value']);
+    khAttribSetBool = frozenset(['_type', 'value']);
     @staticmethod
     def fromJsonBool(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetBool);
+        assertJsonAttribsInSet(oJson, ArmAstBase.khAttribSetBool);
         return ArmAstBool(oJson['value']);
 
-    kAttribSetInteger = frozenset(['_type', 'value']);
+    khAttribSetInteger = frozenset(['_type', 'value']);
     @staticmethod
     def fromJsonInteger(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetInteger);
+        assertJsonAttribsInSet(oJson, ArmAstBase.khAttribSetInteger);
         return ArmAstInteger(oJson['value']);
 
-    kAttribSetSet = frozenset(['_type', 'values']);
+    khAttribSetSet = frozenset(['_type', 'values']);
     @staticmethod
     def fromJsonSet(oJson, sMode):
         assert sMode != ArmAstBase.ksModeValuesOnly;
-        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetSet);
+        assertJsonAttribsInSet(oJson, ArmAstBase.khAttribSetSet);
         return ArmAstSet([ArmAstBase.fromJson(oArg, sMode) for oArg in oJson['values']]);
 
-    kAttribSetValue = frozenset(['_type', 'value', 'meaning']);
+    khAttribSetValue = frozenset(['_type', 'value', 'meaning']);
     @staticmethod
     def fromJsonValue(oJson, sMode):
         _ = sMode;
-        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetValue);
+        assertJsonAttribsInSet(oJson, ArmAstBase.khAttribSetValue);
         return ArmAstValue(oJson['value']);
 
-    kAttribSetEquationValue      = frozenset(['_type', 'value', 'meaning', 'slice']);
-    kAttribSetEquationValueRange = frozenset(['_type', 'start', 'width']);
+    khAttribSetEquationValue      = frozenset(['_type', 'value', 'meaning', 'slice']);
+    khAttribSetEquationValueRange = frozenset(['_type', 'start', 'width']);
     @staticmethod
     def fromJsonEquationValue(dJson, sMode):
         assert sMode == ArmAstBase.ksModeValuesOnly;
-        assertJsonAttribsInSet(dJson, ArmAstBase.kAttribSetEquationValue);
+        assertJsonAttribsInSet(dJson, ArmAstBase.khAttribSetEquationValue);
         assert len(dJson['slice']) == 1;
         dSlice = dJson['slice'][0];
         assert dSlice['_type'] == 'Range';
-        assertJsonAttribsInSet(dSlice, ArmAstBase.kAttribSetEquationValueRange);
+        assertJsonAttribsInSet(dSlice, ArmAstBase.khAttribSetEquationValueRange);
         return ArmAstEquationValue(dJson['value'], int(dSlice['start']), int(dSlice['width']));
 
-    kAttribSetValuesGroup = frozenset(['_type', 'value', 'meaning', 'values']);
+    khAttribSetValuesGroup = frozenset(['_type', 'value', 'meaning', 'values']);
     @staticmethod
     def fromJsonValuesGroup(dJson, sMode):
         assert sMode == ArmAstBase.ksModeValuesOnly;
-        assertJsonAttribsInSet(dJson, ArmAstBase.kAttribSetValuesGroup);
+        assertJsonAttribsInSet(dJson, ArmAstBase.khAttribSetValuesGroup);
         assert dJson['values']['_type'] == 'Valuesets.Values';
         assert len(dJson['values']['values']) == 0;
         return ArmAstValuesGroup(dJson['value']);
 
-    kAttribSetField = frozenset(['_type', 'value']);
+    khAttribSetField = frozenset(['_type', 'value']);
     @staticmethod
     def fromJsonString(oJson, sMode):
         assert sMode in (ArmAstBase.ksModeConstraints, # Seen in register as 'input' to ImpDefBool.
                          ArmAstBase.ksModeAccessorCond);
-        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetField);
+        assertJsonAttribsInSet(oJson, ArmAstBase.khAttribSetField);
         return ArmAstString(oJson['value']);
 
-    kAttribSetField = frozenset(['_type', 'value']);
-    kAttribSetFieldValue = frozenset(['field', 'name', 'state', 'instance', 'slices']);
+    khAttribSetField = frozenset(['_type', 'value']);
+    khAttribSetFieldValue = frozenset(['field', 'name', 'state', 'instance', 'slices']);
     @staticmethod
     def fromJsonField(oJson, sMode):
         assert sMode in (ArmAstBase.ksModeConstraints, ArmAstBase.ksModeAccessor, ArmAstBase.ksModeAccessorCond);
-        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetField);
+        assertJsonAttribsInSet(oJson, ArmAstBase.khAttribSetField);
         dJsonValue = oJson['value'];
-        assertJsonAttribsInSet(dJsonValue, ArmAstBase.kAttribSetFieldValue);
+        assertJsonAttribsInSet(dJsonValue, ArmAstBase.khAttribSetFieldValue);
         return ArmAstField(dJsonValue['field'], dJsonValue['name'], dJsonValue['state'],
                            dJsonValue['slices'], dJsonValue['instance']);
 
-    kAttribSetRegisterType = frozenset(['_type', 'value']);
-    kAttribSetRegisterTypeValue = frozenset(['name', 'state', 'instance', 'slices']);
+    khAttribSetRegisterType = frozenset(['_type', 'value']);
+    khAttribSetRegisterTypeValue = frozenset(['name', 'state', 'instance', 'slices']);
     @staticmethod
     def fromJsonRegisterType(oJson, sMode):
         assert sMode in (ArmAstBase.ksModeConstraints, ArmAstBase.ksModeAccessorCond);
-        assertJsonAttribsInSet(oJson, ArmAstBase.kAttribSetRegisterType);
+        assertJsonAttribsInSet(oJson, ArmAstBase.khAttribSetRegisterType);
         dJsonValue = oJson['value'];
-        assertJsonAttribsInSet(dJsonValue, ArmAstBase.kAttribSetRegisterTypeValue);
+        assertJsonAttribsInSet(dJsonValue, ArmAstBase.khAttribSetRegisterTypeValue);
         return ArmAstRegisterType(dJsonValue['name'], dJsonValue['state'], dJsonValue['slices'], dJsonValue['instance']);
 
-    kAttribSetType = frozenset(['_type', 'name']);
+    khAttribSetType = frozenset(['_type', 'name']);
     @staticmethod
     def fromJsonType(dJson, sMode):
         assert sMode == ArmAstBase.ksModeAccessor;
-        assertJsonAttribsInSet(dJson, ArmAstBase.kAttribSetType);
+        assertJsonAttribsInSet(dJson, ArmAstBase.khAttribSetType);
         return ArmAstType(ArmAstBase.fromJson(dJson['name'], sMode));
 
-    kAttribSetTypeAnnotation = frozenset(['_type', 'type', 'var']);
+    khAttribSetTypeAnnotation = frozenset(['_type', 'type', 'var']);
     @staticmethod
     def fromJsonTypeAnnotation(dJson, sMode):
         assert sMode == ArmAstBase.ksModeAccessor;
-        assertJsonAttribsInSet(dJson, ArmAstBase.kAttribSetTypeAnnotation);
+        assertJsonAttribsInSet(dJson, ArmAstBase.khAttribSetTypeAnnotation);
         return ArmAstTypeAnnotation(ArmAstBase.fromJson(dJson['var'], sMode), ArmAstBase.fromJson(dJson['type'], sMode));
 
-    kAttribSetAssignment = frozenset(['_type', 'val', 'var']);
+    khAttribSetAssignment = frozenset(['_type', 'val', 'var']);
     @staticmethod
     def fromJsonAssignment(dJson, sMode):
         assert sMode == ArmAstBase.ksModeAccessor;
-        assertJsonAttribsInSet(dJson, ArmAstBase.kAttribSetAssignment);
+        assertJsonAttribsInSet(dJson, ArmAstBase.khAttribSetAssignment);
         return ArmAstAssignment(ArmAstBase.fromJson(dJson['var'], sMode), ArmAstBase.fromJson(dJson['val'], sMode));
 
-    kAttribSetReturn = frozenset(['_type', 'val']);
+    khAttribSetReturn = frozenset(['_type', 'val']);
     @staticmethod
     def fromJsonReturn(dJson, sMode):
         assert sMode == ArmAstBase.ksModeAccessor;
-        assertJsonAttribsInSet(dJson, ArmAstBase.kAttribSetReturn);
+        assertJsonAttribsInSet(dJson, ArmAstBase.khAttribSetReturn);
         return ArmAstReturn(ArmAstBase.fromJson(dJson['val'], sMode) if dJson['val'] else None);
 
     kfnTypeMap = {
@@ -376,30 +375,30 @@ class ArmAstBase(object):
 
 
 class ArmAstBinaryOp(ArmAstBase):
-    kOpTypeCompare      = 'cmp';
-    kOpTypeLogical      = 'log';
-    kOpTypeArithmetical = 'arit';
-    kOpTypeSet          = 'set';
-    kOpTypeConstraints  = 'constraints';
-    kOpTypeBitwise      = 'bitwise';
+    ksOpTypeCompare      = 'cmp';
+    ksOpTypeLogical      = 'log';
+    ksOpTypeArithmetical = 'arit';
+    ksOpTypeSet          = 'set';
+    ksOpTypeConstraints  = 'constraints';
+    ksOpTypeBitwise      = 'bitwise';
     kdOps = {
-        '||':  kOpTypeLogical,
-        '&&':  kOpTypeLogical,
-        '==':  kOpTypeCompare,
-        '!=':  kOpTypeCompare,
-        '>':   kOpTypeCompare,
-        '<':   kOpTypeCompare,
-        '>=':  kOpTypeCompare,
-        '<=':  kOpTypeCompare,
-        'IN':  kOpTypeSet,
-        '+':   kOpTypeArithmetical,
-        '-':   kOpTypeArithmetical,
-        'MOD': kOpTypeArithmetical,
-        '*':   kOpTypeArithmetical,
-        'AND': kOpTypeBitwise,
-        'OR':  kOpTypeBitwise,
-        '-->': kOpTypeConstraints,    # implies that the right hand side is true when left hand side is.
-        '<->': kOpTypeConstraints,    # bidirectional version of -->, i.e. it follows strictly in both directions.
+        '||':  ksOpTypeLogical,
+        '&&':  ksOpTypeLogical,
+        '==':  ksOpTypeCompare,
+        '!=':  ksOpTypeCompare,
+        '>':   ksOpTypeCompare,
+        '<':   ksOpTypeCompare,
+        '>=':  ksOpTypeCompare,
+        '<=':  ksOpTypeCompare,
+        'IN':  ksOpTypeSet,
+        '+':   ksOpTypeArithmetical,
+        '-':   ksOpTypeArithmetical,
+        'MOD': ksOpTypeArithmetical,
+        '*':   ksOpTypeArithmetical,
+        'AND': ksOpTypeBitwise,
+        'OR':  ksOpTypeBitwise,
+        '-->': ksOpTypeConstraints,    # implies that the right hand side is true when left hand side is.
+        '<->': ksOpTypeConstraints,    # bidirectional version of -->, i.e. it follows strictly in both directions.
     };
     kdOpsToC = {
         '||':  '||',
@@ -417,8 +416,8 @@ class ArmAstBinaryOp(ArmAstBase):
         '*':   '*',
         'AND': '&',
         'OR':  '|',
-        #'-->': kOpTypeConstraints,
-        #'<->': kOpTypeConstraints,
+        #'-->': ksOpTypeConstraints,
+        #'<->': ksOpTypeConstraints,
     };
 
     ## This is operators that can be grouped by toStringEx.
@@ -467,7 +466,7 @@ class ArmAstBinaryOp(ArmAstBase):
 
     def __init__(self, oLeft, sOp, oRight, fConstraints = False):
         ArmAstBase.__init__(self, ArmAstBase.ksTypeBinaryOp);
-        assert sOp in ArmAstBinaryOp.kdOps and (fConstraints or ArmAstBinaryOp.kdOps[sOp] != ArmAstBinaryOp.kOpTypeConstraints),\
+        assert sOp in ArmAstBinaryOp.kdOps and (fConstraints or ArmAstBinaryOp.kdOps[sOp] != ArmAstBinaryOp.ksOpTypeConstraints),\
                'sOp="%s"' % (sOp,);
         self.oLeft  = oLeft;
         self.sOp    = sOp;
@@ -494,7 +493,7 @@ class ArmAstBinaryOp(ArmAstBase):
 
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         # Recurse first.
-        fChildElimination = ArmAstBinaryOp.kdOps[self.sOp] in (ArmAstBinaryOp.kOpTypeLogical,);
+        fChildElimination = ArmAstBinaryOp.kdOps[self.sOp] in (ArmAstBinaryOp.ksOpTypeLogical,);
         self.oLeft  = self.oLeft.transform(fnCallback, fChildElimination, oCallbackArg);
         self.oRight = self.oRight.transform(fnCallback, fChildElimination, oCallbackArg);
 
@@ -590,10 +589,10 @@ class ArmAstBinaryOp(ArmAstBase):
 
     def toCExpr(self, oHelper):
         # Logical, compare, arithmetical & bitwise operations are straight forward.
-        if ArmAstBinaryOp.kdOps[self.sOp] in (ArmAstBinaryOp.kOpTypeLogical,
-                                              ArmAstBinaryOp.kOpTypeCompare,
-                                              ArmAstBinaryOp.kOpTypeArithmetical,
-                                              ArmAstBinaryOp.kOpTypeBitwise):
+        if ArmAstBinaryOp.kdOps[self.sOp] in (ArmAstBinaryOp.ksOpTypeLogical,
+                                              ArmAstBinaryOp.ksOpTypeCompare,
+                                              ArmAstBinaryOp.ksOpTypeArithmetical,
+                                              ArmAstBinaryOp.ksOpTypeBitwise):
             sLeft = self.oLeft.toCExpr(oHelper);
             if ArmAstBinaryOp.needParentheses(self.oLeft, self.sOp):
                 sLeft = '(%s)' % (sLeft);
@@ -654,7 +653,7 @@ class ArmAstBinaryOp(ArmAstBase):
     def getWidth(self, oHelper):
         _ = oHelper;
         sOpType = self.kdOps[self.sOp];
-        if sOpType in (self.kOpTypeCompare, self.kOpTypeLogical, self.kOpTypeSet):
+        if sOpType in (self.ksOpTypeCompare, self.ksOpTypeLogical, self.ksOpTypeSet):
             return 1; # boolean result.
         return -1;
 
@@ -674,11 +673,11 @@ class ArmAstBinaryOp(ArmAstBase):
 
 
 class ArmAstUnaryOp(ArmAstBase):
-    kOpTypeLogical      = 'log';
-    kOpTypeBitwise      = 'bitwise';
+    ksOpTypeLogical      = 'log';
+    ksOpTypeBitwise      = 'bitwise';
     kdOps = {
-        '!':   kOpTypeLogical,
-        'NOT': kOpTypeBitwise,
+        '!':   ksOpTypeLogical,
+        'NOT': ksOpTypeBitwise,
     };
     kdOpsToC = {
         '!':   '!',
@@ -702,7 +701,7 @@ class ArmAstUnaryOp(ArmAstBase):
         return False;
 
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
-        fChildElimination = ArmAstUnaryOp.kdOps[self.sOp] in (ArmAstUnaryOp.kOpTypeLogical,);
+        fChildElimination = ArmAstUnaryOp.kdOps[self.sOp] in (ArmAstUnaryOp.ksOpTypeLogical,);
         self.oExpr = self.oExpr.transform(fnCallback, fChildElimination, oCallbackArg);
         if self.oExpr:
             if self.sOp == '!' and isinstance(self.oExpr, ArmAstBool):
@@ -735,7 +734,7 @@ class ArmAstUnaryOp(ArmAstBase):
         return '%s%s' % (ArmAstUnaryOp.kdOpsToC[self.sOp], self.oExpr.toCExpr(oHelper));
 
     def getWidth(self, oHelper):
-        if self.kdOps[self.sOp] == self.kOpTypeLogical:
+        if self.kdOps[self.sOp] == self.ksOpTypeLogical:
             return 1; # boolean result.
         return self.oExpr.getWidth(oHelper);
 
@@ -978,11 +977,12 @@ class ArmAstConcat(ArmAstBase):
 
 
 class ArmAstFunction(ArmAstBase):
-    s_oReValidName = re.compile('^[_A-Za-z][_A-Za-z0-9]+$');
+    """ This is used both as an expression and as a statment... """
+    koReValidName = re.compile('^[_A-Za-z][_A-Za-z0-9]+$');
 
     def __init__(self, sName, aoArgs):
         ArmAstBase.__init__(self, ArmAstBase.ksTypeFunction);
-        assert self.s_oReValidName.match(sName), 'sName=%s' % (sName);
+        assert self.koReValidName.match(sName), 'sName=%s' % (sName);
         self.sName  = sName;
         self.aoArgs = aoArgs;
 
@@ -1032,13 +1032,13 @@ class ArmAstFunction(ArmAstBase):
 
 
 class ArmAstIdentifier(ArmAstBase):
-    s_oReValidName        = re.compile('^[_A-Za-z][_A-Za-z0-9]*$');
-    s_oReValidNameRelaxed = re.compile('^[_A-Za-z][_A-Za-z0-9<>]*$');
-    s_aoReValidName = (s_oReValidName, s_oReValidNameRelaxed)
+    koReValidName        = re.compile('^[_A-Za-z][_A-Za-z0-9]*$');
+    koReValidNameRelaxed = re.compile('^[_A-Za-z][_A-Za-z0-9<>]*$');
+    kaoReValidName       = (koReValidName, koReValidNameRelaxed)
 
     def __init__(self, sName, fRelaxedName = False):
         ArmAstBase.__init__(self, ArmAstBase.ksTypeIdentifier);
-        assert self.s_aoReValidName[fRelaxedName].match(sName), 'sName=%s' % (sName);
+        assert self.kaoReValidName[fRelaxedName].match(sName), 'sName=%s' % (sName);
         self.sName = sName;
 
     def clone(self):
@@ -1246,8 +1246,7 @@ class ArmAstValue(ArmAstBase):
 
 
 class ArmAstEquationValue(ArmAstBase):
-
-    s_oSimpleName = re.compile('^[_A-Za-z][_A-Za-z0-9]+$');
+    koSimpleName = re.compile('^[_A-Za-z][_A-Za-z0-9]+$');
 
     def __init__(self, sValue, iFirstBit, cBitsWidth):
         ArmAstBase.__init__(self, ArmAstBase.ksTypeValue);
@@ -1270,7 +1269,7 @@ class ArmAstEquationValue(ArmAstBase):
         return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
     def toString(self):
-        if self.s_oSimpleName.match(self.sValue):
+        if self.koSimpleName.match(self.sValue):
             return '%s[%u:%u]' % (self.sValue, self.iFirstBit, self.iFirstBit + self.cBitsWidth - 1,);
         return '(%s)[%u:%u]' % (self.sValue, self.iFirstBit, self.iFirstBit + self.cBitsWidth - 1,);
 
@@ -1284,7 +1283,6 @@ class ArmAstEquationValue(ArmAstBase):
 
 
 class ArmAstValuesGroup(ArmAstBase):
-
     def __init__(self, sValue, aoValues = None):
         ArmAstBase.__init__(self, ArmAstBase.ksTypeValue);
         self.sValue     = sValue;
@@ -1764,14 +1762,14 @@ class ArmAstIfList(ArmAstStatementBase):
         return asLines;
 
 
-    kAttribSet = frozenset(['_type', 'access', 'condition',]);
+    khAttribSet = frozenset(['_type', 'access', 'condition',]);
     @staticmethod
     def fromJson(dJson, uDepth = 0): # pylint: disable=arguments-renamed
         #
         # There are two variants of this object.
         #
         if dJson['_type'] != 'Accessors.Permission.SystemAccess': raise Exception('wrong type: %s' % (dJson['_type'],));
-        assertJsonAttribsInSet(dJson, ArmAstIfList.kAttribSet);
+        assertJsonAttribsInSet(dJson, ArmAstIfList.khAttribSet);
 
         oCondition = ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeAccessorCond);
 

@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # $Id$
-# pylint: disable=invalid-name,too-many-lines
 
 """
 ARM BSD / OpenSource specification reader.
@@ -144,7 +143,7 @@ class ArmInstructionBase(object):
     Instances of ArmInstructionSet doesn't have a parent, so it is None.
     """
 
-    s_oReValidName = re.compile('^[_A-Za-z][_A-Za-z0-9]+$');
+    koReValidName = re.compile('^[_A-Za-z][_A-Za-z0-9]+$');
 
     def __init__(self, oJson, sName, aoFields, fFields, oCondition, oParent):
         self.oJson           = oJson;
@@ -154,7 +153,7 @@ class ArmInstructionBase(object):
         self.fFields         = fFields;
         self.oCondition      = oCondition;
 
-        assert ArmInstructionBase.s_oReValidName.match(sName), '%s' % (sName);
+        assert ArmInstructionBase.koReValidName.match(sName), '%s' % (sName);
         assert (oJson['_type'] == 'Instruction.InstructionSet') == (oParent is None);
         assert not oParent or isinstance(oParent, (ArmInstructionGroup, ArmInstructionSet));
 
@@ -189,7 +188,7 @@ class ArmInstructionBase(object):
 class ArmInstructionOrganizerBase(ArmInstructionBase):
     """ Common base class for ArmInstructionSet and ArmInstructionGroup. """
 
-    s_oReValidName = re.compile('^[_A-Za-z][_A-Za-z0-9]+$');
+    koReValidName = re.compile('^[_A-Za-z][_A-Za-z0-9]+$');
 
     def __init__(self, oJson, sName, aoFields, fFields, oCondition, oParent = None):
         ArmInstructionBase.__init__(self, oJson, sName, aoFields, fFields, oCondition, oParent);
@@ -288,7 +287,7 @@ class ArmInstruction(ArmInstructionBase):
     """
     ARM instruction
     """
-    s_oReValidName = re.compile('^[_A-Za-z][_A-Za-z0-9]+$');
+    koReValidName = re.compile('^[_A-Za-z][_A-Za-z0-9]+$');
 
     def __init__(self, oJson, sName, sMemonic, sAsmDisplay, aoFields, fFields, oCondition, oParent):
         ArmInstructionBase.__init__(self, oJson, sName, aoFields, fFields, oCondition, oParent);
@@ -304,7 +303,7 @@ class ArmInstruction(ArmInstructionBase):
         self.fDecoderLeafCheckNeeded = False;    ##< Whether we need to check fixed value/mask in leaf decoder functions.
 
         # Check input.
-        assert self.s_oReValidName.match(sName), 'sName=%s' % (sName);
+        assert self.koReValidName.match(sName), 'sName=%s' % (sName);
 
     def toString(self, cchName = 0, fEncoding = False):
         if self.sName == self.sMnemonic:
@@ -502,22 +501,22 @@ class ArmFeature(object):
             if oExpr:
                 dSupportExpr[oExpr.toString()] = oExpr;
 
-        def CalcWeight(sStr):
+        def calcWeight(sStr):
             iRet = 10 if sStr.find('AArch64.') >= 0 else 0;
             if sStr.find('AArch32.') >= 0: iRet -= 1;
             if sStr.find('ext.') >= 0:     iRet -= 2;
             return iRet;
 
-        def CmpExpr(sExpr1, sExpr2):
-            iWeight1 = CalcWeight(sExpr1);
-            iWeight2 = CalcWeight(sExpr2);
+        def cmpExpr(sExpr1, sExpr2):
+            iWeight1 = calcWeight(sExpr1);
+            iWeight2 = calcWeight(sExpr2);
             if iWeight1 != iWeight2:
                 return -1 if iWeight1 > iWeight2 else 1;
             if sExpr1 == sExpr2:
                 return 0;
             return -1 if sExpr1 < sExpr2 else 1;
 
-        asKeys = sorted(dSupportExpr.keys(), key = functools.cmp_to_key(CmpExpr));
+        asKeys = sorted(dSupportExpr.keys(), key = functools.cmp_to_key(cmpExpr));
         self.oSupportExpr = dSupportExpr[asKeys[0]] if asKeys else None;
 
         # Manual overrides and fixes.
@@ -643,56 +642,56 @@ class ArmFieldsBase(object):
         return aoRet;
 
 
-    kAttribSetReserved = frozenset(['_type', 'description', 'rangeset', 'value']);
+    khAttribSetReserved = frozenset(['_type', 'description', 'rangeset', 'value']);
     @staticmethod
     def fromJsonReserved(dJson, oParent):
-        assertJsonAttribsInSet(dJson, ArmFieldsBase.kAttribSetReserved);
+        assertJsonAttribsInSet(dJson, ArmFieldsBase.khAttribSetReserved);
         return ArmFieldsReserved(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']));
 
 
-    kAttribSetImplementationDefined = frozenset(['_type', 'constraints', 'description', 'display', 'name',
-                                                 'rangeset', 'resets', 'volatile']);
+    khAttribSetImplementationDefined = frozenset(['_type', 'constraints', 'description', 'display', 'name',
+                                                  'rangeset', 'resets', 'volatile']);
     @staticmethod
     def fromJsonImplementationDefined(dJson, oParent):
-        assertJsonAttribsInSet(dJson, ArmFieldsBase.kAttribSetImplementationDefined);
+        assertJsonAttribsInSet(dJson, ArmFieldsBase.khAttribSetImplementationDefined);
         return ArmFieldsImplementationDefined(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name']);
 
 
-    kAttribSetField = frozenset(['_type', 'access', 'description', 'display', 'name',
-                                 'rangeset', 'resets', 'values', 'volatile']);
+    khAttribSetField = frozenset(['_type', 'access', 'description', 'display', 'name',
+                                  'rangeset', 'resets', 'values', 'volatile']);
     @staticmethod
     def fromJsonField(dJson, oParent):
-        assertJsonAttribsInSet(dJson, ArmFieldsBase.kAttribSetField);
+        assertJsonAttribsInSet(dJson, ArmFieldsBase.khAttribSetField);
         return ArmFieldsField(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name']);
 
 
-    kAttribSetConditionalField = frozenset(['_type', 'description', 'display', 'fields', 'name',
-                                            'rangeset', 'reservedtype', 'resets', 'volatile']);
-    kAttribSetConditionalFieldEntry = frozenset(['condition', 'field']);
+    khAttribSetConditionalField = frozenset(['_type', 'description', 'display', 'fields', 'name',
+                                             'rangeset', 'reservedtype', 'resets', 'volatile']);
+    khAttribSetConditionalFieldEntry = frozenset(['condition', 'field']);
     @staticmethod
     def fromJsonConditionalField(dJson, oParent):
-        assertJsonAttribsInSet(dJson, ArmFieldsBase.kAttribSetConditionalField);
+        assertJsonAttribsInSet(dJson, ArmFieldsBase.khAttribSetConditionalField);
         atCondFields = [];
         oNew = ArmFieldsConditionalField(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name'], atCondFields);
         for dJsonField in dJson['fields']:
-            assertJsonAttribsInSet(dJsonField, ArmFieldsBase.kAttribSetConditionalFieldEntry);
+            assertJsonAttribsInSet(dJsonField, ArmFieldsBase.khAttribSetConditionalFieldEntry);
             atCondFields.append((ArmAstBase.fromJson(dJsonField['condition'], ArmAstBase.ksModeConstraints),
                                  ArmFieldsBase.fromJson(dJsonField['field'], oNew)));
         return oNew;
 
 
-    kAttribSetConstantField = frozenset(['_type', 'access', 'description', 'name', 'rangeset', 'value']);
+    khAttribSetConstantField = frozenset(['_type', 'access', 'description', 'name', 'rangeset', 'value']);
     @staticmethod
     def fromJsonConstantField(dJson, oParent):
-        assertJsonAttribsInSet(dJson, ArmFieldsBase.kAttribSetConstantField);
+        assertJsonAttribsInSet(dJson, ArmFieldsBase.khAttribSetConstantField);
         return ArmFieldsConstantField(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name']);
 
 
-    kAttribSetArray = frozenset(['_type', 'access', 'description', 'display', 'index_variable', 'indexes', 'name',
-                                 'rangeset', 'resets' , 'values', 'volatile']);
+    khAttribSetArray = frozenset(['_type', 'access', 'description', 'display', 'index_variable', 'indexes', 'name',
+                                  'rangeset', 'resets' , 'values', 'volatile']);
     @staticmethod
     def fromJsonArray(dJson, oParent):
-        assertJsonAttribsInSet(dJson, ArmFieldsBase.kAttribSetArray);
+        assertJsonAttribsInSet(dJson, ArmFieldsBase.khAttribSetArray);
         aoIndexes = ArmFieldsArray.Index.fromJsonArray(dJson['indexes']);
         aoRanges  = ArmFieldsBase.rangesFromJson(dJson['rangeset']);
         assert len(aoIndexes) <= len(aoRanges), \
@@ -706,10 +705,10 @@ class ArmFieldsBase(object):
         return ArmFieldsArray(oParent, aoRanges, dJson['name'], dJson['index_variable'], aoIndexes, cIndexSteps, cBitsPerEntry);
 
 
-    kAttribSetVector = frozenset(['reserved_type', 'size',]) | kAttribSetArray;
+    khAttribSetVector = frozenset(['reserved_type', 'size',]) | khAttribSetArray;
     @staticmethod
     def fromJsonVector(dJson, oParent):
-        assertJsonAttribsInSet(dJson, ArmFieldsBase.kAttribSetVector);
+        assertJsonAttribsInSet(dJson, ArmFieldsBase.khAttribSetVector);
         aoIndexes = ArmFieldsArray.Index.fromJsonArray(dJson['indexes']);
         aoRanges  = ArmFieldsBase.rangesFromJson(dJson['rangeset']);
         assert len(aoIndexes) <= len(aoRanges), \
@@ -729,10 +728,10 @@ class ArmFieldsBase(object):
                                cBitsPerEntry, atCondSizes);
 
 
-    kAttribSetDynamic = frozenset(['_type', 'description', 'display', 'instances', 'name', 'rangeset', 'resets', 'volatile']);
+    khAttribSetDynamic = frozenset(['_type', 'description', 'display', 'instances', 'name', 'rangeset', 'resets', 'volatile']);
     @staticmethod
     def fromJsonDynamic(dJson, oParent):
-        assertJsonAttribsInSet(dJson, ArmFieldsBase.kAttribSetDynamic);
+        assertJsonAttribsInSet(dJson, ArmFieldsBase.khAttribSetDynamic);
         return ArmFieldsDynamic(oParent, ArmFieldsBase.rangesFromJson(dJson['rangeset']), dJson['name'],
                                 [ArmFieldset.fromJson(dJsonFieldSet) for dJsonFieldSet in dJson['instances']]);
 
@@ -899,12 +898,12 @@ class ArmRegEncoding(object):
                 raise oXcpt;
         return 'ARMV8_AARCH64_SYSREG_ID_CREATE(' + ','.join(asArgs) + ')';
 
-    kAttribSet = frozenset(['_type', 'asmvalue', 'encodings']);
+    khAttribSet = frozenset(['_type', 'asmvalue', 'encodings']);
     @staticmethod
     def fromJson(dJson):
         """ Decodes a register encoding object. """
         assert dJson['_type'] == 'Encoding';
-        assertJsonAttribsInSet(dJson, ArmRegEncoding.kAttribSet);
+        assertJsonAttribsInSet(dJson, ArmRegEncoding.khAttribSet);
         dNamedValues = collections.OrderedDict();
         for sName, dValue in dJson['encodings'].items():
             dNamedValues[sName] = ArmAstBase.fromJson(dValue, ArmAstBase.ksModeValuesOnly);
@@ -921,12 +920,12 @@ class ArmAccessorPermissionBase(object):
         self.oCondition = oCondition;
 
 
-    kAttribSetMemory = frozenset(['_type', 'access', 'condition',]);
+    khAttribSetMemory = frozenset(['_type', 'access', 'condition',]);
     @staticmethod
     def fromJsonMemory(dJson, fNested):
         _ = fNested;
         assert dJson['_type'] == 'Accessors.Permission.MemoryAccess';
-        assertJsonAttribsInSet(dJson, ArmAccessorPermissionBase.kAttribSetMemory);
+        assertJsonAttribsInSet(dJson, ArmAccessorPermissionBase.khAttribSetMemory);
         oCondition = ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints)
         # The 'access' attribute comes in three variations: Accessors.Permission.MemoryAccess list,
         # Accessors.Permission.AccessTypes.Memory.ReadWriteAccess and
@@ -962,11 +961,11 @@ class ArmAccessorPermissionMemReadWriteAccess(object):
         self.sRead  = sRead;
         self.sWrite = sWrite;
 
-    kAttribSet = frozenset(['_type', 'read', 'write',]);
+    khAttribSet = frozenset(['_type', 'read', 'write',]);
     @staticmethod
     def fromJson(dJson):
         assert dJson['_type'] == 'Accessors.Permission.AccessTypes.Memory.ReadWriteAccess';
-        assertJsonAttribsInSet(dJson, ArmAccessorPermissionMemReadWriteAccess.kAttribSet);
+        assertJsonAttribsInSet(dJson, ArmAccessorPermissionMemReadWriteAccess.khAttribSet);
         return ArmAccessorPermissionMemReadWriteAccess(dJson['read'], dJson['write']);
 
 
@@ -999,41 +998,41 @@ class ArmAccessorBase(object):
         self.dJson = dJson;
         self.oCondition = oCondition;
 
-    kAttribSetBlockAccess = frozenset(['_type', 'access', 'condition']);
+    khAttribSetBlockAccess = frozenset(['_type', 'access', 'condition']);
     @staticmethod
     def fromJsonBlockAccess(dJson):
-        assertJsonAttribsInSet(dJson, ArmAccessorBase.kAttribSetBlockAccess);
+        assertJsonAttribsInSet(dJson, ArmAccessorBase.khAttribSetBlockAccess);
         return ArmAccessorBlockAccess(dJson, ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints));
 
 
-    kAttribSetBlockAccessArray = frozenset(['_type', 'access', 'condition', 'index_variables', 'indexes',
-                                            'offset', 'references']);
+    khAttribSetBlockAccessArray = frozenset(['_type', 'access', 'condition', 'index_variables', 'indexes',
+                                             'offset', 'references']);
     @staticmethod
     def fromJsonBlockAccessArray(dJson):
-        assertJsonAttribsInSet(dJson, ArmAccessorBase.kAttribSetBlockAccessArray);
+        assertJsonAttribsInSet(dJson, ArmAccessorBase.khAttribSetBlockAccessArray);
         return ArmAccessorBlockAccessArray(dJson, ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints));
 
 
-    kAttribSetExternalDebug = frozenset(['_type', 'access', 'component', 'condition', 'instance', 'offset',
-                                         'power_domain', 'range']);
+    khAttribSetExternalDebug = frozenset(['_type', 'access', 'component', 'condition', 'instance', 'offset',
+                                          'power_domain', 'range']);
     @staticmethod
     def fromJsonExternalDebug(dJson):
-        assertJsonAttribsInSet(dJson, ArmAccessorBase.kAttribSetExternalDebug);
+        assertJsonAttribsInSet(dJson, ArmAccessorBase.khAttribSetExternalDebug);
         return ArmAccessorExternalDebug(dJson, ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints));
 
 
-    kAttribSetMemoryMapped = frozenset(['_type', 'access', 'component', 'condition', 'frame', 'instance', 'offset',
-                                        'power_domain', 'range']);
+    khAttribSetMemoryMapped = frozenset(['_type', 'access', 'component', 'condition', 'frame', 'instance', 'offset',
+                                         'power_domain', 'range']);
     @staticmethod
     def fromJsonMemoryMapped(dJson):
-        assertJsonAttribsInSet(dJson, ArmAccessorBase.kAttribSetMemoryMapped);
+        assertJsonAttribsInSet(dJson, ArmAccessorBase.khAttribSetMemoryMapped);
         return ArmAccessorExternalDebug(dJson, ArmAstBase.fromJson(dJson['condition'], ArmAstBase.ksModeConstraints));
 
 
-    kAttribSetSystem = frozenset(['_type', 'access', 'condition', 'encoding', 'name']);
+    khAttribSetSystem = frozenset(['_type', 'access', 'condition', 'encoding', 'name']);
     @staticmethod
     def fromJsonSystem(dJson):
-        assertJsonAttribsInSet(dJson, ArmAccessorBase.kAttribSetSystem);
+        assertJsonAttribsInSet(dJson, ArmAccessorBase.khAttribSetSystem);
         assert len(dJson['encoding']) == 1;
         sName     = dJson['name']; # For exception listing
         oEncoding = ArmRegEncoding.fromJson(dJson['encoding'][0]);
@@ -1042,10 +1041,10 @@ class ArmAccessorBase(object):
                                  sName, oEncoding, oAccess);
 
 
-    kAttribSetSystemArray = frozenset(['_type', 'access', 'condition', 'encoding', 'index_variable', 'indexes', 'name']);
+    khAttribSetSystemArray = frozenset(['_type', 'access', 'condition', 'encoding', 'index_variable', 'indexes', 'name']);
     @staticmethod
     def fromJsonSystemArray(dJson):
-        assertJsonAttribsInSet(dJson, ArmAccessorBase.kAttribSetSystemArray);
+        assertJsonAttribsInSet(dJson, ArmAccessorBase.khAttribSetSystemArray);
         assert len(dJson['encoding']) == 1;
         oEncoding = ArmRegEncoding.fromJson(dJson['encoding'][0]);
         oAccess   = ArmAstIfList.fromJson(dJson['access']) if dJson['access'] else None;
@@ -1702,7 +1701,7 @@ def nsElapsedAsStr(nsStart):
     return numToStr1000Sep(time.time_ns() - nsStart);
 
 
-def _ParseArmOpenSourceSpecification(dRawInstructions, dRawFeatures, dRawRegisters):
+def _parseArmOpenSourceSpecification(dRawInstructions, dRawFeatures, dRawRegisters):
     """
     Parses the raw json specification, populating the global variables.
 
@@ -1748,7 +1747,7 @@ def _ParseArmOpenSourceSpecification(dRawInstructions, dRawFeatures, dRawRegiste
     return True;
 
 
-def LoadArmOpenSourceSpecificationFromTar(sTarFile, sFileInstructions = 'Instructions.json', sFileFeatures = 'Features.json',
+def loadArmOpenSourceSpecificationFromTar(sTarFile, sFileInstructions = 'Instructions.json', sFileFeatures = 'Features.json',
                                           sFileRegisters = 'Registers.json'):
     """
     Loads the ARM specifications from a tar file.
@@ -1764,10 +1763,10 @@ def LoadArmOpenSourceSpecificationFromTar(sTarFile, sFileInstructions = 'Instruc
             dRawRegisters    = json.load(oFile);
     print("*** Done loading specs (%s ns)." % (nsElapsedAsStr(nsStart),));
 
-    return _ParseArmOpenSourceSpecification(dRawInstructions, dRawFeatures, dRawRegisters);
+    return _parseArmOpenSourceSpecification(dRawInstructions, dRawFeatures, dRawRegisters);
 
 
-def LoadArmOpenSourceSpecificationFromFiles(sFileInstructions = 'Instructions.json', sFileFeatures = 'Features.json',
+def loadArmOpenSourceSpecificationFromFiles(sFileInstructions = 'Instructions.json', sFileFeatures = 'Features.json',
                                             sFileRegisters = 'Registers.json', fInternalCall = False):
     """
     Loads the ARM specifications from individual files.
@@ -1783,10 +1782,10 @@ def LoadArmOpenSourceSpecificationFromFiles(sFileInstructions = 'Instructions.js
         dRawRegisters    = json.load(oFile);
     print("*** Done loading specs (%s ns)." % (nsElapsedAsStr(nsStart),));
 
-    return _ParseArmOpenSourceSpecification(dRawInstructions, dRawFeatures, dRawRegisters);
+    return _parseArmOpenSourceSpecification(dRawInstructions, dRawFeatures, dRawRegisters);
 
 
-def LoadArmOpenSourceSpecificationFromDir(sSpecDir, sFileInstructions = 'Instructions.json', sFileFeatures = 'Features.json',
+def loadArmOpenSourceSpecificationFromDir(sSpecDir, sFileInstructions = 'Instructions.json', sFileFeatures = 'Features.json',
                                           sFileRegisters = 'Registers.json'):
     """
     Loads the ARM specifications from a directory.
@@ -1800,15 +1799,15 @@ def LoadArmOpenSourceSpecificationFromDir(sSpecDir, sFileInstructions = 'Instruc
         if not os.path.isabs(sFileRegisters):
             sFileRegisters    = os.path.normpath(os.path.join(sSpecDir, sFileRegisters));
 
-    return LoadArmOpenSourceSpecificationFromFiles(sFileInstructions, sFileFeatures, sFileRegisters, True);
+    return loadArmOpenSourceSpecificationFromFiles(sFileInstructions, sFileFeatures, sFileRegisters, True);
 
 
-def PrintSpecs(fPrintInstructions = False, fPrintInstructionsWithEncoding = False, fPrintInstructionsWithConditions = False,
+def printSpecs(fPrintInstructions = False, fPrintInstructionsWithEncoding = False, fPrintInstructionsWithConds = False,
                fPrintFixedMaskStats = False, fPrintFixedMaskTop10 = False,
                fPrintSysRegs = False):
     """ Prints the specification if requested in the options. """
 
-    if fPrintInstructions or fPrintInstructionsWithEncoding or fPrintInstructionsWithConditions:
+    if fPrintInstructions or fPrintInstructionsWithEncoding or fPrintInstructionsWithConds:
         for oInstr in g_aoAllArmInstructions:
             print('%08x/%08x %s %s' % (oInstr.fFixedMask, oInstr.fFixedValue, oInstr.getCName(), oInstr.sAsmDisplay));
             if fPrintInstructionsWithEncoding:
@@ -1816,7 +1815,7 @@ def PrintSpecs(fPrintInstructions = False, fPrintInstructionsWithEncoding = Fals
                     print('  %2u L %2u: %010x/%010x%s%s'
                           % (oField.iFirstBit, oField.cBitsWidth, oField.fFixed, oField.fValue,
                              ' ' if oField.sName else '', oField.sName if oField.sName else '',));
-            if fPrintInstructionsWithConditions and not oInstr.oCondition.isBoolAndTrue():
+            if fPrintInstructionsWithConds and not oInstr.oCondition.isBoolAndTrue():
                 print('  condition: %s' % (oInstr.oCondition.toString(),));
 
     # Print stats on fixed bits:
