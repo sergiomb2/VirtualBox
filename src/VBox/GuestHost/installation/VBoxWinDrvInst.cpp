@@ -3183,39 +3183,6 @@ int vboxWinDrvInstRegResolveRegPath(const char *pszPath, char **ppszResolved)
 }
 
 /**
- * Helper for vboxDrvInstFileQueryVersionEx and attempts to read and parse
- * FileVersion.
- *
- * @returns Success indicator.
- */
-static bool vboxWinDrvInstFileQueryVersionOwn(LPCTSTR pVerData, uint32_t *puMajor, uint32_t *puMinor,
-                                              uint32_t *puBuildNumber, uint32_t *puRevisionNumber)
-{
-    UINT    cchStrValue = 0;
-    LPTSTR  pStrValue   = NULL;
-    if (!VerQueryValueA(pVerData, "\\StringFileInfo\\040904b0\\FileVersion", (LPVOID *)&pStrValue, &cchStrValue))
-        return false;
-
-    char *pszNext = (char *)pStrValue;
-    int rc = RTStrToUInt32Ex(pszNext, &pszNext, 0, puMajor);
-    AssertReturn(rc == VWRN_TRAILING_CHARS, false);
-    AssertReturn(*pszNext == '.', false);
-
-    rc = RTStrToUInt32Ex(pszNext + 1, &pszNext, 0, puMinor);
-    AssertReturn(rc == VWRN_TRAILING_CHARS, false);
-    AssertReturn(*pszNext == '.', false);
-
-    rc = RTStrToUInt32Ex(pszNext + 1, &pszNext, 0, puBuildNumber);
-    AssertReturn(rc == VWRN_TRAILING_CHARS, false);
-    AssertReturn(*pszNext == '.', false);
-
-    rc = RTStrToUInt32Ex(pszNext + 1, &pszNext, 0, puRevisionNumber);
-    AssertReturn(rc == VINF_SUCCESS || rc == VWRN_TRAILING_CHARS /*??*/, false);
-
-    return true;
-}
-
-/**
  * Worker for vboxDrvInstQueryFileVersion.
  *
  * @returns VBox status code.
@@ -3260,29 +3227,19 @@ int VBoxWinDrvInstFileQueryVersionEx(const char *pszPath, uint32_t *puMajor, uin
         {
             if (GetFileVersionInfoA(pszPathTmp, dwHandleIgnored, cbVerData, pVerData))
             {
-                /*
-                 * Try query and parse the FileVersion string our selves first
-                 * since this will give us the correct revision number when
-                 * it goes beyond the range of an uint16_t / WORD.
-                 */
-                if (vboxWinDrvInstFileQueryVersionOwn(pVerData, puMajor, puMinor, puBuildNumber, puRevisionNumber))
-                    rc = VINF_SUCCESS;
-                else
+                /* Always use VS_FIXEDFILEINFO, to make comparing file versions of different binaries possible / consistent. */
+                UINT                 cbFileInfoIgnored = 0;
+                VS_FIXEDFILEINFO    *pFileInfo = NULL;
+                if (VerQueryValueW(pVerData, L"\\", (LPVOID *)&pFileInfo, &cbFileInfoIgnored))
                 {
-                    /* Fall back on VS_FIXEDFILEINFO */
-                    UINT                 cbFileInfoIgnored = 0;
-                    VS_FIXEDFILEINFO    *pFileInfo = NULL;
-                    if (VerQueryValueW(pVerData, L"\\", (LPVOID *)&pFileInfo, &cbFileInfoIgnored))
-                    {
-                        *puMajor          = HIWORD(pFileInfo->dwFileVersionMS);
-                        *puMinor          = LOWORD(pFileInfo->dwFileVersionMS);
-                        *puBuildNumber    = HIWORD(pFileInfo->dwFileVersionLS);
-                        *puRevisionNumber = LOWORD(pFileInfo->dwFileVersionLS);
-                        rc = VINF_SUCCESS;
-                    }
-                    else
-                        rc = RTErrConvertFromWin32(GetLastError());
+                    *puMajor          = HIWORD(pFileInfo->dwFileVersionMS);
+                    *puMinor          = LOWORD(pFileInfo->dwFileVersionMS);
+                    *puBuildNumber    = HIWORD(pFileInfo->dwFileVersionLS);
+                    *puRevisionNumber = LOWORD(pFileInfo->dwFileVersionLS);
+                    rc = VINF_SUCCESS;
                 }
+                else
+                    rc = RTErrConvertFromWin32(GetLastError());
             }
             else
                 rc = RTErrConvertFromWin32(GetLastError());
