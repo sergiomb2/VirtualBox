@@ -154,6 +154,22 @@ extern const PDMGICBACKEND g_GicKvmBackend;
 /** @} */
 
 /**
+ * GIC distributor interrupt bitmap.
+ *
+ * @returns
+ */
+typedef union GICDISTINTRBMP
+{
+    /** The 32-bit view. */
+    uint64_t        au64[32];
+    /** The 64-bit view. */
+    uint32_t        au32[64];
+} GICDISTINTRBMP;
+AssertCompileSize(GICDISTINTRBMP, 256);
+AssertCompileMembersSameSize(GICDISTINTRBMP, au64, GICDISTINTRBMP, au32);
+AssertCompileMemberAlignment(GICDISTINTRBMP, au32, 4);
+
+/**
  * GIC PDM instance data (per-VM).
  */
 typedef struct GICDEV
@@ -161,26 +177,24 @@ typedef struct GICDEV
     /** @name Distributor register state.
      * @{
      */
-    /** @todo r=aeichner This could be made uint64_t so we have fewer loop iterations
-     *                   in gicDistGetHighestPriorityPendingIntr() etc. */
     /** Interrupt group bitmap. */
-    uint32_t                    bmIntrGroup[64];
+    GICDISTINTRBMP              IntrGroup;
     /** Interrupt config bitmap (edge-triggered vs level-sensitive). */
-    uint32_t                    bmIntrConfig[64];
+    GICDISTINTRBMP              IntrConfig;
     /** Interrupt enabled bitmap. */
-    uint32_t                    bmIntrEnabled[64];
+    GICDISTINTRBMP              IntrEnabled;
     /** Interrupt pending bitmap. */
-    uint32_t                    bmIntrPending[64];
+    GICDISTINTRBMP              IntrPending;
     /** Interrupt active bitmap. */
-    uint32_t                    bmIntrActive[64];
+    GICDISTINTRBMP              IntrActive;
     /** Interrupt line-level bitmap. */
-    uint32_t                    bmIntrLevel[64];
-    /** Interrupt priorities. */
-    uint8_t                     abIntrPriority[2048];
+    GICDISTINTRBMP              IntrLevel;
+    /** Interrupt routine mode bitmap. */
+    GICDISTINTRBMP              IntrRoutingMode;
     /** Interrupt routing info. */
     uint32_t                    au32IntrRouting[2048];
-    /** Interrupt routine mode bitmap. */
-    uint32_t                    bmIntrRoutingMode[64];
+    /** Interrupt priorities. */
+    uint8_t                     abIntrPriority[2048];
     /** Mask of enabled interrupt groups (see GIC_INTR_GROUP_XXX). */
     uint32_t                    fIntrGroupMask;
     /** Flag whether affinity routing is enabled. */

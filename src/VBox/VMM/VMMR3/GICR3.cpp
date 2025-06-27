@@ -138,12 +138,12 @@ static DECLCALLBACK(void) gicR3DbgInfoDist(PVM pVM, PCDBGFINFOHLP pHlp, const ch
                             (a_bmIntr)[i],   (a_bmIntr)[i+1], (a_bmIntr)[i+2], (a_bmIntr)[i+3],  \
                             (a_bmIntr)[i+4], (a_bmIntr)[i+5], (a_bmIntr)[i+6], (a_bmIntr)[i+7]); \
     } while (0)
-    GIC_DBGFINFO_DIST_INTR_BITMAP("bmIntrGroup",   pGicDev->bmIntrGroup);
-    GIC_DBGFINFO_DIST_INTR_BITMAP("bmIntrEnabled", pGicDev->bmIntrEnabled);
-    GIC_DBGFINFO_DIST_INTR_BITMAP("bmIntrPending", pGicDev->bmIntrPending);
-    GIC_DBGFINFO_DIST_INTR_BITMAP("bmIntrLevel",   pGicDev->bmIntrLevel);
-    GIC_DBGFINFO_DIST_INTR_BITMAP("bmIntrActive",  pGicDev->bmIntrActive);
-    GIC_DBGFINFO_DIST_INTR_BITMAP("bmIntrConfig",  pGicDev->bmIntrConfig);
+    GIC_DBGFINFO_DIST_INTR_BITMAP("bmIntrGroup",   pGicDev->IntrGroup.au32);
+    GIC_DBGFINFO_DIST_INTR_BITMAP("bmIntrEnabled", pGicDev->IntrEnabled.au32);
+    GIC_DBGFINFO_DIST_INTR_BITMAP("bmIntrPending", pGicDev->IntrPending.au32);
+    GIC_DBGFINFO_DIST_INTR_BITMAP("bmIntrLevel",   pGicDev->IntrLevel.au32);
+    GIC_DBGFINFO_DIST_INTR_BITMAP("bmIntrActive",  pGicDev->IntrActive.au32);
+    GIC_DBGFINFO_DIST_INTR_BITMAP("bmIntrConfig",  pGicDev->IntrConfig.au32);
 #undef GIC_DBGFINFO_DIST_INTR_BITMAP
 
     /* Interrupt priorities.*/
@@ -173,30 +173,30 @@ static DECLCALLBACK(void) gicR3DbgInfoDist(PVM pVM, PCDBGFINFOHLP pHlp, const ch
         pHlp->pfnPrintf(pHlp, "  Interrupt routing:\n");
         for (uint32_t i = 0; i < cRouting; i += 16)
         {
-            uint8_t const cBits  = sizeof(pGicDev->bmIntrRoutingMode[0]) * 8;
+            uint8_t const cBits  = sizeof(pGicDev->IntrRoutingMode.au32[0]) * 8;
             uint8_t const idxIrm = i / cBits;
             uint8_t const iBit   = i % cBits;
-            Assert(idxIrm < RT_ELEMENTS(pGicDev->bmIntrRoutingMode));   /* Paranoia. */
+            Assert(idxIrm < RT_ELEMENTS(pGicDev->IntrRoutingMode.au32));   /* Paranoia. */
             pHlp->pfnPrintf(pHlp, "    IntId[%4u..%-4u] = %u:%u %u:%u %u:%u %u:%u %u:%u %u:%u %u:%u %u:%u"
                                   "    IntId[%4u..%-4u] = %u:%u %u:%u %u:%u %u:%u %u:%u %u:%u %u:%u %u:%u\n",
-                                  gicDistGetIntIdFromIndex(i),                            gicDistGetIntIdFromIndex(i + 7),
-                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 0),  pGicDev->au32IntrRouting[i],
-                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 1),  pGicDev->au32IntrRouting[i + 1],
-                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 2),  pGicDev->au32IntrRouting[i + 2],
-                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 3),  pGicDev->au32IntrRouting[i + 3],
-                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 4),  pGicDev->au32IntrRouting[i + 4],
-                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 5),  pGicDev->au32IntrRouting[i + 5],
-                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 6),  pGicDev->au32IntrRouting[i + 6],
-                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 7),  pGicDev->au32IntrRouting[i + 7],
-                                  gicDistGetIntIdFromIndex(i + 8),                        gicDistGetIntIdFromIndex(i + 15),
-                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 8),  pGicDev->au32IntrRouting[i + 8],
-                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 9),  pGicDev->au32IntrRouting[i + 9],
-                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 10), pGicDev->au32IntrRouting[i + 10],
-                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 11), pGicDev->au32IntrRouting[i + 11],
-                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 12), pGicDev->au32IntrRouting[i + 12],
-                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 13), pGicDev->au32IntrRouting[i + 13],
-                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 14), pGicDev->au32IntrRouting[i + 14],
-                                  pGicDev->bmIntrRoutingMode[idxIrm] & RT_BIT(iBit + 15), pGicDev->au32IntrRouting[i + 15]);
+                                  gicDistGetIntIdFromIndex(i),                               gicDistGetIntIdFromIndex(i + 7),
+                                  pGicDev->IntrRoutingMode.au32[idxIrm] & RT_BIT(iBit + 0),  pGicDev->au32IntrRouting[i],
+                                  pGicDev->IntrRoutingMode.au32[idxIrm] & RT_BIT(iBit + 1),  pGicDev->au32IntrRouting[i + 1],
+                                  pGicDev->IntrRoutingMode.au32[idxIrm] & RT_BIT(iBit + 2),  pGicDev->au32IntrRouting[i + 2],
+                                  pGicDev->IntrRoutingMode.au32[idxIrm] & RT_BIT(iBit + 3),  pGicDev->au32IntrRouting[i + 3],
+                                  pGicDev->IntrRoutingMode.au32[idxIrm] & RT_BIT(iBit + 4),  pGicDev->au32IntrRouting[i + 4],
+                                  pGicDev->IntrRoutingMode.au32[idxIrm] & RT_BIT(iBit + 5),  pGicDev->au32IntrRouting[i + 5],
+                                  pGicDev->IntrRoutingMode.au32[idxIrm] & RT_BIT(iBit + 6),  pGicDev->au32IntrRouting[i + 6],
+                                  pGicDev->IntrRoutingMode.au32[idxIrm] & RT_BIT(iBit + 7),  pGicDev->au32IntrRouting[i + 7],
+                                  gicDistGetIntIdFromIndex(i + 8),                           gicDistGetIntIdFromIndex(i + 15),
+                                  pGicDev->IntrRoutingMode.au32[idxIrm] & RT_BIT(iBit + 8),  pGicDev->au32IntrRouting[i + 8],
+                                  pGicDev->IntrRoutingMode.au32[idxIrm] & RT_BIT(iBit + 9),  pGicDev->au32IntrRouting[i + 9],
+                                  pGicDev->IntrRoutingMode.au32[idxIrm] & RT_BIT(iBit + 10), pGicDev->au32IntrRouting[i + 10],
+                                  pGicDev->IntrRoutingMode.au32[idxIrm] & RT_BIT(iBit + 11), pGicDev->au32IntrRouting[i + 11],
+                                  pGicDev->IntrRoutingMode.au32[idxIrm] & RT_BIT(iBit + 12), pGicDev->au32IntrRouting[i + 12],
+                                  pGicDev->IntrRoutingMode.au32[idxIrm] & RT_BIT(iBit + 13), pGicDev->au32IntrRouting[i + 13],
+                                  pGicDev->IntrRoutingMode.au32[idxIrm] & RT_BIT(iBit + 14), pGicDev->au32IntrRouting[i + 14],
+                                  pGicDev->IntrRoutingMode.au32[idxIrm] & RT_BIT(iBit + 15), pGicDev->au32IntrRouting[i + 15]);
         }
     }
 }
@@ -520,15 +520,15 @@ static DECLCALLBACK(int) gicR3SaveExec(PPDMDEVINS pDevIns, PSSMHANDLE pSSM)
     /* Distributor state. */
     pHlp->pfnSSMPutU32(pSSM,  pGicDev->fIntrGroupMask);
     pHlp->pfnSSMPutBool(pSSM, pGicDev->fAffRoutingEnabled);
-    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->bmIntrGroup[0],       sizeof(pGicDev->bmIntrGroup));
-    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->bmIntrConfig[0],      sizeof(pGicDev->bmIntrConfig));
-    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->bmIntrEnabled[0],     sizeof(pGicDev->bmIntrEnabled));
-    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->bmIntrPending[0],     sizeof(pGicDev->bmIntrPending));
-    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->bmIntrActive[0],      sizeof(pGicDev->bmIntrActive));
-    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->bmIntrLevel[0],       sizeof(pGicDev->bmIntrLevel));
-    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->abIntrPriority[0],    sizeof(pGicDev->abIntrPriority));
-    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->au32IntrRouting[0],   sizeof(pGicDev->au32IntrRouting));
-    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->bmIntrRoutingMode[0], sizeof(pGicDev->bmIntrRoutingMode));
+    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->IntrGroup,          sizeof(pGicDev->IntrGroup));
+    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->IntrConfig,         sizeof(pGicDev->IntrConfig));
+    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->IntrEnabled,        sizeof(pGicDev->IntrEnabled));
+    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->IntrPending,        sizeof(pGicDev->IntrPending));
+    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->IntrActive,         sizeof(pGicDev->IntrActive));
+    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->IntrLevel,          sizeof(pGicDev->IntrLevel));
+    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->abIntrPriority[0],  sizeof(pGicDev->abIntrPriority));
+    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->au32IntrRouting[0], sizeof(pGicDev->au32IntrRouting));
+    pHlp->pfnSSMPutMem(pSSM,  &pGicDev->IntrRoutingMode,    sizeof(pGicDev->IntrRoutingMode));
 
     /* LPI state. */
     /* We store the size followed by the data because we currently do not support the full LPI range. */
@@ -574,6 +574,7 @@ static DECLCALLBACK(int) gicR3SaveExec(PPDMDEVINS pDevIns, PSSMHANDLE pSSM)
         pHlp->pfnSSMPutMem(pSSM, &pGicCpu->bmLpiPending[0], sizeof(pGicCpu->bmLpiPending));
     }
 
+    /* Marker. */
     return pHlp->pfnSSMPutU32(pSSM, UINT32_MAX);
 }
 
@@ -621,15 +622,15 @@ static DECLCALLBACK(int) gicR3LoadExec(PPDMDEVINS pDevIns, PSSMHANDLE pSSM, uint
     /* Distributor state. */
     pHlp->pfnSSMGetU32(pSSM,  &pGicDev->fIntrGroupMask);
     pHlp->pfnSSMGetBool(pSSM, &pGicDev->fAffRoutingEnabled);
-    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->bmIntrGroup[0],       sizeof(pGicDev->bmIntrGroup));
-    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->bmIntrConfig[0],      sizeof(pGicDev->bmIntrConfig));
-    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->bmIntrEnabled[0],     sizeof(pGicDev->bmIntrEnabled));
-    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->bmIntrPending[0],     sizeof(pGicDev->bmIntrPending));
-    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->bmIntrActive[0],      sizeof(pGicDev->bmIntrActive));
-    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->bmIntrLevel[0],       sizeof(pGicDev->bmIntrLevel));
-    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->abIntrPriority[0],    sizeof(pGicDev->abIntrPriority));
-    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->au32IntrRouting[0],   sizeof(pGicDev->au32IntrRouting));
-    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->bmIntrRoutingMode[0], sizeof(pGicDev->bmIntrRoutingMode));
+    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->IntrGroup,          sizeof(pGicDev->IntrGroup));
+    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->IntrConfig,         sizeof(pGicDev->IntrConfig));
+    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->IntrEnabled,        sizeof(pGicDev->IntrEnabled));
+    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->IntrPending,        sizeof(pGicDev->IntrPending));
+    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->IntrActive,         sizeof(pGicDev->IntrActive));
+    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->IntrLevel,          sizeof(pGicDev->IntrLevel));
+    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->abIntrPriority[0],  sizeof(pGicDev->abIntrPriority));
+    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->au32IntrRouting[0], sizeof(pGicDev->au32IntrRouting));
+    pHlp->pfnSSMGetMem(pSSM,  &pGicDev->IntrRoutingMode,    sizeof(pGicDev->IntrRoutingMode));
 
     /* LPI state. */
     /* LPI pending bitmap size. */
@@ -686,7 +687,7 @@ static DECLCALLBACK(int) gicR3LoadExec(PPDMDEVINS pDevIns, PSSMHANDLE pSSM, uint
         pHlp->pfnSSMGetBool(pSSM, &pGicCpu->fIntrGroup0Enabled);
         pHlp->pfnSSMGetBool(pSSM, &pGicCpu->fIntrGroup1Enabled);
 
-        /* LPI pending. */
+        /* LPI state. */
         pHlp->pfnSSMGetMem(pSSM, &pGicCpu->bmLpiPending[0], sizeof(pGicCpu->bmLpiPending));
     }
 
@@ -696,6 +697,7 @@ static DECLCALLBACK(int) gicR3LoadExec(PPDMDEVINS pDevIns, PSSMHANDLE pSSM, uint
     int rc = pHlp->pfnSSMHandleGetStatus(pSSM);
     AssertRCReturn(rc, rc);
 
+    /* Marker. */
     uint32_t uMarker = 0;
     rc = pHlp->pfnSSMGetU32(pSSM, &uMarker);
     AssertRCReturn(rc, rc);
@@ -713,29 +715,40 @@ static DECLCALLBACK(int) gicR3LoadExec(PPDMDEVINS pDevIns, PSSMHANDLE pSSM, uint
     else
         return pHlp->pfnSSMSetCfgError(pSSM, RT_SRC_POS, N_("Invalid uArchRev, got %u expected range [%u,%u]"), pGicDev->uArchRev,
                                        GIC_DIST_REG_PIDR2_ARCHREV_GICV1, GIC_DIST_REG_PIDR2_ARCHREV_GICV4);
+
     if (pGicDev->uArchRevMinor == 1)
     { /* likely */ }
     else
         return pHlp->pfnSSMSetCfgError(pSSM, RT_SRC_POS, N_("Invalid uArchRevMinor, got %u expected 1"), pGicDev->uArchRevMinor);
+
     if (pGicDev->uMaxSpi - 1 < 31)
     { /* likely */ }
     else
         return pHlp->pfnSSMSetCfgError(pSSM, RT_SRC_POS, N_("Invalid MaxSpi, got %u expected range [1,31]"), pGicDev->uMaxSpi);
+
     if (pGicDev->uMaxExtSpi <= 31)
     { /* likely */ }
     else
         return pHlp->pfnSSMSetCfgError(pSSM, RT_SRC_POS, N_("Invalid MaxExtSpi, got %u expected range [0,31]"), pGicDev->uMaxExtSpi);
+
     if (   pGicDev->uMaxExtPpi == GIC_REDIST_REG_TYPER_PPI_NUM_MAX_1087
         || pGicDev->uMaxExtPpi == GIC_REDIST_REG_TYPER_PPI_NUM_MAX_1119)
     { /* likely */ }
     else
         return pHlp->pfnSSMSetCfgError(pSSM, RT_SRC_POS, N_("Invalid MaxExtPpi, got %u expected range [1,2]"), pGicDev->uMaxExtPpi);
+
     bool const fIsGitsEnabled = RT_BOOL(pGicDev->hMmioGits != NIL_IOMMMIOHANDLE);
     if (fIsGitsEnabled == pGicDev->fLpi)
     { /* likely */ }
     else
         return pHlp->pfnSSMSetCfgError(pSSM, RT_SRC_POS, N_("Config mismatch: LPIs are %s when ITS is %s"),
                                        fIsGitsEnabled ? "enabled" : "disabled", pGicDev->fLpi ? "enabled" : "disabled");
+
+    if (pGicDev->fAffRoutingEnabled)
+    { /* likely */ }
+    else
+        return pHlp->pfnSSMSetCfgError(pSSM, RT_SRC_POS, N_("Config mismatch: Affinity routing must be enabled"));
+
     return rc;
 }
 
