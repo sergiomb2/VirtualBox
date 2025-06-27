@@ -51,7 +51,7 @@
 *   Defined Constants And Macros                                                                                                 *
 *********************************************************************************************************************************/
 /** GIC saved state version. */
-#define GIC_SAVED_STATE_VERSION                     12
+#define GIC_SAVED_STATE_VERSION                     13
 
 # define GIC_SYSREGRANGE(a_uFirst, a_uLast, a_szName) \
     { (a_uFirst), (a_uLast), kCpumSysRegRdFn_GicIcc, kCpumSysRegWrFn_GicIcc, 0, 0, 0, 0, 0, 0, a_szName, { 0 }, { 0 }, { 0 }, { 0 } }
@@ -223,7 +223,8 @@ static DECLCALLBACK(void) gicR3DbgInfoReDist(PVM pVM, PCDBGFINFOHLP pHlp, const 
     AssertCompile(RT_ELEMENTS(pGicCpu->bmIntrEnabled) >= 3);
     AssertCompile(RT_ELEMENTS(pGicCpu->bmIntrPending) >= 3);
     AssertCompile(RT_ELEMENTS(pGicCpu->bmIntrActive)  >= 3);
-    AssertCompile(RT_ELEMENTS(pGicCpu->bmIntrLevel)  >= 3);
+    AssertCompile(RT_ELEMENTS(pGicCpu->bmIntrLevel)   >= 3);
+    AssertCompile(RT_ELEMENTS(pGicCpu->bmIntrConfig)  >= 3);
 
 #define GIC_DBGFINFO_REDIST_INTR_BITMAPS_3(a_bmIntr) pGicCpu->a_bmIntr[0], pGicCpu->a_bmIntr[1], pGicCpu->a_bmIntr[2]
     pHlp->pfnPrintf(pHlp, "  bmIntrGroup[0..2]   = %#010x %#010x %#010x\n", GIC_DBGFINFO_REDIST_INTR_BITMAPS_3(bmIntrGroup));
@@ -256,8 +257,11 @@ static DECLCALLBACK(void) gicR3DbgInfoReDist(PVM pVM, PCDBGFINFOHLP pHlp, const 
 
     pHlp->pfnPrintf(pHlp, "\nVCPU[%u] ICC system register state:\n", pVCpu->idCpu);
     pHlp->pfnPrintf(pHlp, "  uIccCtlr            = %#RX64\n",  pGicCpu->uIccCtlr);
-    pHlp->pfnPrintf(pHlp, "  fIntrGroup0Enabled  = %RTbool\n", pGicCpu->fIntrGroup0Enabled);
-    pHlp->pfnPrintf(pHlp, "  fIntrGroup1Enabled  = %RTbool\n", pGicCpu->fIntrGroup1Enabled);
+    pHlp->pfnPrintf(pHlp, "  fIntrGroupMask      = %#RX32 (group_0=%RTbool, group_1s=%RTbool, group_1ns=%RTbool)\n",
+                    pGicCpu->fIntrGroupMask,
+                    RT_BOOL(pGicCpu->fIntrGroupMask & GIC_INTR_GROUP_0),
+                    RT_BOOL(pGicCpu->fIntrGroupMask & GIC_INTR_GROUP_1S),
+                    RT_BOOL(pGicCpu->fIntrGroupMask & GIC_INTR_GROUP_1NS));
     pHlp->pfnPrintf(pHlp, "  bBinaryPtGroup0     = %#x\n",     pGicCpu->bBinaryPtGroup0);
     pHlp->pfnPrintf(pHlp, "  bBinaryPtGroup1     = %#x\n",     pGicCpu->bBinaryPtGroup1);
     pHlp->pfnPrintf(pHlp, "  idxRunningPriority  = %u\n",      pGicCpu->idxRunningPriority);
@@ -567,8 +571,7 @@ static DECLCALLBACK(int) gicR3SaveExec(PPDMDEVINS pDevIns, PSSMHANDLE pSSM)
         pHlp->pfnSSMPutMem(pSSM, &pGicCpu->bmActivePriorityGroup1[0], sizeof(pGicCpu->bmActivePriorityGroup1));
         pHlp->pfnSSMPutU8(pSSM,   pGicCpu->bBinaryPtGroup0);
         pHlp->pfnSSMPutU8(pSSM,   pGicCpu->bBinaryPtGroup1);
-        pHlp->pfnSSMPutBool(pSSM, pGicCpu->fIntrGroup0Enabled);
-        pHlp->pfnSSMPutBool(pSSM, pGicCpu->fIntrGroup1Enabled);
+        pHlp->pfnSSMPutU32(pSSM,  pGicCpu->fIntrGroupMask);
 
         /* LPI state. */
         pHlp->pfnSSMPutMem(pSSM, &pGicCpu->bmLpiPending[0], sizeof(pGicCpu->bmLpiPending));
@@ -684,8 +687,7 @@ static DECLCALLBACK(int) gicR3LoadExec(PPDMDEVINS pDevIns, PSSMHANDLE pSSM, uint
         pHlp->pfnSSMGetMem(pSSM,  &pGicCpu->bmActivePriorityGroup1[0], sizeof(pGicCpu->bmActivePriorityGroup1));
         pHlp->pfnSSMGetU8(pSSM,   &pGicCpu->bBinaryPtGroup0);
         pHlp->pfnSSMGetU8(pSSM,   &pGicCpu->bBinaryPtGroup1);
-        pHlp->pfnSSMGetBool(pSSM, &pGicCpu->fIntrGroup0Enabled);
-        pHlp->pfnSSMGetBool(pSSM, &pGicCpu->fIntrGroup1Enabled);
+        pHlp->pfnSSMGetU32(pSSM,  &pGicCpu->fIntrGroupMask);
 
         /* LPI state. */
         pHlp->pfnSSMGetMem(pSSM, &pGicCpu->bmLpiPending[0], sizeof(pGicCpu->bmLpiPending));
