@@ -37,7 +37,6 @@ import argparse;
 import collections;
 import datetime;
 import hashlib;
-import io;
 import operator;
 import os;
 import re;
@@ -61,7 +60,7 @@ import ArmBsdSpec as spec;
 
 # Imports from the parent directory.
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))));
-import PyCommonVmm as pycmn;
+import PyCommonVmm as pycmn;    # pylint: disable=import-error
 
 
 ## Program start time for logging.
@@ -1079,6 +1078,308 @@ class DecoderNode(object):
             return 'iemDecode%s_%08x_%08x_%u' % (sInstrSet, self.fCheckedMask, self.fCheckedValue, uDepth,);
         return 'iemDecode%s_%s' % (sInstrSet, self.aoInstructions[0].getCName(),);
 
+
+#
+# System Register Code Morphing.
+#
+
+class SysRegAccessorInfo(object):
+    """ Info about an accessor we're emitting code for. """
+    def __init__(self, oAccessor, oReg, sEnc):
+        self.oAccessor  = oAccessor     # type: ArmAccessorSystem
+        self.oReg       = oReg;
+        self.sEnc       = sEnc;
+        self.oCode      = None;
+        # Stats for the code generator.
+        self.cCallsToIsFeatureImplemented = 0;
+        self.cInstructionReferences       = 0;
+        self.cInstrEssenceRefs            = 0;  # References to uInstrEssence (idSysReg + idGprReg + direction)
+
+
+class SysRegGeneratorBase(object):
+    """ Base class for the system register access code generators. """
+
+    kdELxToNum = { 'EL0': 0, 'EL1': 1, 'EL2': 2, 'EL3': 3, }
+
+    def __init__(self, sInstr):
+        self.sInstr     = sInstr;
+        self.aoInfo     = []           # type: List[SysRegAccessorInfo]
+
+    def generateOneHandler(self, oInfo):
+        return [ '', '/// @todo %s / %s' % (self.sInstr, oInfo.sEnc,) ];
+
+    def generateMainFunction(self):
+        return [ '', '/// @todo %s main function' % (self.sInstr,) ];
+
+    def isA64Instruction(self):
+        return self.sInstr.startswith('A64');
+
+    kdAstForFunctionsWithoutArguments = {
+        'EL2Enabled': # HaveEL(EL2) && (!Have(EL3) || SCR_curr[].NS || IsSecureEL2Enabled())
+        ArmAstBinaryOp(ArmAstFunction('HaveEL', [ArmAstIdentifier('EL2'),]),
+                                     '&&',
+                                     ArmAstBinaryOp.orListToTree([
+            ArmAstUnaryOp('!', ArmAstFunction('HaveEL', [ArmAstIdentifier('EL3'),])),
+            ArmAstDotAtom([ArmAstIdentifier('SCR_curr'), ArmAstIdentifier('NS')]), # SCR_curr is SCR or SCR_EL3.
+            ArmAstFunction('IsSecureEL2Enabled', []),
+        ])),
+    };
+
+    def transformCodePass1Callback(self, oNode, fEliminationAllowed, oInfo):
+        """ Callback for pass 1: Code flow adjustments; Optimizations. """
+        _ = fEliminationAllowed; _ = oInfo;
+        if isinstance(oNode, ArmAstIfList):
+            # If we have a complete series of PSTATE.EL == ELx checks,
+            # turn the final one into an else case to help compilers make
+            # better sense of the code flow.
+            if len(oNode.aoIfConditions) >= 3 and not oNode.oElseStatement: ## @todo EL3
+                aidxEl = [-1, -1, -1, -1];
+                for idxCond, oCond in enumerate(oNode.aoIfConditions):
+                    if isinstance(oCond, ArmAstBinaryOp):
+                        if oCond.sOp == '==':
+                            if oCond.oLeft.isMatchingDotAtom('PSTATE', 'EL'):
+                                idxEl = self.kdELxToNum.get(oCond.oRight.getIdentifierName(), -1);
+                                if idxEl >= 0:
+                                    assert aidxEl[idxEl] == -1;
+                                    aidxEl[idxEl] = idxCond;
+                assert aidxEl[3] == -1; ## todo EL3
+                if aidxEl[0] >= 0 and aidxEl[1] >= 0 and aidxEl[2] >= 0:
+                    # We've found checks for each of the 4 EL levels.  Convert the last one into the else.
+                    idxLast = max(aidxEl);
+                    assert idxLast + 1 == len(oNode.aoIfStatements); # There shall not be anything after the final EL check.
+                    oNode.oElseStatement = oNode.aoIfStatements[idxLast];
+                    oNode.aoIfConditions = oNode.aoIfConditions[:idxLast];
+                    oNode.aoIfStatements = oNode.aoIfStatements[:idxLast];
+
+        elif isinstance(oNode, ArmAstBinaryOp):
+            # EL3 not implemented, so eliminate PSTATE.EL == 3 and similar. ## @todo EL3
+            if oNode.oLeft.isMatchingDotAtom('PSTATE', 'EL'):
+                if oNode.oRight.isMatchingIdentifier('EL3'):
+                    if oNode.sOp in ('==', '>='):
+                        return None;
+                    if oNode.sOp in ('!=', '<'):
+                        return ArmAstBool(True);
+                elif oNode.sOp == '>' and oNode.oRight.isMatchingIdentifier('EL2'): # PSTATE.EL > EL2.
+                    return None;
+
+            # Simplify boolean fields checks.
+            if isinstance(oNode.oLeft, ArmAstField) and isinstance(oNode.oRight, ArmAstValue):
+                if oNode.oRight.getWidth(None) == 1:
+                    oReg = spec.g_ddoAllArmRegistersByStateByName[oNode.oLeft.sState][oNode.oLeft.sName]; # ArmRegister
+                    aoFields = oReg.daoFields.get(oNode.oLeft.sField); # List[ArmFieldsBase]
+                    if aoFields and len(aoFields) == 1:
+                        if len(aoFields[0].aoRanges) == 1 and aoFields[0].aoRanges[0].cBitsWidth == 1:
+                            if oNode.sOp == '==' and oNode.oRight.sValue == "'1'":
+                                return oNode.oLeft;
+                            if oNode.sOp == '==' and oNode.oRight.sValue == "'0'":
+                                return ArmAstUnaryOp('!', oNode.oLeft);
+                            if oNode.sOp == '!=' and oNode.oRight.sValue == "'0'":
+                                return oNode.oLeft;
+                            if oNode.sOp == '!=' and oNode.oRight.sValue == "'1'":
+                                return ArmAstUnaryOp('!', oNode.oLeft);
+
+        elif isinstance(oNode, ArmAstFunction):
+            # Since we don't implement any external debug state (no EDSCR.STATUS),
+            # the Halted() function always returns False.  Eliminate it.
+            if oNode.isMatchingFunctionCall('Halted'):
+                return None;
+
+            # The EL3SDDUndefPriority() and EL3SDDUndef() can likewise be eliminated,
+            # as they requires Halted() to be true and EDSCR.SDD to be set.
+            if oNode.isMatchingFunctionCall('EL3SDDUndefPriority') or oNode.isMatchingFunctionCall('EL3SDDUndef'):
+                return None;
+
+            # The HaveAArch64() must be true if we're in a A64 instruction handler.
+            if oNode.isMatchingFunctionCall('HaveAArch64'):
+                if self.isA64Instruction():
+                    return ArmAstBool(True);
+                return ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_AA64')]);
+
+            # Translate HaveEL(ELx) call into the corresponding feature checks.
+            if oNode.sName == 'HaveEL':
+                if oNode.aoArgs[0].isMatchingIdentifier('EL3'):
+                    return ArmAstBool(False); # EL3 is not implemented.
+                    #return ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_EL3')]); ## @todo EL3
+                if oNode.aoArgs[0].isMatchingIdentifier('EL2'):
+                    return ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_EL2')]);
+                if oNode.aoArgs[0].isMatchingIdentifier('EL1') or oNode.aoArgs[0].isMatchingIdentifier('EL0'):
+                    return ArmAstBool(True); # EL0 and EL1 are mandatory.
+                raise Exception('Unexpected HaveEL call: %s' % (oNode.toString(),));
+
+            # AArch64_SystemAccessTrap(EL2,0x18) and such.
+            if oNode.isMatchingFunctionCall('AArch64_SystemAccessTrap', None, None):
+                idxEl  = self.kdELxToNum.get(oNode.aoArgs[0].getIdentifierName());
+                iClass = oNode.aoArgs[1].getIntegerValue();
+                if idxEl is not None and iClass is not None:
+                    assert idxEl > 0;
+                    if iClass == 0:
+                        return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapUnknown(pVCpu, %s)' % (idxEl,)));
+                    if iClass == 7 and self.isA64Instruction():
+                        return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapAdvSimdFpAccessA64(pVCpu, %s)'
+                                                           % (idxEl,)));
+                    if iClass == 7 and not self.isA64Instruction():
+                        oInfo.cInstructionReferences += 1;
+                        return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapAdvSimdFpAccess(pVCpu, %u, u32Instr)'
+                                                          % (idxEl,)));
+                    if iClass == 20:
+                        oInfo.cInstrEssenceRefs += 1;
+                        return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrap128Bit(pVCpu, %s, uInstrEssence)'
+                                                          % (idxEl,)));
+                    if iClass == 24:
+                        oInfo.cInstrEssenceRefs += 1;
+                        return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrap(pVCpu, %s, uInstrEssence)' % (idxEl,)));
+                    if iClass == 25:
+                        return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapSme(pVCpu, %s)' % (idxEl,)));
+                    if iClass == 29:
+                        return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapSme(pVCpu, %s)' % (idxEl,)));
+                raise Exception('Unexpected: %s' % (oNode.toString(),));
+
+            # Generic mapping of functions without any arguments:
+            if len(oNode.aoArgs) == 0 and oNode.sName in self.kdAstForFunctionsWithoutArguments:
+                oNode = self.kdAstForFunctionsWithoutArguments[oNode.sName].clone();
+                return self.transformCodePass1(oInfo, oNode);
+
+        return oNode;
+
+    def transformCodePass1(self, oInfo, oCode):
+        """ Code transformation pass 1: Code flow adjustments; Optimizations. """
+        return oCode.transform(self.transformCodePass1Callback, True, oInfo);
+
+    def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo):
+        """ Callback for pass 2: C++ translation. """
+        if isinstance(oNode, ArmAstFunction):
+            # Undefined() -> return iemRaiseUndefined(pVCpu);
+            if oNode.isMatchingFunctionCall('Undefined'):
+                return ArmAstReturn(ArmAstCppExpr('iemRaiseUndefined(pVCpu)'));
+
+            # IsFeatureImplemented(FEAT_xxxx) -> pGstFeat->fXxxx:
+            if oNode.sName == 'IsFeatureImplemented':
+                if len(oNode.aoArgs) != 1 or not isinstance(oNode.aoArgs[0], ArmAstIdentifier):
+                    raise Exception('Unexpected IsFeatureImplemented arguments: %s' % (oNode.aoArgs,));
+                sFeatureNm   = oNode.aoArgs[0].sName;
+                sCpumFeature = g_dSpecFeatToCpumFeat.get(sFeatureNm, None);
+                if sCpumFeature is None:
+                    raise Exception('Unknown IsFeatureImplemented parameter: %s (see g_dSpecFeatToCpumFeat)' % (sFeatureNm));
+                if isinstance(sCpumFeature, str):
+                    oInfo.cCallsToIsFeatureImplemented += 1;
+                    return ArmAstCppExpr('pGstFeats->%s' % (sCpumFeature,));
+                if sCpumFeature is True:  return 'true /*%s*/' % (sFeatureNm,);
+                if sCpumFeature is False: return 'false /*%s*/' % (sFeatureNm,);
+                return ArmAstCppExpr('false /** @todo pGstFeats->%s */' % (sFeatureNm,));
+
+        elif isinstance(oNode, ArmAstBinaryOp):
+            # PSTATE.EL == EL0 and similar:
+            if oNode.oLeft.isMatchingDotAtom('PSTATE', 'EL'):
+                idxEl = self.kdELxToNum.get(oNode.oRight.getIdentifierName(), -1);
+                if idxEl >= 0:
+                    oNode.oLeft  = ArmAstCppExpr('IEM_F_MODE_ARM_GET_EL(pVCpu->iem.s.fExec)');
+                    oNode.oRight = ArmAstInteger(idxEl);
+                return oNode;
+
+        _ = fEliminationAllowed;
+        _ = oInfo;
+        return oNode;
+
+    def transformCodePass2(self, oInfo, oCode):
+        """ Code transformation pass 2: C++ translation. """
+        return oCode.transform(self.transformCodePass2Callback, True, oInfo);
+
+    def morphCodeToC(self, oInfo):
+        """ Morphs the accessor code and assigns the result to self.oCode """
+        assert oInfo.oCode is None;
+        oInfo.oCode = self.transformCodePass2(oInfo, self.transformCodePass1(oInfo, oInfo.oAccessor.oAccess.clone()));
+        return True;
+
+
+class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
+
+    def __init__(self):
+        SysRegGeneratorBase.__init__(self, 'A64.MRS');
+
+    def generateOneHandler(self, oInfo):
+        """ Generates one register access for A64.MRS. """
+        asLines = [
+            '',
+            '/**',
+            ' * %s - %s' % (oInfo.oAccessor.oEncoding.sAsmValue, oInfo.oAccessor.oEncoding.dNamedValues,),
+            ' */',
+            'static VBOXSTRICTRC iemCImplA64_mrs_%s(PVMCPU pVCpu, uint64_t *puDst%s)'
+            % (oInfo.oAccessor.oEncoding.sAsmValue, ', uint32_t uInstrEssence' if oInfo.cInstrEssenceRefs > 0 else ''),
+            '{',
+        ];
+        if oInfo.cCallsToIsFeatureImplemented > 0:
+            asLines.append('    const CPUMFEATURESARMV8 * const pGstFeats = IEM_GET_GUEST_CPU_FEATURES(pVCpu);');
+        if oInfo.oCode:
+            asLines.extend(oInfo.oCode.toStringList('    ', 'C'));
+
+        asLines.append('    /* -------- Original code specification: -------- */');
+        asLines.extend([ '    // ' + sLine for sLine in oInfo.oAccessor.oAccess.toStringList()]);
+        asLines += [
+            '    return VERR_IEM_ASPECT_NOT_IMPLEMENTED;',
+            '}',
+        ];
+        return asLines;
+
+    def generateMainFunction(self):
+        """ Generates the CIMPL function for A64.MRS. """
+        asLines = [
+            '',
+            '/**',
+            ' * Implements the MRS instruction.',
+            ' *',
+            ' * @returns Strict VBox status code.',
+            ' * @param   pVCpu       The cross context virtual CPU structure of the',
+            ' *                      calling thread.',
+            ' * @param   idSysReg    The system register to read from (IPRT format).',
+            ' * @param   idGprDst    The destination GPR register number (for exceptions).',
+            ' * @param   puDst       Where to return the value.',
+            ' */',
+            'DECLHIDDEN(VBOXSTRICT) iemCImplA64_mrs_generic(PVMCPU pVCpu, uint32_t idSysReg, uint32_t idGprDst,',
+            '                                               uint64_t *puDst)',
+            '{',
+            '    uint32_t const   uInstrEssence = idSysReg | (idGprDst << 24);',
+            '    uint64_t         uZeroDummy;',
+            '    uint64_t * const puDst = idGprDst < ARMV8_A64_REG_XZR',
+            '                           ? &pVCpu->cpum.GstCtx.aGRegs[idGprDst].x : &uZeroDummy;',
+            '    switch (idSysReg)',
+            '    {',
+        ];
+        for oInfo in self.aoInfo:
+            if oInfo.sEnc[0] == 'A':
+                asLines.append('        case %s: %sreturn iemCImplA64_mrs_%s(pVCpu, puDst%s);'
+                               % (oInfo.sEnc, ' ' * (45 - len(oInfo.sEnc)), oInfo.oAccessor.oEncoding.sAsmValue,
+                                  ', uInstrEssence' if oInfo.cInstrEssenceRefs else '',));
+        asLines += [
+            '    }',
+            '    /* Fall back on handcoded handler. */',
+            '    return iemCImplA64_mrs_fallback(pVCpu, idGprDst, idSysReg);',
+            '}',
+            '',
+            '/**',
+            ' * Implements the MRS instruction.',
+            ' *',
+            ' * @param   idSysReg    The system register to read from (IPRT format).',
+            ' * @param   idGprDst    The destination GPR register number.',
+            ' */',
+            'IEM_CIMPL_DEF_2(iemCImplA64_mrs, uint32_t, idSysReg, uint32_t, idGprDst)',
+            '{',
+            '    uint64_t         uZeroDummy;',
+            '    uint64_t * const puDst = idGprDst < ARMV8_A64_REG_XZR',
+            '                           ? &pVCpu->cpum.GstCtx.aGRegs[idGprDst].x : &uZeroDummy;',
+            '    return iemCImplA64_mrs_generic(pVCpu, idSysReg, idGprDst, puDst);',
+            '}',
+        ];
+        return asLines;
+
+
+    def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo):
+        """ Callback used by the second pass."""
+        if oNode.isMatchingSquareOp('X', 't', 64):
+            return ArmAstCppExpr('*puDst', 64);
+
+        return super().transformCodePass2Callback(oNode, fEliminationAllowed, oInfo);
+
+
 #
 # Generators
 #
@@ -1187,6 +1488,10 @@ class IEMArmGenerator(object):
         _ = sFilename; _ = iPartNo;
         return self.generateImplementationStubHdr('A64');
 
+
+    #
+    # Decoder.
+    #
 
     def generateDecoderFunctions(self, sInstrSet):
         """
@@ -1621,302 +1926,6 @@ class IEMArmGenerator(object):
     # System registers
     #
 
-    class SysRegAccessorInfo(object):
-        """ Info about an accessor we're emitting code for. """
-        def __init__(self, oAccessor, oReg, sEnc):
-            self.oAccessor  = oAccessor     # type: ArmAccessorSystem
-            self.oReg       = oReg;
-            self.sEnc       = sEnc;
-            self.oCode      = None;
-            # Stats for the code generator.
-            self.cCallsToIsFeatureImplemented = 0;
-            self.cInstructionReferences       = 0;
-            self.cInstrEssenceRefs            = 0;  # References to uInstrEssence (idSysReg + idGprReg + direction)
-
-
-    class SysRegGeneratorBase(object):
-        """ Base class for the system register access code generators. """
-
-        kdELxToNum = { 'EL0': 0, 'EL1': 1, 'EL2': 2, 'EL3': 3, }
-
-        def __init__(self, sInstr):
-            self.sInstr     = sInstr;
-            self.aoInfo     = []           # type: List[SysRegAccessorInfo]
-
-        def generateOneHandler(self, oInfo):
-            return [ '', '/// @todo %s / %s' % (self.sInstr, oInfo.sEnc,) ];
-
-        def generateMainFunction(self):
-            return [ '', '/// @todo %s main function' % (self.sInstr,) ];
-
-        def isA64Instruction(self):
-            return self.sInstr.startswith('A64');
-
-        kdAstForFunctionsWithoutArguments = {
-            'EL2Enabled': # HaveEL(EL2) && (!Have(EL3) || SCR_curr[].NS || IsSecureEL2Enabled())
-            ArmAstBinaryOp(ArmAstFunction('HaveEL', [ArmAstIdentifier('EL2'),]),
-                                         '&&',
-                                         ArmAstBinaryOp.orListToTree([
-                ArmAstUnaryOp('!', ArmAstFunction('HaveEL', [ArmAstIdentifier('EL3'),])),
-                ArmAstDotAtom([ArmAstIdentifier('SCR_curr'), ArmAstIdentifier('NS')]), # SCR_curr is SCR or SCR_EL3.
-                ArmAstFunction('IsSecureEL2Enabled', []),
-            ])),
-        };
-
-        def transformCodePass1Callback(self, oNode, fEliminationAllowed, oInfo):
-            """ Callback for pass 1: Code flow adjustments; Optimizations. """
-            _ = fEliminationAllowed; _ = oInfo;
-            if isinstance(oNode, ArmAstIfList):
-                # If we have a complete series of PSTATE.EL == ELx checks,
-                # turn the final one into an else case to help compilers make
-                # better sense of the code flow.
-                if len(oNode.aoIfConditions) >= 3 and not oNode.oElseStatement: ## @todo EL3
-                    aidxEl = [-1, -1, -1, -1];
-                    for idxCond, oCond in enumerate(oNode.aoIfConditions):
-                        if isinstance(oCond, ArmAstBinaryOp):
-                            if oCond.sOp == '==':
-                                if oCond.oLeft.isMatchingDotAtom('PSTATE', 'EL'):
-                                    idxEl = self.kdELxToNum.get(oCond.oRight.getIdentifierName(), -1);
-                                    if idxEl >= 0:
-                                        assert aidxEl[idxEl] == -1;
-                                        aidxEl[idxEl] = idxCond;
-                    assert aidxEl[3] == -1; ## todo EL3
-                    if aidxEl[0] >= 0 and aidxEl[1] >= 0 and aidxEl[2] >= 0:
-                        # We've found checks for each of the 4 EL levels.  Convert the last one into the else.
-                        idxLast = max(aidxEl);
-                        assert idxLast + 1 == len(oNode.aoIfStatements); # There shall not be anything after the final EL check.
-                        oNode.oElseStatement = oNode.aoIfStatements[idxLast];
-                        oNode.aoIfConditions = oNode.aoIfConditions[:idxLast];
-                        oNode.aoIfStatements = oNode.aoIfStatements[:idxLast];
-
-            elif isinstance(oNode, ArmAstBinaryOp):
-                # EL3 not implemented, so eliminate PSTATE.EL == 3 and similar. ## @todo EL3
-                if oNode.oLeft.isMatchingDotAtom('PSTATE', 'EL'):
-                    if oNode.oRight.isMatchingIdentifier('EL3'):
-                        if oNode.sOp in ('==', '>='):
-                            return None;
-                        if oNode.sOp in ('!=', '<'):
-                            return ArmAstBool(True);
-                    elif oNode.sOp == '>' and oNode.oRight.isMatchingIdentifier('EL2'): # PSTATE.EL > EL2.
-                        return None;
-
-                # Simplify boolean fields checks.
-                if isinstance(oNode.oLeft, ArmAstField) and isinstance(oNode.oRight, ArmAstValue):
-                    if oNode.oRight.getWidth(None) == 1:
-                        oReg = spec.g_ddoAllArmRegistersByStateByName[oNode.oLeft.sState][oNode.oLeft.sName]; # ArmRegister
-                        aoFields = oReg.daoFields.get(oNode.oLeft.sField); # List[ArmFieldsBase]
-                        if aoFields and len(aoFields) == 1:
-                            if len(aoFields[0].aoRanges) == 1 and aoFields[0].aoRanges[0].cBitsWidth == 1:
-                                if oNode.sOp == '==' and oNode.oRight.sValue == "'1'":
-                                    return oNode.oLeft;
-                                if oNode.sOp == '==' and oNode.oRight.sValue == "'0'":
-                                    return ArmAstUnaryOp('!', oNode.oLeft);
-                                if oNode.sOp == '!=' and oNode.oRight.sValue == "'0'":
-                                    return oNode.oLeft;
-                                if oNode.sOp == '!=' and oNode.oRight.sValue == "'1'":
-                                    return ArmAstUnaryOp('!', oNode.oLeft);
-
-            elif isinstance(oNode, ArmAstFunction):
-                # Since we don't implement any external debug state (no EDSCR.STATUS),
-                # the Halted() function always returns False.  Eliminate it.
-                if oNode.isMatchingFunctionCall('Halted'):
-                    return None;
-
-                # The EL3SDDUndefPriority() and EL3SDDUndef() can likewise be eliminated,
-                # as they requires Halted() to be true and EDSCR.SDD to be set.
-                if oNode.isMatchingFunctionCall('EL3SDDUndefPriority') or oNode.isMatchingFunctionCall('EL3SDDUndef'):
-                    return None;
-
-                # The HaveAArch64() must be true if we're in a A64 instruction handler.
-                if oNode.isMatchingFunctionCall('HaveAArch64'):
-                    if self.isA64Instruction():
-                        return ArmAstBool(True);
-                    return ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_AA64')]);
-
-                # Translate HaveEL(ELx) call into the corresponding feature checks.
-                if oNode.sName == 'HaveEL':
-                    if oNode.aoArgs[0].isMatchingIdentifier('EL3'):
-                        return ArmAstBool(False); # EL3 is not implemented.
-                        #return ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_EL3')]); ## @todo EL3
-                    if oNode.aoArgs[0].isMatchingIdentifier('EL2'):
-                        return ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_EL2')]);
-                    if oNode.aoArgs[0].isMatchingIdentifier('EL1') or oNode.aoArgs[0].isMatchingIdentifier('EL0'):
-                        return ArmAstBool(True); # EL0 and EL1 are mandatory.
-                    raise Exception('Unexpected HaveEL call: %s' % (oNode.toString(),));
-
-                # AArch64_SystemAccessTrap(EL2,0x18) and such.
-                if oNode.isMatchingFunctionCall('AArch64_SystemAccessTrap', None, None):
-                    idxEl  = self.kdELxToNum.get(oNode.aoArgs[0].getIdentifierName());
-                    iClass = oNode.aoArgs[1].getIntegerValue();
-                    if idxEl is not None and iClass is not None:
-                        assert idxEl > 0;
-                        if iClass == 0:
-                            return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapUnknown(pVCpu, %s)' % (idxEl,)));
-                        if iClass == 7 and self.isA64Instruction():
-                            return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapAdvSimdFpAccessA64(pVCpu, %s)'
-                                                               % (idxEl,)));
-                        if iClass == 7 and not self.isA64Instruction():
-                            oInfo.cInstructionReferences += 1;
-                            return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapAdvSimdFpAccess(pVCpu, %u, u32Instr)'
-                                                              % (idxEl,)));
-                        if iClass == 20:
-                            oInfo.cInstrEssenceRefs += 1;
-                            return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrap128Bit(pVCpu, %s, uInstrEssence)'
-                                                              % (idxEl,)));
-                        if iClass == 24:
-                            oInfo.cInstrEssenceRefs += 1;
-                            return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrap(pVCpu, %s, uInstrEssence)' % (idxEl,)));
-                        if iClass == 25:
-                            return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapSme(pVCpu, %s)' % (idxEl,)));
-                        if iClass == 29:
-                            return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapSme(pVCpu, %s)' % (idxEl,)));
-                    raise Exception('Unexpected: %s' % (oNode.toString(),));
-
-                # Generic mapping of functions without any arguments:
-                if len(oNode.aoArgs) == 0 and oNode.sName in self.kdAstForFunctionsWithoutArguments:
-                    oNode = self.kdAstForFunctionsWithoutArguments[oNode.sName].clone();
-                    return self.transformCodePass1(oInfo, oNode);
-
-            return oNode;
-
-        def transformCodePass1(self, oInfo, oCode):
-            """ Code transformation pass 1: Code flow adjustments; Optimizations. """
-            return oCode.transform(self.transformCodePass1Callback, True, oInfo);
-
-        def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo):
-            """ Callback for pass 2: C++ translation. """
-            if isinstance(oNode, ArmAstFunction):
-                # Undefined() -> return iemRaiseUndefined(pVCpu);
-                if oNode.isMatchingFunctionCall('Undefined'):
-                    return ArmAstReturn(ArmAstCppExpr('iemRaiseUndefined(pVCpu)'));
-
-                # IsFeatureImplemented(FEAT_xxxx) -> pGstFeat->fXxxx:
-                if oNode.sName == 'IsFeatureImplemented':
-                    if len(oNode.aoArgs) != 1 or not isinstance(oNode.aoArgs[0], ArmAstIdentifier):
-                        raise Exception('Unexpected IsFeatureImplemented arguments: %s' % (oNode.aoArgs,));
-                    sFeatureNm   = oNode.aoArgs[0].sName;
-                    sCpumFeature = g_dSpecFeatToCpumFeat.get(sFeatureNm, None);
-                    if sCpumFeature is None:
-                        raise Exception('Unknown IsFeatureImplemented parameter: %s (see g_dSpecFeatToCpumFeat)' % (sFeatureNm));
-                    if isinstance(sCpumFeature, str):
-                        oInfo.cCallsToIsFeatureImplemented += 1;
-                        return ArmAstCppExpr('pGstFeats->%s' % (sCpumFeature,));
-                    if sCpumFeature is True:  return 'true /*%s*/' % (sFeatureNm,);
-                    if sCpumFeature is False: return 'false /*%s*/' % (sFeatureNm,);
-                    return ArmAstCppExpr('false /** @todo pGstFeats->%s */' % (sFeatureNm,));
-
-            elif isinstance(oNode, ArmAstBinaryOp):
-                # PSTATE.EL == EL0 and similar:
-                if oNode.oLeft.isMatchingDotAtom('PSTATE', 'EL'):
-                    idxEl = self.kdELxToNum.get(oNode.oRight.getIdentifierName(), -1);
-                    if idxEl >= 0:
-                        oNode.oLeft  = ArmAstCppExpr('IEM_F_MODE_ARM_GET_EL(pVCpu->iem.s.fExec)');
-                        oNode.oRight = ArmAstInteger(idxEl);
-                    return oNode;
-
-            _ = fEliminationAllowed;
-            _ = oInfo;
-            return oNode;
-
-        def transformCodePass2(self, oInfo, oCode):
-            """ Code transformation pass 2: C++ translation. """
-            return oCode.transform(self.transformCodePass2Callback, True, oInfo);
-
-        def morphCodeToC(self, oInfo):
-            """ Morphs the accessor code and assigns the result to self.oCode """
-            assert oInfo.oCode is None;
-            oInfo.oCode = self.transformCodePass2(oInfo, self.transformCodePass1(oInfo, oInfo.oAccessor.oAccess.clone()));
-            return True;
-
-
-    class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
-        def __init__(self):
-            IEMArmGenerator.SysRegGeneratorBase.__init__(self, 'A64.MRS');
-
-        def generateOneHandler(self, oInfo):
-            """ Generates one register access for A64.MRS. """
-            asLines = [
-                '',
-                '/**',
-                ' * %s - %s' % (oInfo.oAccessor.oEncoding.sAsmValue, oInfo.oAccessor.oEncoding.dNamedValues,),
-                ' */',
-                'static VBOXSTRICTRC iemCImplA64_mrs_%s(PVMCPU pVCpu, uint64_t *puDst%s)'
-                % (oInfo.oAccessor.oEncoding.sAsmValue, ', uint32_t uInstrEssence' if oInfo.cInstrEssenceRefs > 0 else ''),
-                '{',
-            ];
-            if oInfo.cCallsToIsFeatureImplemented > 0:
-                asLines.append('    const CPUMFEATURESARMV8 * const pGstFeats = IEM_GET_GUEST_CPU_FEATURES(pVCpu);');
-            if oInfo.oCode:
-                asLines.extend(oInfo.oCode.toStringList('    ', 'C'));
-
-            asLines.append('    /* -------- Original code specification: -------- */');
-            asLines.extend([ '    // ' + sLine for sLine in oInfo.oAccessor.oAccess.toStringList()]);
-            asLines += [
-                '    return VERR_IEM_ASPECT_NOT_IMPLEMENTED;',
-                '}',
-            ];
-            return asLines;
-
-        def generateMainFunction(self):
-            """ Generates the CIMPL function for A64.MRS. """
-            asLines = [
-                '',
-                '/**',
-                ' * Implements the MRS instruction.',
-                ' *',
-                ' * @returns Strict VBox status code.',
-                ' * @param   pVCpu       The cross context virtual CPU structure of the',
-                ' *                      calling thread.',
-                ' * @param   idSysReg    The system register to read from (IPRT format).',
-                ' * @param   idGprDst    The destination GPR register number (for exceptions).',
-                ' * @param   puDst       Where to return the value.',
-                ' */',
-                'DECLHIDDEN(VBOXSTRICT) iemCImplA64_mrs_generic(PVMCPU pVCpu, uint32_t idSysReg, uint32_t idGprDst,',
-                '                                               uint64_t *puDst)',
-                '{',
-                '    uint32_t const   uInstrEssence = idSysReg | (idGprDst << 24);',
-                '    uint64_t         uZeroDummy;',
-                '    uint64_t * const puDst = idGprDst < ARMV8_A64_REG_XZR',
-                '                           ? &pVCpu->cpum.GstCtx.aGRegs[idGprDst].x : &uZeroDummy;',
-                '    switch (idSysReg)',
-                '    {',
-            ];
-            for oInfo in self.aoInfo:
-                if oInfo.sEnc[0] == 'A':
-                    asLines.append('        case %s: %sreturn iemCImplA64_mrs_%s(pVCpu, puDst%s);'
-                                   % (oInfo.sEnc, ' ' * (45 - len(oInfo.sEnc)), oInfo.oAccessor.oEncoding.sAsmValue,
-                                      ', uInstrEssence' if oInfo.cInstrEssenceRefs else '',));
-            asLines += [
-                '    }',
-                '    /* Fall back on handcoded handler. */',
-                '    return iemCImplA64_mrs_fallback(pVCpu, idGprDst, idSysReg);',
-                '}',
-                '',
-                '/**',
-                ' * Implements the MRS instruction.',
-                ' *',
-                ' * @param   idSysReg    The system register to read from (IPRT format).',
-                ' * @param   idGprDst    The destination GPR register number.',
-                ' */',
-                'IEM_CIMPL_DEF_2(iemCImplA64_mrs, uint32_t, idSysReg, uint32_t, idGprDst)',
-                '{',
-                '    uint64_t         uZeroDummy;',
-                '    uint64_t * const puDst = idGprDst < ARMV8_A64_REG_XZR',
-                '                           ? &pVCpu->cpum.GstCtx.aGRegs[idGprDst].x : &uZeroDummy;',
-                '    return iemCImplA64_mrs_generic(pVCpu, idSysReg, idGprDst, puDst);',
-                '}',
-            ];
-            return asLines;
-
-
-        def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo):
-            """ Callback used by the second pass."""
-            if oNode.isMatchingSquareOp('X', 't', 64):
-                return ArmAstCppExpr('*puDst', 64);
-
-            return super().transformCodePass2Callback(oNode, fEliminationAllowed, oInfo);
-
-
     def generateCImplSysRegCpp(self, sInstrSet, sState):
         """ Worker for generateA64CImplSysRegCpp. """
         _ = sInstrSet;
@@ -1925,11 +1934,11 @@ class IEMArmGenerator(object):
         # Gather the relevant system register access code.
         #
         dAccessors = {
-            'A64.MRS':          IEMArmGenerator.SysRegGeneratorA64Mrs(),
-            'A64.MSRregister':  IEMArmGenerator.SysRegGeneratorBase('A64.MSRregister'),
-            'A64.MSRimmediate': IEMArmGenerator.SysRegGeneratorBase('A64.MSRimmediate'),
-            'A64.MRRS':         IEMArmGenerator.SysRegGeneratorBase('A64.MRRS'),
-            'A64.MSRRregister': IEMArmGenerator.SysRegGeneratorBase('A64.MSRRregister'),
+            'A64.MRS':          SysRegGeneratorA64Mrs(),
+            'A64.MSRregister':  SysRegGeneratorBase('A64.MSRregister'),
+            'A64.MSRimmediate': SysRegGeneratorBase('A64.MSRimmediate'),
+            'A64.MRRS':         SysRegGeneratorBase('A64.MRRS'),
+            'A64.MSRRregister': SysRegGeneratorBase('A64.MSRRregister'),
         } # type: Dict[str,SysRegGeneratorBase]
 
         for oReg in spec.g_daoAllArmRegistersByState[sState]: # type: ArmRegister
@@ -1942,7 +1951,7 @@ class IEMArmGenerator(object):
                         and not oAccessor.oEncoding.fHasIndex
                         and oAccessor.sName in ('A64.MRS', 'A64.MSRregister')):
                         sEncSortKey = oAccessor.oEncoding.getSysRegIdCreate();
-                    dAccessors[oAccessor.sName].aoInfo.append(self.SysRegAccessorInfo(oAccessor, oReg, sEncSortKey));
+                    dAccessors[oAccessor.sName].aoInfo.append(SysRegAccessorInfo(oAccessor, oReg, sEncSortKey));
 
         for sKey, oGenerator in dAccessors.items():
             assert sKey == oGenerator.sInstr;
