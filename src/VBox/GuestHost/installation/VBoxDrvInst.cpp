@@ -1136,7 +1136,8 @@ static DECLCALLBACK(RTEXITCODE) vboxDrvInstCmdStatusMain(PRTGETOPTSTATE pGetStat
                 cSvcListed++;
                 vboxDrvInstServiceList(s_apszServices[i].pszName, &SvcInfo);
 
-                if (RTStrVersionCompare(SvcInfo.szVer, szVer) != 0)
+                if (   RTStrICmp(SvcInfo.szVer, "-") != 0 /* Version information found? */
+                    && RTStrVersionCompare(SvcInfo.szVer, szVer) != 0)
                     LOG_WARNING("Service '%s' version ('%s') is different (from '%s')\n",
                                  s_apszServices[i].pszName, SvcInfo.szVer, szVer);
 

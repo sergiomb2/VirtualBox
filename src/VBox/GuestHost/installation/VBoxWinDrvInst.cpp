@@ -3310,6 +3310,7 @@ int VBoxWinDrvInstFileQueryVersionEx(const char *pszPath, uint32_t *puMajor, uin
  * @param   cbVersion       The size of the version string buffer. This MUST be
  *                          at least 2 bytes!
  *
+ * @note    On failure the returned version string always will contain '-'.
  * @note    Copied from VGSvcUtilWinGetFileVersionString(). Merge this?
  */
 int VBoxWinDrvInstFileQueryVersion(const char *pszPath, char *pszVersion, size_t cbVersion)
@@ -3344,6 +3345,8 @@ int VBoxWinDrvInstFileQueryVersion(const char *pszPath, char *pszVersion, size_t
  * @param   pszVersion      Where to return the version string.
  * @param   cbVersion       The size of the version string buffer. This MUST be
  *                          at least 2 bytes!
+ *
+ * @note    On failure the returned version string always will contain '-'.
  */
 int VBoxWinDrvInstFileQueryVersionUtf16(PCRTUTF16 pwszPath, char *pszVersion, size_t cbVersion)
 {
