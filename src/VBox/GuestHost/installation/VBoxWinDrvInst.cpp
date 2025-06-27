@@ -3012,9 +3012,15 @@ static int vboxWinDrvInstServiceQueryExInternal(SC_HANDLE hSCM, const char *pszS
            rc = RTErrConvertFromWin32(dwLastErr);
     }
 
-    int rc2 = VBoxWinDrvInstFileQueryVersionUtf16(pSvcInfo->pConfig->lpBinaryPathName, pSvcInfo->szVer, sizeof(pSvcInfo->szVer));
-    if (RT_SUCCESS(rc))
-        rc = rc2;
+    int const rc2 = VBoxWinDrvInstFileQueryVersionUtf16(pSvcInfo->pConfig->lpBinaryPathName,
+                                                        pSvcInfo->szVer, sizeof(pSvcInfo->szVer));
+    /* If the file was not found we wanted to query the version from, don't return this as
+     * an error to the caller. We still potentially have the service information from above. */
+    if (rc2 != VERR_FILE_NOT_FOUND)
+    {
+        if (RT_SUCCESS(rc))
+            rc = rc2;
+    }
 
     if (RT_FAILURE(rc))
         vboxWinDrvInstServiceInfoDestroy(pSvcInfo);
@@ -3334,7 +3340,6 @@ int VBoxWinDrvInstFileQueryVersion(const char *pszPath, char *pszVersion, size_t
  *
  * @returns VBox status code.  The output buffer is always valid and the status
  *          code can safely be ignored.
- *
  * @param   pszwPath        Absolute path to the file to query.
  * @param   pszVersion      Where to return the version string.
  * @param   cbVersion       The size of the version string buffer. This MUST be
