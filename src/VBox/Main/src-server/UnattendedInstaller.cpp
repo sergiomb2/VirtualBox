@@ -122,7 +122,9 @@ UnattendedInstaller::createInstance(VBOXOSTYPE enmDetectedOSType, const Utf8Str 
         else if (   enmDetectedOSType >= VBOXOSTYPE_Oracle
                  && enmDetectedOSType <= VBOXOSTYPE_Oracle_latest_arm64)
         {
-            if (RTStrVersionCompare(strDetectedOSVersion.c_str(), "9") >= 0)
+            if (RTStrVersionCompare(strDetectedOSVersion.c_str(), "10") >= 0)
+                pUinstaller = new UnattendedOracleLinux10Installer(pParent);
+            else if (RTStrVersionCompare(strDetectedOSVersion.c_str(), "9") >= 0)
                 pUinstaller = new UnattendedOracleLinux9Installer(pParent);
             else if (RTStrVersionCompare(strDetectedOSVersion.c_str(), "8") >= 0)
                 pUinstaller = new UnattendedOracleLinux8Installer(pParent);
