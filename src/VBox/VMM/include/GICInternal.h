@@ -262,6 +262,8 @@ typedef struct GICDEV
 typedef GICDEV *PGICDEV;
 /** Pointer to a const GIC device. */
 typedef GICDEV const *PCGICDEV;
+AssertCompileMemberAlignment(GICDEV, au32IntrRouting, 4);
+AssertCompileMemberAlignment(GICDEV, abIntrPriority, 4);
 AssertCompileMemberSizeAlignment(GICDEV, Gits, 8);
 AssertCompileMemberAlignment(GICDEV, abLpiConfig, 8);
 AssertCompileMemberAlignment(GICDEV, hMmioDist, 8);
