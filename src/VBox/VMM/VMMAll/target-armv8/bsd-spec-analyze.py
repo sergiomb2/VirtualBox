@@ -696,6 +696,11 @@ class ArmAstBase(object):
     def toString(self):
         return 'todo<%s>' % (self.sType,);
 
+    def toStringEx(self, cchMaxWidth):
+        """ Extended version of toString() that can split the expression up into multiple lines (newline sep). """
+        _ = cchMaxWidth;
+        return self.toString();
+
     def __str__(self):
         return self.toString();
 
@@ -738,6 +743,11 @@ class ArmAstBase(object):
         # This is overridden by ArmAstInteger.
         _ = iValue;
         return False;
+
+    def getIntegerValue(self):
+        """ Return the value of an integer node, otherwise return None """
+        # This is overridden by ArmAstInteger.
+        return None;
 
     def isMatchingSquareOp(self, sVar, *aoValueMatches):
         """
@@ -811,6 +821,50 @@ class ArmAstBinaryOp(ArmAstBase):
         #'<->': kOpTypeConstraints,
     };
 
+    ## This is operators that can be grouped by toStringEx.
+    # It's operators with the same C++ precedency, more or less.
+    kdOpGroupings = {
+        '||':  { '||', },
+        '&&':  { '&&', },
+        '==':  { '==', '!=', '>', '<', '>=', '<=', 'IN', },
+        '!=':  { '==', '!=', '>', '<', '>=', '<=', 'IN', },
+        '>':   { '==', '!=', '>', '<', '>=', '<=', 'IN', },
+        '<':   { '==', '!=', '>', '<', '>=', '<=', 'IN', },
+        '>=':  { '==', '!=', '>', '<', '>=', '<=', 'IN', },
+        '<=':  { '==', '!=', '>', '<', '>=', '<=', 'IN', },
+        'IN':  { '==', '!=', '>', '<', '>=', '<=', 'IN', },
+        '+':   { '+', '-', },
+        '-':   { '+', '-', },
+        'MOD': { '*', 'MOD', },
+        '*':   { '*', 'MOD', },
+        'AND': { 'AND', 'OR', },
+        'OR':  { 'AND', 'OR', },
+        '-->': { '-->', },
+        '<->': { '<->', },
+    };
+
+    ## Operator precedency, lower means higher importance.
+    kdOpPrecedence = {
+        '||':   15,
+        '&&':   14,
+        '==':   10,
+        '!=':   10,
+        '>':    9,
+        '<':    9,
+        '>=':   9,
+        '<=':   9,
+        'IN':   9,
+        '+':    6,
+        '-':    6,
+        'MOD':  5,
+        '*':    5,
+        'AND':  11,
+        'OR':   15,
+        '-->':  17,
+        '<->':  17,
+    };
+
+
     def __init__(self, oLeft, sOp, oRight, fConstraints = False):
         ArmAstBase.__init__(self, ArmAstBase.ksTypeBinaryOp);
         assert sOp in ArmAstBinaryOp.kdOps and (fConstraints or ArmAstBinaryOp.kdOps[sOp] != ArmAstBinaryOp.kOpTypeConstraints),\
@@ -849,10 +903,20 @@ class ArmAstBinaryOp(ArmAstBase):
             return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
         if self.oLeft and self.oRight:
+            if self.sOp == '||' and (self.oLeft.isBoolAndTrue() or self.oRight.isBoolAndTrue()):
+                return fnCallback(ArmAstBool(True), fEliminationAllowed, oCallbackArg);
+            if self.sOp == '&&':
+                if self.oLeft.isBoolAndFalse() or self.oRight.isBoolAndFalse():
+                    if not fEliminationAllowed:
+                        return fnCallback(ArmAstBool(False), fEliminationAllowed, oCallbackArg);
+                    return None;
+                if self.oLeft.isBoolAndTrue():
+                    return fnCallback(self.oRight, fEliminationAllowed, oCallbackArg);
+                if self.oRight.isBoolAndTrue():
+                    return fnCallback(self.oLeft, fEliminationAllowed, oCallbackArg);
             return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
         if self.sOp == '||':
-            ## @todo ensure boolean return?
             if self.oLeft:
                 return self.oLeft;
             if self.oRight:
@@ -878,6 +942,51 @@ class ArmAstBinaryOp(ArmAstBase):
             sRight = '(%s)' % (sRight);
 
         return '%s %s %s' % (sLeft, self.sOp, sRight);
+
+    def toStringEx(self, cchMaxWidth):
+        """ Extended version of toString() that can split the expression up into multiple lines (newline sep). """
+        # First try as-is without any wrapping.
+        sRet = self.toString();
+        if len(sRet) <= cchMaxWidth:
+            return sRet;
+
+        # Okay, so it's too long.  We create a list of binary ops that can be
+        # grouped together with self.sOp and display then one on each line.
+        cchIndent   = len(self.sOp) + 1;
+        dOpGrouping = self.kdOpGroupings[self.sOp];
+        aoList      = [ self.oLeft, self.sOp, self.oRight ];
+        idx = 0;
+        while idx < len(aoList):
+            oEntry = aoList[idx];
+            if isinstance(oEntry, str):
+                cchIndent = max(cchIndent, len(oEntry) + 1);
+            elif isinstance(oEntry, ArmAstBinaryOp) and oEntry.sOp in dOpGrouping:
+                aoList = aoList[:idx] + [ oEntry.oLeft, oEntry.sOp, oEntry.oRight ] + aoList[idx + 1:];
+                idx -= 1;
+            idx += 1;
+
+        # Now do the formatting.
+        cchNewMaxWidth = max(cchMaxWidth - cchIndent, 16);
+        sRet           = '';
+        idx            = 0;
+        sCurOp         = ' ' * (cchIndent - 1);
+        iCurOpPrio     = self.kdOpPrecedence[self.sOp];
+        while idx < len(aoList):
+            oNode       = aoList[idx];
+            sNextOp     = aoList[idx + 1] if idx + 1 < len(aoList) else sCurOp;
+            iNextOpPrio = self.kdOpPrecedence[sNextOp] if idx + 1 < len(aoList) else iCurOpPrio;
+            sNodeExpr   = oNode.toStringEx(cchNewMaxWidth);
+            if isinstance(oNode, ArmAstBinaryOp) and self.kdOpPrecedence[oNode.sOp] > min(iNextOpPrio, iCurOpPrio):
+                sNodeExpr = '(' + sNodeExpr.replace('\n', '\n ') + ')';
+            if idx > 0:
+                sRet += '\n';
+            sRet += sCurOp + ' ' + sNodeExpr.replace('\n', '\n' + ' ' * cchIndent);
+
+            # next;
+            sCurOp     = sNextOp;
+            iCurOpPrio = iNextOpPrio;
+            idx       += 2;
+        return sRet;
 
     def toCExpr(self, oHelper):
         # Logical, compare, arithmetical & bitwise operations are straight forward.
@@ -996,9 +1105,16 @@ class ArmAstUnaryOp(ArmAstBase):
         fChildElimination = ArmAstUnaryOp.kdOps[self.sOp] in (ArmAstUnaryOp.kOpTypeLogical,);
         self.oExpr = self.oExpr.transform(fnCallback, fChildElimination, oCallbackArg);
         if self.oExpr:
-            return fnCallback(self, fEliminationAllowed, oCallbackArg);
-        assert fChildElimination;
-        if fEliminationAllowed:
+            oRet = fnCallback(self, fEliminationAllowed, oCallbackArg);
+            if oRet is not None:
+                if oRet.isBoolAndTrue() and self.sOp == '!':
+                    return ArmAstBool(False);
+                if oRet.isBoolAndFalse() and self.sOp == '!':
+                    return ArmAstBool(True);
+                return oRet;
+        else:
+            assert fChildElimination;
+        if fEliminationAllowed and self.sOp == 'NOT':
             return None;
         assert self.sOp == '!';
         return fnCallback(ArmAstBool(True), fEliminationAllowed, oCallbackArg);
@@ -1424,6 +1540,9 @@ class ArmAstInteger(ArmAstBase):
 
     def isMatchingInteger(self, iValue):
         return self.iValue == iValue;
+
+    def getIntegerValue(self):
+        return self.iValue;
 
 
 class ArmAstSet(ArmAstBase):
@@ -3003,7 +3122,11 @@ class ArmAstIfList(ArmAstStatementBase):
         asLines = [];
         sNextIndent = sIndent + '    ';
         for i, oIfCond in enumerate(self.aoIfConditions):
-            asLines.append('%s%sif (%s)' % (sIndent, 'else ' if i > 0 else '', oIfCond.toString(),));
+            sIfCond = oIfCond.toStringEx(cchMaxWidth = max(120 - len(sIndent), 60));
+            if '\n' in sIfCond:
+                sIfCond = sIfCond.replace('\n', '\n         ' + sIndent if i > 0 else '\n    ' + sIndent);
+            asLines.extend(('%s%sif (%s)' % (sIndent, 'else ' if i > 0 else '', sIfCond,)).split('\n'));
+
             oIfStmt = self.aoIfStatements[i];
             if isinstance(oIfStmt, ArmAstStatementBase):
                 asStmts = oIfStmt.toStringList(sNextIndent, sLang);
@@ -5137,10 +5260,15 @@ class IEMArmGenerator(object):
             self.oCode      = None;
             # Stats for the code generator.
             self.cCallsToIsFeatureImplemented = 0;
+            self.cInstructionReferences       = 0;
+            self.cInstrEssenceRefs            = 0;  # References to uInstrEssence (idSysReg + idGprReg + direction)
 
 
     class SysRegGeneratorBase(object):
         """ Base class for the system register access code generators. """
+
+        kdELxToNum = { 'EL0': 0, 'EL1': 1, 'EL2': 2, 'EL3': 3, }
+
         def __init__(self, sInstr):
             self.sInstr     = sInstr;
             self.aoInfo     = []           # type: List[SysRegAccessorInfo]
@@ -5150,6 +5278,9 @@ class IEMArmGenerator(object):
 
         def generateMainFunction(self):
             return [ '', '/// @todo %s main function' % (self.sInstr,) ];
+
+        def isA64Instruction(self):
+            return self.sInstr.startswith('A64');
 
         kdAstForFunctionsWithoutArguments = {
             'EL2Enabled': # HaveEL(EL2) && (!Have(EL3) || SCR_curr[].NS || IsSecureEL2Enabled())
@@ -5169,23 +5300,51 @@ class IEMArmGenerator(object):
                 # If we have a complete series of PSTATE.EL == ELx checks,
                 # turn the final one into an else case to help compilers make
                 # better sense of the code flow.
-                if len(oNode.aoIfConditions) >= 4 and not oNode.oElseStatement:
+                if len(oNode.aoIfConditions) >= 3 and not oNode.oElseStatement: ## @todo EL3
                     aidxEl = [-1, -1, -1, -1];
                     for idxCond, oCond in enumerate(oNode.aoIfConditions):
                         if isinstance(oCond, ArmAstBinaryOp):
                             if oCond.sOp == '==':
                                 if oCond.oLeft.isMatchingDotAtom('PSTATE', 'EL'):
-                                    idxEl = ('EL0', 'EL1', 'EL2', 'EL3').index(oCond.oRight.getIdentifierName());
+                                    idxEl = self.kdELxToNum.get(oCond.oRight.getIdentifierName(), -1);
                                     if idxEl >= 0:
                                         assert aidxEl[idxEl] == -1;
                                         aidxEl[idxEl] = idxCond;
-                    if aidxEl[0] >= 0 and aidxEl[1] >= 0 and aidxEl[2] >= 0 and aidxEl[3] >= 0:
+                    assert aidxEl[3] == -1; ## todo EL3
+                    if aidxEl[0] >= 0 and aidxEl[1] >= 0 and aidxEl[2] >= 0:
                         # We've found checks for each of the 4 EL levels.  Convert the last one into the else.
                         idxLast = max(aidxEl);
                         assert idxLast + 1 == len(oNode.aoIfStatements); # There shall not be anything after the final EL check.
                         oNode.oElseStatement = oNode.aoIfStatements[idxLast];
                         oNode.aoIfConditions = oNode.aoIfConditions[:idxLast];
                         oNode.aoIfStatements = oNode.aoIfStatements[:idxLast];
+
+            elif isinstance(oNode, ArmAstBinaryOp):
+                # EL3 not implemented, so eliminate PSTATE.EL == 3 and similar. ## @todo EL3
+                if oNode.oLeft.isMatchingDotAtom('PSTATE', 'EL'):
+                    if oNode.oRight.isMatchingIdentifier('EL3'):
+                        if oNode.sOp in ('==', '>='):
+                            return None;
+                        if oNode.sOp in ('!=', '<'):
+                            return ArmAstBool(True);
+                    elif oNode.sOp == '>' and oNode.oRight.isMatchingIdentifier('EL2'): # PSTATE.EL > EL2.
+                        return None;
+
+                # Simplify boolean fields checks.
+                if isinstance(oNode.oLeft, ArmAstField) and isinstance(oNode.oRight, ArmAstValue):
+                    if oNode.oRight.getWidth(None) == 1:
+                        oReg = g_ddoAllArmRegistersByStateByName[oNode.oLeft.sState][oNode.oLeft.sName]; # ArmRegister
+                        aoFields = oReg.daoFields.get(oNode.oLeft.sField); # List[ArmFieldsBase]
+                        if aoFields and len(aoFields) == 1:
+                            if len(aoFields[0].aoRanges) == 1 and aoFields[0].aoRanges[0].cBitsWidth == 1:
+                                if oNode.sOp == '==' and oNode.oRight.sValue == "'1'":
+                                    return oNode.oLeft;
+                                if oNode.sOp == '==' and oNode.oRight.sValue == "'0'":
+                                    return ArmAstUnaryOp('!', oNode.oLeft);
+                                if oNode.sOp == '!=' and oNode.oRight.sValue == "'0'":
+                                    return oNode.oLeft;
+                                if oNode.sOp == '!=' and oNode.oRight.sValue == "'1'":
+                                    return ArmAstUnaryOp('!', oNode.oLeft);
 
             elif isinstance(oNode, ArmAstFunction):
                 # Since we don't implement any external debug state (no EDSCR.STATUS),
@@ -5200,17 +5359,19 @@ class IEMArmGenerator(object):
 
                 # The HaveAArch64() must be true if we're in a A64 instruction handler.
                 if oNode.isMatchingFunctionCall('HaveAArch64'):
-                    if self.sInstr.startswith('A64'):
+                    if self.isA64Instruction():
                         return ArmAstBool(True);
                     return ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_AA64')]);
 
                 # Translate HaveEL(ELx) call into the corresponding feature checks.
                 if oNode.sName == 'HaveEL' and len(oNode.aoArgs) == 1:
                     if oNode.aoArgs[0].isMatchingIdentifier('EL3'):
-                        return ArmAstBinaryOp.orListToTree([
-                            ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_AA64EL3')]),
-                            ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_AA32EL3')]),
-                        ]);
+                        ## @todo EL3 support.
+                        #return ArmAstBinaryOp.orListToTree([
+                        #    ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_AA64EL3')]),
+                        #    ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_AA32EL3')]),
+                        #]);
+                        return None; # EL3 not supported.
                     if oNode.aoArgs[0].isMatchingIdentifier('EL2'):
                         return ArmAstBinaryOp.orListToTree([
                             ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_AA64EL2')]),
@@ -5219,6 +5380,34 @@ class IEMArmGenerator(object):
                     if oNode.aoArgs[0].isMatchingIdentifier('EL1') or oNode.aoArgs[0].isMatchingIdentifier('EL0'):
                         return ArmAstBool(True); # EL0 and EL1 are mandatory.
                     raise Exception('Unexpected HaveEL argument: %s' % (oNode.aoArgs[0],));
+
+                # AArch64_SystemAccessTrap(EL2,0x18) and such.
+                if oNode.isMatchingFunctionCall('AArch64_SystemAccessTrap', None, None):
+                    idxEl  = self.kdELxToNum.get(oNode.aoArgs[0].getIdentifierName());
+                    iClass = oNode.aoArgs[1].getIntegerValue();
+                    if idxEl is not None and iClass is not None:
+                        assert idxEl > 0;
+                        if iClass == 0:
+                            return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapUnknown(pVCpu, %s)' % (idxEl,)));
+                        if iClass == 7 and self.isA64Instruction():
+                            return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapAdvSimdFpAccessA64(pVCpu, %s)'
+                                                               % (idxEl,)));
+                        if iClass == 7 and not self.isA64Instruction():
+                            oInfo.cInstructionReferences += 1;
+                            return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapAdvSimdFpAccess(pVCpu, %u, u32Instr)'
+                                                              % (idxEl,)));
+                        if iClass == 20:
+                            oInfo.cInstrEssenceRefs += 1;
+                            return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrap128Bit(pVCpu, %s, uInstrEssence)'
+                                                              % (idxEl,)));
+                        if iClass == 24:
+                            oInfo.cInstrEssenceRefs += 1;
+                            return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrap(pVCpu, %s, uInstrEssence)' % (idxEl,)));
+                        if iClass == 25:
+                            return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapSme(pVCpu, %s)' % (idxEl,)));
+                        if iClass == 29:
+                            return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapSme(pVCpu, %s)' % (idxEl,)));
+                    raise Exception('Unexpected: %s' % (oNode.toString(),));
 
                 # Generic mapping of functions without any arguments:
                 if len(oNode.aoArgs) == 0 and oNode.sName in self.kdAstForFunctionsWithoutArguments:
@@ -5236,7 +5425,7 @@ class IEMArmGenerator(object):
             if isinstance(oNode, ArmAstFunction):
                 # Undefined() -> return iemRaiseUndefined(pVCpu);
                 if oNode.isMatchingFunctionCall('Undefined'):
-                    return ArmAstCppStmt('return iemRaiseUndefined(pVCpu);');
+                    return ArmAstReturn(ArmAstCppExpr('iemRaiseUndefined(pVCpu)'));
 
                 # IsFeatureImplemented(FEAT_xxxx) -> pGstFeat->fXxxx:
                 if oNode.sName == 'IsFeatureImplemented':
@@ -5254,7 +5443,7 @@ class IEMArmGenerator(object):
             elif isinstance(oNode, ArmAstBinaryOp):
                 # PSTATE.EL == EL0 and similar:
                 if oNode.oLeft.isMatchingDotAtom('PSTATE', 'EL'):
-                    idxEl = ('EL0', 'EL1', 'EL2', 'EL3').index(oNode.oRight.getIdentifierName());
+                    idxEl = self.kdELxToNum.get(oNode.oRight.getIdentifierName(), -1);
                     if idxEl >= 0:
                         oNode.oLeft  = ArmAstCppExpr('IEM_F_MODE_ARM_GET_EL(pVCpu->iem.s.fExec)');
                         oNode.oRight = ArmAstInteger(idxEl);
@@ -5286,7 +5475,8 @@ class IEMArmGenerator(object):
                 '/**',
                 ' * %s - %s' % (oInfo.oAccessor.oEncoding.sAsmValue, oInfo.oAccessor.oEncoding.dNamedValues,),
                 ' */',
-                'static VBOXSTRICTRC iemCImplA64_mrs_%s(PVMCPU pVCpu, uint64_t *puDst)' % (oInfo.oAccessor.oEncoding.sAsmValue,),
+                'static VBOXSTRICTRC iemCImplA64_mrs_%s(PVMCPU pVCpu, uint64_t *puDst%s)'
+                % (oInfo.oAccessor.oEncoding.sAsmValue, ', uint32_t uInstrEssence' if oInfo.cInstrEssenceRefs > 0 else ''),
                 '{',
             ];
             if oInfo.cCallsToIsFeatureImplemented > 0:
@@ -5295,7 +5485,7 @@ class IEMArmGenerator(object):
                 asLines.extend(oInfo.oCode.toStringList('    ', 'C'));
 
             asLines.append('    /* -------- Original code specification: -------- */');
-            asLines.extend(oInfo.oAccessor.oAccess.toStringList('    // '));
+            asLines.extend([ '    // ' + sLine for sLine in oInfo.oAccessor.oAccess.toStringList()]);
             asLines += [
                 '    return VERR_IEM_ASPECT_NOT_IMPLEMENTED;',
                 '}',
@@ -5313,11 +5503,13 @@ class IEMArmGenerator(object):
                 ' * @param   pVCpu       The cross context virtual CPU structure of the',
                 ' *                      calling thread.',
                 ' * @param   idSysReg    The system register to read from (IPRT format).',
+                ' * @param   idGprDst    The destination GPR register number (for exceptions).',
                 ' * @param   puDst       Where to return the value.',
-                ' * @todo    Place this in CPUM and return status codes rather than raising exceptions.',
                 ' */',
-                'DECLHIDDEN(VBOXSTRICT) iemCImplA64_mrs_generic(PVMCPU pVCpu, uint32_t idSysReg, uint64_t *puDst)',
+                'DECLHIDDEN(VBOXSTRICT) iemCImplA64_mrs_generic(PVMCPU pVCpu, uint32_t idSysReg, uint32_t idGprDst,',
+                '                                               uint64_t *puDst)',
                 '{',
+                '    uint32_t const   uInstrEssence = idSysReg | (idGprDst << 24);',
                 '    uint64_t         uZeroDummy;',
                 '    uint64_t * const puDst = idGprDst < ARMV8_A64_REG_XZR',
                 '                           ? &pVCpu->cpum.GstCtx.aGRegs[idGprDst].x : &uZeroDummy;',
@@ -5326,8 +5518,9 @@ class IEMArmGenerator(object):
             ];
             for oInfo in self.aoInfo:
                 if oInfo.sEnc[0] == 'A':
-                    asLines.append('        case %s: %sreturn iemCImplA64_mrs_%s(pVCpu, puDst);'
-                                   % (oInfo.sEnc, ' ' * (45 - len(oInfo.sEnc)), oInfo.oAccessor.oEncoding.sAsmValue));
+                    asLines.append('        case %s: %sreturn iemCImplA64_mrs_%s(pVCpu, puDst%s);'
+                                   % (oInfo.sEnc, ' ' * (45 - len(oInfo.sEnc)), oInfo.oAccessor.oEncoding.sAsmValue,
+                                      ', uInstrEssence' if oInfo.cInstrEssenceRefs else '',));
             asLines += [
                 '    }',
                 '    /* Fall back on handcoded handler. */',
@@ -5337,15 +5530,15 @@ class IEMArmGenerator(object):
                 '/**',
                 ' * Implements the MRS instruction.',
                 ' *',
-                ' * @param   idSysReg    The system register to read from.',
-                ' * @param   idGprDst    The destination GPR register number (IPRT format).',
+                ' * @param   idSysReg    The system register to read from (IPRT format).',
+                ' * @param   idGprDst    The destination GPR register number.',
                 ' */',
-                'IEM_CIMPL_DEF_2(iemCImplA64_mrs, uint32_t, idSysReg, uint8_t, idGprDst)',
+                'IEM_CIMPL_DEF_2(iemCImplA64_mrs, uint32_t, idSysReg, uint32_t, idGprDst)',
                 '{',
                 '    uint64_t         uZeroDummy;',
                 '    uint64_t * const puDst = idGprDst < ARMV8_A64_REG_XZR',
                 '                           ? &pVCpu->cpum.GstCtx.aGRegs[idGprDst].x : &uZeroDummy;',
-                '    return iemCImplA64_mrs_generic(pVCpu, idSysReg, puDst);',
+                '    return iemCImplA64_mrs_generic(pVCpu, idSysReg, idGprDst, puDst);',
                 '}',
             ];
             return asLines;
