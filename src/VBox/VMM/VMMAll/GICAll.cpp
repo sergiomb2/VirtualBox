@@ -654,10 +654,10 @@ static uint16_t gicReDistGetHighestPriorityPendingIntr(PCGICCPU pGicCpu, uint32_
                     uint16_t const cIntrPerElement = sizeof(pGicCpu->bmIntrGroup[0]) * 8;
                     idxHighest = (uint16_t)idxPending;
                     bPriority  = pGicCpu->abIntrPriority[idxPending];
-                    fIntrGrp   =   RT_BOOL(  pGicCpu->bmIntrGroup[idxHighest / cIntrPerElement]
-                                           & RT_BIT_64(idxHighest % cIntrPerElement))
-                                 ? (GIC_INTR_GROUP_1NS | GIC_INTR_GROUP_1S)
-                                 : GIC_INTR_GROUP_0;
+                    fIntrGrp   = RT_BOOL(  pGicCpu->bmIntrGroup[idxHighest / cIntrPerElement]
+                                         & RT_BIT_64(idxHighest % cIntrPerElement))
+                               ? (GIC_INTR_GROUP_1NS | GIC_INTR_GROUP_1S)
+                               : GIC_INTR_GROUP_0;
                 }
                 idxPending = ASMBitNextSet(pvIntrs, cIntrs, idxPending);
             } while (idxPending != -1);
