@@ -1298,7 +1298,7 @@ $(foreach py, \
 	$(if-expr "$(VBOX_BLD_PYTHON_VERSION)" vge "3.8.0" && "$(VBOX_PYLINT_VERSION)" >= 20000, \
 		$(PATH_SUB_CURRENT)/VMMAll/target-armv8/ArmAst.py \
 		$(PATH_SUB_CURRENT)/VMMAll/target-armv8/ArmBsdSpec.py \
-		$(PATH_SUB_CURRENT)/VMMAll/target-armv8/bsd-spec-analyze.py,) \
+		$(PATH_SUB_CURRENT)/VMMAll/target-armv8/ArmBsdSpecCodeGen.py,) \
 , $(eval $(def_vbox_vmm_py_check)))
 
 

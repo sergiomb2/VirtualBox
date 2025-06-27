@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # $Id$
-# pylint: disable=invalid-name
 
 """
 ARM BSD / OpenSource specification code generator.
@@ -758,8 +757,8 @@ class DecoderNode(object):
         15,     # [2^14 =16384] => 32768
     );
 
-    kChildMaskOpcodeValueIf          = 0x7fffffff;
-    kChildMaskMultipleOpcodeValueIfs = 0xffffffff;
+    kfChildMaskOpcodeValueIf          = 0x7fffffff;
+    kfChildMaskMultipleOpcodeValueIfs = 0xffffffff;
 
     class TooExpensive(Exception):
         def __init__(self):
@@ -791,7 +790,7 @@ class DecoderNode(object):
             uValue &= uValue - 1;
         return cBits;
 
-    s_uLogLine = 0;
+    s_uLogLine = 0;  # pylint: disable=invalid-name
     @staticmethod
     def dprint(uDepth, sMsg):
         msNow = (time.time_ns() - g_nsProgStart) // 1000000;
@@ -816,14 +815,14 @@ class DecoderNode(object):
             # Special case: 1 instruction - leaf.
             if cInstructions <= 1:
                 if self.aoInstructions[0].fFixedMask & ~self.fCheckedMask != 0:
-                    self.fChildMask = DecoderNode.kChildMaskOpcodeValueIf;
+                    self.fChildMask = DecoderNode.kfChildMaskOpcodeValueIf;
                     uCost = 16;                                                         # 16 = kCostOpcodeValueIf
                 else:
                     assert self.fChildMask == 0;
 
             # Special case: 2, 3 or 4 instructions - use a sequence of 'if ((uOpcode & fFixedMask) == fFixedValue)' checks.
             else:
-                self.fChildMask = DecoderNode.kChildMaskMultipleOpcodeValueIfs;
+                self.fChildMask = DecoderNode.kfChildMaskMultipleOpcodeValueIfs;
                 uCost = 32 * cInstructions * 2;                                         # 32 = kCostMultipleOpcodeValueIfs
             return uCost;
 
@@ -1062,10 +1061,10 @@ class DecoderNode(object):
         Sets the fDecoderLeafCheckNeeded instruction property.
         """
         if not self.dChildren:
-            assert len(self.aoInstructions) != 1 or self.fChildMask in (0, DecoderNode.kChildMaskOpcodeValueIf);
-            assert len(self.aoInstructions) == 1 or self.fChildMask == DecoderNode.kChildMaskMultipleOpcodeValueIfs;
+            assert len(self.aoInstructions) != 1 or self.fChildMask in (0, DecoderNode.kfChildMaskOpcodeValueIf);
+            assert len(self.aoInstructions) == 1 or self.fChildMask == DecoderNode.kfChildMaskMultipleOpcodeValueIfs;
             for oInstr in self.aoInstructions:
-                oInstr.fDecoderLeafCheckNeeded = self.fChildMask == DecoderNode.kChildMaskOpcodeValueIf;
+                oInstr.fDecoderLeafCheckNeeded = self.fChildMask == DecoderNode.kfChildMaskOpcodeValueIf;
         else:
             for oChildNode in self.dChildren.values():
                 oChildNode.setInstrProps(uDepth + 1);
@@ -1460,13 +1459,13 @@ class IEMArmGenerator(object):
             oChildNode = oNode.dChildren[idx];
             if oChildNode.dChildren:
                 aoSubCodeBlocks = self.generateDecoderCode(sInstrSet, oChildNode, uDepth + 1, dCodeCache);
-            elif oChildNode.fChildMask == DecoderNode.kChildMaskMultipleOpcodeValueIfs:
+            elif oChildNode.fChildMask == DecoderNode.kfChildMaskMultipleOpcodeValueIfs:
                 assert len(oChildNode.aoInstructions) > 1;
                 aoSubCodeBlocks = [IEMArmGenerator.DecoderCodeMultiIfFunc(sInstrSet, oChildNode, uDepth + 1),];
                 cMultiIfEntries += 1;
             else:
                 assert len(oChildNode.aoInstructions) == 1;
-                assert oChildNode.fChildMask in [DecoderNode.kChildMaskOpcodeValueIf, 0];
+                assert oChildNode.fChildMask in [DecoderNode.kfChildMaskOpcodeValueIf, 0];
                 cLeafEntries += 1;
                 dChildCode[idx] = IEMArmGenerator.DecoderCodeTableLeafEntry(oChildNode.getFuncName(sInstrSet, -1));
                 continue;
@@ -2513,33 +2512,33 @@ def printException(oXcpt):
 
 
 if __name__ == '__main__':
-    fProfileIt = 'VBOX_PROFILE_PYTHON' in os.environ;
-    oProfiler = cProfile.Profile() if fProfileIt else None;
+    g_fProfileIt = 'VBOX_PROFILE_PYTHON' in os.environ;
+    g_oProfiler = cProfile.Profile() if g_fProfileIt else None;
     try:
-        if not oProfiler:
-            rcExit = IEMArmGenerator().main(sys.argv);
+        if not g_oProfiler:
+            g_iRcExit = IEMArmGenerator().main(sys.argv);
         else:
-            rcExit = oProfiler.runcall(IEMArmGenerator().main, sys.argv);
+            g_iRcExit = g_oProfiler.runcall(IEMArmGenerator().main, sys.argv);
     except Exception as oXcptOuter:
         printException(oXcptOuter);
-        rcExit = 2;
+        g_iRcExit = 2;
     except KeyboardInterrupt as oXcptOuter:
         printException(oXcptOuter);
-        rcExit = 2;
-    if oProfiler:
-        sProfileSort = 'tottime'; iSortColumn = 1;
-        #sProfileSort = 'cumtime'; iSortColumn = 3;
-        if not oProfiler:
-            oProfiler.print_stats(sort=sProfileSort);
+        g_iRcExit = 2;
+    if g_oProfiler:
+        g_sProfileSort = 'tottime'; g_iSortColumn = 1;
+        #g_sProfileSort = 'cumtime'; g_iSortColumn = 3;
+        if not g_oProfiler:
+            g_oProfiler.print_stats(sort = g_sProfileSort);
         else:
             oStringStream = io.StringIO();
-            pstats.Stats(oProfiler, stream = oStringStream).strip_dirs().sort_stats(sProfileSort).print_stats(64);
+            pstats.Stats(g_oProfiler, stream = oStringStream).strip_dirs().sort_stats(g_sProfileSort).print_stats(64);
             for iStatLine, sStatLine in enumerate(oStringStream.getvalue().split('\n')):
                 if iStatLine > 20:
                     asStatWords = sStatLine.split();
-                    if (    len(asStatWords) > iSortColumn
-                        and asStatWords[iSortColumn] in { '0.000', '0.001', '0.002', '0.003', '0.004', '0.005' }):
+                    if (    len(asStatWords) > g_iSortColumn
+                        and asStatWords[g_iSortColumn] in { '0.000', '0.001', '0.002', '0.003', '0.004', '0.005' }):
                         break;
                 print(sStatLine);
-    sys.exit(rcExit);
+    sys.exit(g_iRcExit);
 
