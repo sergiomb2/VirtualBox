@@ -155,8 +155,6 @@ extern const PDMGICBACKEND g_GicKvmBackend;
 
 /**
  * GIC distributor interrupt bitmap.
- *
- * @returns
  */
 typedef union GICDISTINTRBMP
 {
