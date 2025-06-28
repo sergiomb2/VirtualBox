@@ -1182,7 +1182,9 @@ class SysRegGeneratorBase(object):
             raise Exception('Unexpected: %s' % (oNode.toString(),));
         ## @todo EL3
         if oNode.aoArgs[0].sName in ('FEAT_AA64EL3', 'FEAT_AA32EL3', 'FEAT_EL3', 'FEAT_RME',
+                                     'FEAT_MEC', # This feature implies FEAT_RME, which we don't implement because of no EL3.
                                      'FEAT_SEL2', 'FEAT_Secure', # No secure state w/o EL3...
+                                     'FEAT_FGT2', # We don't have any of the associated registers like HDFGRTR2 yet.
                                      ):
             return ArmAstBool(False);
 
@@ -1206,7 +1208,6 @@ class SysRegGeneratorBase(object):
                 # Without EL3, everything is non-secure.
                 return ArmAstBool(True);
         raise Exception('Unexpected: %s' % (oNode.toString(),));
-
 
     def transformCodePass1_AArch64_SystemAccessTrap(self, oNode, oInfo): # pylint: disable=invalid-name
         """ Pass 1: AArch64_SystemAccessTrap(EL2,0x18) and such. """
@@ -1236,6 +1237,7 @@ class SysRegGeneratorBase(object):
                 if iClass == 29:
                     return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapSme(pVCpu, %s)' % (idxEl,)));
         raise Exception('Unexpected: %s' % (oNode.toString(),));
+
 
     def transformCodePass1Callback(self, oNode, fEliminationAllowed, oInfo):
         """
@@ -1343,6 +1345,22 @@ class SysRegGeneratorBase(object):
     # Pass 2 - C++ translation.
     #
 
+    def transformCodePass2_IsFeatureImplemented(self, oNode, oInfo):
+        """ Pass 2: IsFeatureImplemented(FEAT_xxxx) -> pGstFeats->fXxxx. """
+        if len(oNode.aoArgs) == 1 and isinstance(oNode.aoArgs[0], ArmAstIdentifier):
+            sFeatureNm   = oNode.aoArgs[0].sName;
+            sCpumFeature = g_dSpecFeatToCpumFeat.get(sFeatureNm, None);
+            if sCpumFeature is None:
+                raise Exception('Unknown IsFeatureImplemented parameter: %s (see g_dSpecFeatToCpumFeat)' % (sFeatureNm));
+            if isinstance(sCpumFeature, str):
+                oInfo.cCallsToIsFeatureImplemented += 1;
+                return ArmAstCppExpr('pGstFeats->%s' % (sCpumFeature,));
+            if sCpumFeature is True:  return 'true /*%s*/' % (sFeatureNm,);
+            if sCpumFeature is False: return 'false /*%s*/' % (sFeatureNm,);
+            return ArmAstCppExpr('false /** @todo pGstFeats->%s */' % (sFeatureNm,));
+        raise Exception('Unexpected IsFeatureImplemented arguments: %s' % (oNode.aoArgs,));
+
+
     def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo):
         """ Callback for pass 2: C++ translation. """
         if isinstance(oNode, ArmAstFunction):
@@ -1352,18 +1370,7 @@ class SysRegGeneratorBase(object):
 
             # IsFeatureImplemented(FEAT_xxxx) -> pGstFeat->fXxxx:
             if oNode.sName == 'IsFeatureImplemented':
-                if len(oNode.aoArgs) != 1 or not isinstance(oNode.aoArgs[0], ArmAstIdentifier):
-                    raise Exception('Unexpected IsFeatureImplemented arguments: %s' % (oNode.aoArgs,));
-                sFeatureNm   = oNode.aoArgs[0].sName;
-                sCpumFeature = g_dSpecFeatToCpumFeat.get(sFeatureNm, None);
-                if sCpumFeature is None:
-                    raise Exception('Unknown IsFeatureImplemented parameter: %s (see g_dSpecFeatToCpumFeat)' % (sFeatureNm));
-                if isinstance(sCpumFeature, str):
-                    oInfo.cCallsToIsFeatureImplemented += 1;
-                    return ArmAstCppExpr('pGstFeats->%s' % (sCpumFeature,));
-                if sCpumFeature is True:  return 'true /*%s*/' % (sFeatureNm,);
-                if sCpumFeature is False: return 'false /*%s*/' % (sFeatureNm,);
-                return ArmAstCppExpr('false /** @todo pGstFeats->%s */' % (sFeatureNm,));
+                return self.transformCodePass2_IsFeatureImplemented(oNode, oInfo);
 
         elif isinstance(oNode, ArmAstBinaryOp):
             # PSTATE.EL == EL0 and similar:
