@@ -1239,7 +1239,7 @@ class SysRegGeneratorBase(object):
         raise Exception('Unexpected: %s' % (oNode.toString(),));
 
 
-    def transformCodePass1Callback(self, oNode, fEliminationAllowed, oInfo):
+    def transformCodePass1Callback(self, oNode, fEliminationAllowed, oInfo, aoStack):
         """
         Callback for pass 1: Code flow adjustments; Optimizations.
         """
@@ -1335,11 +1335,12 @@ class SysRegGeneratorBase(object):
                 return self.transformCodePass1(oInfo, oNode);
 
         _ = fEliminationAllowed;
+        _ = aoStack;
         return oNode;
 
     def transformCodePass1(self, oInfo, oCode):
         """ Code transformation pass 1: Code flow adjustments; Optimizations. """
-        return oCode.transform(self.transformCodePass1Callback, True, oInfo);
+        return oCode.transform(self.transformCodePass1Callback, True, oInfo, []);
 
     #
     # Pass 2 - C++ translation.
@@ -1361,7 +1362,7 @@ class SysRegGeneratorBase(object):
         raise Exception('Unexpected IsFeatureImplemented arguments: %s' % (oNode.aoArgs,));
 
 
-    def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo):
+    def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo, aoStack):
         """ Callback for pass 2: C++ translation. """
         if isinstance(oNode, ArmAstFunction):
             # Undefined() -> return iemRaiseUndefined(pVCpu);
@@ -1382,11 +1383,12 @@ class SysRegGeneratorBase(object):
                 return oNode;
 
         _ = fEliminationAllowed;
+        _ = aoStack;
         return oNode;
 
     def transformCodePass2(self, oInfo, oCode):
         """ Code transformation pass 2: C++ translation. """
-        return oCode.transform(self.transformCodePass2Callback, True, oInfo);
+        return oCode.transform(self.transformCodePass2Callback, True, oInfo, []);
 
 
 class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
@@ -1488,12 +1490,12 @@ class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
         return asLines;
 
 
-    def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo):
+    def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo, aoStack):
         """ Callback used by the second pass."""
         if oNode.isMatchingSquareOp('X', 't', 64):
             return ArmAstCppExpr('*puDst', 64);
 
-        return super().transformCodePass2Callback(oNode, fEliminationAllowed, oInfo);
+        return super().transformCodePass2Callback(oNode, fEliminationAllowed, oInfo, aoStack);
 
 
 #
