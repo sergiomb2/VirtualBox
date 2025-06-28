@@ -1119,6 +1119,35 @@ class SysRegGeneratorBase(object):
     def isA64Instruction(self):
         return self.sInstr.startswith('A64');
 
+    def checkCConversionCallback(self, oNode, oInfo):
+        """ Walker callback used by morphCodeToC() to look for nodes that aren't suitable for C. """
+        if isinstance(oNode, ArmAstBinaryOp):
+            if ArmAstBinaryOp.kdOps[oNode.sOp] in (ArmAstBinaryOp.ksOpTypeCompare, ArmAstBinaryOp.ksOpTypeLogical,
+                                                   ArmAstBinaryOp.ksOpTypeArithmetical, ArmAstBinaryOp.ksOpTypeBitwise):
+                return True;
+        elif isinstance(oNode, ArmAstReturn):
+            if oNode.oValue:
+                return True;
+        elif isinstance(oNode, (ArmAstBool, ArmAstCppExpr, ArmAstCppStmt, ArmAstIfList, ArmAstInteger, ArmAstUnaryOp,)):
+            return True;
+
+        oInfo.cIncompleteNodes += 1;
+        return True;
+
+    def morphCodeToC(self, oInfo):
+        """ Morphs the accessor code and assigns the result to self.oCode """
+        assert oInfo.oCode is None;
+        oInfo.oCode = self.transformCodePass2(oInfo, self.transformCodePass1(oInfo, oInfo.oAccessor.oAccess.clone()));
+
+        # Update the completion status.
+        oInfo.cIncompleteNodes = 0;
+        oInfo.oCode.walk(self.checkCConversionCallback, oInfo);
+        return True;
+
+    #
+    # Pass 1 - Expanding calls & code elimination.
+    #
+
     kdAstForFunctionsWithoutArguments = {
         'EL2Enabled': # HaveEL(EL2) && (!Have(EL3) || SCR_curr[].NS || IsSecureEL2Enabled())
         ArmAstBinaryOp(ArmAstFunction('HaveEL', [ArmAstIdentifier('EL2'),]),
@@ -1130,9 +1159,88 @@ class SysRegGeneratorBase(object):
         ])),
     };
 
+    def transformCodePass1_HaveAArch64(self):
+        """ Pass 1: The HaveAArch64() must be true if we're in a A64 instruction handler. """
+        if self.isA64Instruction():
+            return ArmAstBool(True);
+        return ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_AA64')]);
+
+    def transformCodePass1_HaveEL(self, oNode):
+        """ Pass 1: HaveEL(ELx) - Translate it into the corresponding feature checks. """
+        if oNode.aoArgs[0].isMatchingIdentifier('EL3'):
+            return ArmAstBool(False); # EL3 is not implemented.
+            #return ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_EL3')]); ## @todo EL3
+        if oNode.aoArgs[0].isMatchingIdentifier('EL2'):
+            return ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_EL2')]);
+        if oNode.aoArgs[0].isMatchingIdentifier('EL1') or oNode.aoArgs[0].isMatchingIdentifier('EL0'):
+            return ArmAstBool(True); # EL0 and EL1 are mandatory.
+        raise Exception('Unexpected HaveEL call: %s' % (oNode.toString(),));
+
+    def transformCodePass1_IsFeatureImplemented(self, oNode):
+        """ Pass 1: IsFeatureImplemented - replace with False for features we just don't implement. """
+        if len(oNode.aoArgs) != 1 or not isinstance(oNode.aoArgs[0], ArmAstIdentifier):
+            raise Exception('Unexpected: %s' % (oNode.toString(),));
+        ## @todo EL3
+        if oNode.aoArgs[0].sName in ('FEAT_AA64EL3', 'FEAT_AA32EL3', 'FEAT_EL3', 'FEAT_RME',
+                                     'FEAT_SEL2', 'FEAT_Secure', # No secure state w/o EL3...
+                                     ):
+            return ArmAstBool(False);
+
+        # Some stuff that is true (probably unused):
+        if oNode.aoArgs[0].sName in ('FEAT_AA64',) and self.isA64Instruction():
+            return ArmAstBool(True);
+        if oNode.aoArgs[0].sName in ('FEAT_EL0', 'FEAT_EL1',):
+            return ArmAstBool(True);
+        return oNode;
+
+    def transformCodePass1_IsCurrentSecurityState(self, oNode):
+        """ Pass 1: IsCurrentSecurityState(SS_Realm), IsCurrentSecurityState(SS_Secure). """
+        if len(oNode.aoArgs) == 1 and isinstance(oNode.aoArgs[0], ArmAstIdentifier):
+            if oNode.aoArgs[0].sName == 'SS_Realm':
+                # Realm requires EL3. ## @todo EL3
+                return ArmAstBool(False);
+            if oNode.aoArgs[0].sName == 'SS_Secure':
+                # SS_Secure requires EL3, unless SecureOnlyImplemeation() is true. ## @todo EL3
+                return ArmAstBool(False);
+            if oNode.aoArgs[0].sName == 'SS_NonSecure':
+                # Without EL3, everything is non-secure.
+                return ArmAstBool(True);
+        raise Exception('Unexpected: %s' % (oNode.toString(),));
+
+
+    def transformCodePass1_AArch64_SystemAccessTrap(self, oNode, oInfo): # pylint: disable=invalid-name
+        """ Pass 1: AArch64_SystemAccessTrap(EL2,0x18) and such. """
+        if len(oNode.aoArgs) == 2:
+            idxEl  = self.kdELxToNum.get(oNode.aoArgs[0].getIdentifierName());
+            iClass = oNode.aoArgs[1].getIntegerValue();
+            if idxEl is not None and iClass is not None:
+                assert idxEl > 0;
+                if iClass == 0:
+                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapUnknown(pVCpu, %s)' % (idxEl,)));
+                if iClass == 7 and self.isA64Instruction():
+                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapAdvSimdFpAccessA64(pVCpu, %s)'
+                                                       % (idxEl,)));
+                if iClass == 7 and not self.isA64Instruction():
+                    oInfo.cInstructionReferences += 1;
+                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapAdvSimdFpAccess(pVCpu, %u, u32Instr)'
+                                                      % (idxEl,)));
+                if iClass == 20:
+                    oInfo.cInstrEssenceRefs += 1;
+                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrap128Bit(pVCpu, %s, uInstrEssence)'
+                                                      % (idxEl,)));
+                if iClass == 24:
+                    oInfo.cInstrEssenceRefs += 1;
+                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrap(pVCpu, %s, uInstrEssence)' % (idxEl,)));
+                if iClass == 25:
+                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapSme(pVCpu, %s)' % (idxEl,)));
+                if iClass == 29:
+                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapSme(pVCpu, %s)' % (idxEl,)));
+        raise Exception('Unexpected: %s' % (oNode.toString(),));
+
     def transformCodePass1Callback(self, oNode, fEliminationAllowed, oInfo):
-        """ Callback for pass 1: Code flow adjustments; Optimizations. """
-        _ = fEliminationAllowed; _ = oInfo;
+        """
+        Callback for pass 1: Code flow adjustments; Optimizations.
+        """
         if isinstance(oNode, ArmAstIfList):
             # If we have a complete series of PSTATE.EL == ELx checks,
             # turn the final one into an else case to help compilers make
@@ -1163,10 +1271,10 @@ class SysRegGeneratorBase(object):
             # If all branches in an if-list has all the same branches, drop the
             # conditionals and use the else statement.
             if oNode.oElseStatement and oNode.aoIfStatements:
-                idxIfStmt = 0;
-                while idxIfStmt < len(oNode.aoIfStatements) and oNode.oElseStatement.isSame(oNode.aoIfStatements[idxIfStmt]):
-                    idxIfStmt += 1;
-                if idxIfStmt >= len(oNode.aoIfStatements):
+                idxIf = 0;
+                while idxIf < len(oNode.aoIfStatements) and oNode.oElseStatement.isSame(oNode.aoIfStatements[idxIf]):
+                    idxIf += 1;
+                if idxIf >= len(oNode.aoIfStatements):
                     return oNode.oElseStatement;
 
         elif isinstance(oNode, ArmAstBinaryOp):
@@ -1174,11 +1282,11 @@ class SysRegGeneratorBase(object):
             if oNode.oLeft.isMatchingDotAtom('PSTATE', 'EL'):
                 if oNode.oRight.isMatchingIdentifier('EL3'):
                     if oNode.sOp in ('==', '>='):
-                        return None;
+                        return ArmAstBool(False);
                     if oNode.sOp in ('!=', '<'):
                         return ArmAstBool(True);
                 elif oNode.sOp == '>' and oNode.oRight.isMatchingIdentifier('EL2'): # PSTATE.EL > EL2.
-                    return None;
+                    return ArmAstBool(False);
 
             # Simplify boolean fields checks.
             if isinstance(oNode.oLeft, ArmAstField) and isinstance(oNode.oRight, ArmAstValue):
@@ -1200,68 +1308,40 @@ class SysRegGeneratorBase(object):
             # Since we don't implement any external debug state (no EDSCR.STATUS),
             # the Halted() function always returns False.  Eliminate it.
             if oNode.isMatchingFunctionCall('Halted'):
-                return None;
+                return ArmAstBool(False);
 
             # The EL3SDDUndefPriority() and EL3SDDUndef() can likewise be eliminated,
             # as they requires Halted() to be true and EDSCR.SDD to be set.
             if oNode.isMatchingFunctionCall('EL3SDDUndefPriority') or oNode.isMatchingFunctionCall('EL3SDDUndef'):
-                return None;
+                return ArmAstBool(False);
 
-            # The HaveAArch64() must be true if we're in a A64 instruction handler.
-            if oNode.isMatchingFunctionCall('HaveAArch64'):
-                if self.isA64Instruction():
-                    return ArmAstBool(True);
-                return ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_AA64')]);
-
-            # Translate HaveEL(ELx) call into the corresponding feature checks.
+            if oNode.sName == 'HaveAArch64':
+                return self.transformCodePass1_HaveAArch64();
             if oNode.sName == 'HaveEL':
-                if oNode.aoArgs[0].isMatchingIdentifier('EL3'):
-                    return ArmAstBool(False); # EL3 is not implemented.
-                    #return ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_EL3')]); ## @todo EL3
-                if oNode.aoArgs[0].isMatchingIdentifier('EL2'):
-                    return ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_EL2')]);
-                if oNode.aoArgs[0].isMatchingIdentifier('EL1') or oNode.aoArgs[0].isMatchingIdentifier('EL0'):
-                    return ArmAstBool(True); # EL0 and EL1 are mandatory.
-                raise Exception('Unexpected HaveEL call: %s' % (oNode.toString(),));
+                return self.transformCodePass1_HaveEL(oNode);
+            if oNode.sName == 'IsFeatureImplemented':
+                return self.transformCodePass1_IsFeatureImplemented(oNode);
+            if oNode.sName == 'IsCurrentSecurityState':
+                return self.transformCodePass1_IsCurrentSecurityState(oNode);
 
-            # AArch64_SystemAccessTrap(EL2,0x18) and such.
-            if oNode.isMatchingFunctionCall('AArch64_SystemAccessTrap', None, None):
-                idxEl  = self.kdELxToNum.get(oNode.aoArgs[0].getIdentifierName());
-                iClass = oNode.aoArgs[1].getIntegerValue();
-                if idxEl is not None and iClass is not None:
-                    assert idxEl > 0;
-                    if iClass == 0:
-                        return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapUnknown(pVCpu, %s)' % (idxEl,)));
-                    if iClass == 7 and self.isA64Instruction():
-                        return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapAdvSimdFpAccessA64(pVCpu, %s)'
-                                                           % (idxEl,)));
-                    if iClass == 7 and not self.isA64Instruction():
-                        oInfo.cInstructionReferences += 1;
-                        return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapAdvSimdFpAccess(pVCpu, %u, u32Instr)'
-                                                          % (idxEl,)));
-                    if iClass == 20:
-                        oInfo.cInstrEssenceRefs += 1;
-                        return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrap128Bit(pVCpu, %s, uInstrEssence)'
-                                                          % (idxEl,)));
-                    if iClass == 24:
-                        oInfo.cInstrEssenceRefs += 1;
-                        return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrap(pVCpu, %s, uInstrEssence)' % (idxEl,)));
-                    if iClass == 25:
-                        return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapSme(pVCpu, %s)' % (idxEl,)));
-                    if iClass == 29:
-                        return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapSme(pVCpu, %s)' % (idxEl,)));
-                raise Exception('Unexpected: %s' % (oNode.toString(),));
+            if oNode.sName == 'AArch64_SystemAccessTrap':
+                return self.transformCodePass1_AArch64_SystemAccessTrap(oNode, oInfo);
 
             # Generic mapping of functions without any arguments:
             if len(oNode.aoArgs) == 0 and oNode.sName in self.kdAstForFunctionsWithoutArguments:
                 oNode = self.kdAstForFunctionsWithoutArguments[oNode.sName].clone();
                 return self.transformCodePass1(oInfo, oNode);
 
+        _ = fEliminationAllowed;
         return oNode;
 
     def transformCodePass1(self, oInfo, oCode):
         """ Code transformation pass 1: Code flow adjustments; Optimizations. """
         return oCode.transform(self.transformCodePass1Callback, True, oInfo);
+
+    #
+    # Pass 2 - C++ translation.
+    #
 
     def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo):
         """ Callback for pass 2: C++ translation. """
@@ -1300,31 +1380,6 @@ class SysRegGeneratorBase(object):
     def transformCodePass2(self, oInfo, oCode):
         """ Code transformation pass 2: C++ translation. """
         return oCode.transform(self.transformCodePass2Callback, True, oInfo);
-
-    def checkCConversionCallback(self, oNode, oInfo):
-        """ Walker callback used by morphCodeToC() to look for nodes that aren't suitable for C. """
-        if isinstance(oNode, ArmAstBinaryOp):
-            if ArmAstBinaryOp.kdOps[oNode.sOp] in (ArmAstBinaryOp.ksOpTypeCompare, ArmAstBinaryOp.ksOpTypeLogical,
-                                                   ArmAstBinaryOp.ksOpTypeArithmetical, ArmAstBinaryOp.ksOpTypeBitwise):
-                return True;
-        elif isinstance(oNode, ArmAstReturn):
-            if oNode.oValue:
-                return True;
-        elif isinstance(oNode, (ArmAstBool, ArmAstCppExpr, ArmAstCppStmt, ArmAstIfList, ArmAstInteger, ArmAstUnaryOp,)):
-            return True;
-
-        oInfo.cIncompleteNodes += 1;
-        return True;
-
-    def morphCodeToC(self, oInfo):
-        """ Morphs the accessor code and assigns the result to self.oCode """
-        assert oInfo.oCode is None;
-        oInfo.oCode = self.transformCodePass2(oInfo, self.transformCodePass1(oInfo, oInfo.oAccessor.oAccess.clone()));
-
-        # Update the completion status.
-        oInfo.cIncompleteNodes = 0;
-        oInfo.oCode.walk(self.checkCConversionCallback, oInfo);
-        return True;
 
 
 class SysRegGeneratorA64Mrs(SysRegGeneratorBase):

@@ -499,6 +499,18 @@ class ArmAstBinaryOp(ArmAstBase):
         '<->':  17,
     };
 
+    ## Boolean negation transformation rules: (sNewOperator, fNegateOperands)
+    kdOpBoolNegation = {
+        '||':  ('&&', True),
+        '&&':  ('||', True),
+        '==':  ('!=', False),
+        '!=':  ('==', False),
+        '>':   ('<=', False),
+        '<':   ('>=', False),
+        '>=':  ('<',  False),
+        '<=':  ('>',  False),
+    };
+
 
     def __init__(self, oLeft, sOp, oRight, fConstraints = False):
         ArmAstBase.__init__(self, ArmAstBase.ksTypeBinaryOp);
@@ -535,15 +547,21 @@ class ArmAstBinaryOp(ArmAstBase):
         fChildElimination = ArmAstBinaryOp.kdOps[self.sOp] in (ArmAstBinaryOp.ksOpTypeLogical,);
         self.oLeft  = self.oLeft.transform(fnCallback, fChildElimination, oCallbackArg);
         self.oRight = self.oRight.transform(fnCallback, fChildElimination, oCallbackArg);
-
-        if not fChildElimination:
-            assert self.oLeft and self.oRight;
-            return fnCallback(self, fEliminationAllowed, oCallbackArg);
+        assert (self.oLeft and self.oRight) or fChildElimination;
 
         if self.oLeft and self.oRight:
-            if self.sOp == '||' and (self.oLeft.isBoolAndTrue() or self.oRight.isBoolAndTrue()):
-                return fnCallback(ArmAstBool(True), fEliminationAllowed, oCallbackArg);
-            if self.sOp == '&&':
+            if self.sOp == '||':
+                # Simplify 'true || x', 'x || true', 'false || x, 'x || false, and 'false || false'.
+                if self.oLeft.isBoolAndTrue():
+                    return self.oLeft;
+                if self.oRight.isBoolAndTrue(): # This is ASSUMING no function call sideeffects!
+                    return self.oRight;
+                if self.oLeft.isBoolAndFalse():
+                    return self.oRight;
+                if self.oRight.isBoolAndFalse():
+                    return self.oLeft;
+
+            elif self.sOp == '&&':
                 if self.oLeft.isBoolAndFalse() or self.oRight.isBoolAndFalse():
                     if not fEliminationAllowed:
                         return fnCallback(ArmAstBool(False), fEliminationAllowed, oCallbackArg);
@@ -743,6 +761,23 @@ class ArmAstUnaryOp(ArmAstBase):
         return self._walker(fnCallback, oCallbackArg, fDepthFirst, self.oExpr);
 
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        # If the expression is a logical or comparative binary op, push the
+        # negation down one level to try make it go away.
+        if isinstance(self.oExpr, ArmAstBinaryOp):
+            if self.sOp == '!':
+                tNegInfo = ArmAstBinaryOp.kdOpBoolNegation.get(self.oExpr.sOp);
+                if tNegInfo:
+                    self.oExpr.sOp = tNegInfo[0];
+                    if tNegInfo[1]:
+                        self.oExpr.oLeft  = ArmAstUnaryOp('!', self.oExpr.oLeft);
+                        self.oExpr.oRight = ArmAstUnaryOp('!', self.oExpr.oRight);
+                    return self.oExpr.transform(fnCallback, fEliminationAllowed, oCallbackArg);
+        # Eliminate double unary expressions.
+        elif isinstance(self.oExpr, ArmAstUnaryOp):
+            if self.oExpr.sOp == self.sOp: ## @todo For '!', we ASSUME the inner expression is also boolean.
+                return self.oExpr.oExpr.transform(fnCallback, fEliminationAllowed, oCallbackArg);
+
+        # Regular transforming.
         fChildElimination = ArmAstUnaryOp.kdOps[self.sOp] in (ArmAstUnaryOp.ksOpTypeLogical,);
         self.oExpr = self.oExpr.transform(fnCallback, fChildElimination, oCallbackArg);
         if self.oExpr:
@@ -1772,14 +1807,19 @@ class ArmAstIfList(ArmAstStatementBase):
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         aoNewIfConditions = [];
         aoNewIfStatements = [];
+        oNewElseStatement = None;
         for idxIf, oIfCond in enumerate(self.aoIfConditions):
             oIfCond = oIfCond.transform(fnCallback, True, oCallbackArg);
             if oIfCond and not oIfCond.isBoolAndFalse():
                 oIfStmt = self.aoIfStatements[idxIf].transform(fnCallback, True, oCallbackArg);
                 assert oIfStmt;
+                if oIfCond.isBoolAndTrue():
+                    oNewElseStatement = oIfStmt;
+                    break;
                 aoNewIfConditions.append(oIfCond);
                 aoNewIfStatements.append(oIfStmt);
-        oNewElseStatement = self.oElseStatement.transform(fnCallback, True, oCallbackArg) if self.oElseStatement else None;
+        if not oNewElseStatement:
+            oNewElseStatement = self.oElseStatement.transform(fnCallback, True, oCallbackArg) if self.oElseStatement else None;
 
         if aoNewIfConditions:
             self.aoIfConditions = aoNewIfConditions;
