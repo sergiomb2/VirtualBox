@@ -205,27 +205,8 @@ static NTSTATUS svgaCreateMiniportMob(VBOXWDDM_EXT_VMSVGA *pSvga)
     NTSTATUS Status = SvgaGboCreate(pSvga, &pSvga->pMiniportGbo, cbMiniportMob, "VMSVGAMOB0");
     if (NT_SUCCESS(Status))
     {
-        Status = SvgaMobAlloc(pSvga, &pSvga->mobidMiniport, pSvga->pMiniportGbo);
-        if (NT_SUCCESS(Status))
-        {
-            uint32_t cbCmd = 0;
-            SvgaMobDefine(pSvga, SVGA3D_INVALID_ID, NULL, 0, &cbCmd);
-            void *pvCmd = SvgaCmdBufReserve(pSvga, cbCmd, SVGA3D_INVALID_ID);
-            if (pvCmd)
-            {
-                SvgaMobDefine(pSvga, pSvga->mobidMiniport, pvCmd, cbCmd, &cbCmd);
-                SvgaCmdBufCommit(pSvga, cbCmd);
-
-                pSvga->pMiniportMobData = (VMSVGAMINIPORTMOB volatile *)RTR0MemObjAddress(pSvga->pMiniportGbo->hMemObj);
-                memset((void *)pSvga->pMiniportMobData, 0, cbMiniportMob);
-                RTListInit(&pSvga->listMobDeferredDestruction);
-                //pSvga->u64MobFence = 0;
-            }
-            else
-                AssertFailedStmt(SvgaMobFree(pSvga, &pSvga->mobidMiniport); STATUS_INSUFFICIENT_RESOURCES);
-        }
-        else
-            SvgaGboUnreference(pSvga, &pSvga->pMiniportGbo);
+        pSvga->pMiniportMobData = (VMSVGAMINIPORTMOB volatile *)RTR0MemObjAddress(pSvga->pMiniportGbo->hMemObj);
+        memset((void *)pSvga->pMiniportMobData, 0, cbMiniportMob);
     }
 
     return Status;
@@ -501,7 +482,21 @@ NTSTATUS SvgaAdapterStart(PVBOXWDDM_EXT_VMSVGA *ppSvga,
                 if (NT_SUCCESS(Status))
                 {
                     if (RT_BOOL(pSvga->u32Caps & SVGA_CAP_DX))
+                    {
+                        RTListInit(&pSvga->listMobDeferredDestruction);
+                        //pSvga->u64MobFence = 0;
+
+                        /* Allocate memory for the MiniportMob.
+                         *
+                         * The MiniportMob id will be allocated on-demand in SvgaMobAlloc, because
+                         * a mob allocation requires sending commands to the host device, but DxgkDdiStartDevice,
+                         * which calls the SvgaAdapterStart function, is not allowed to send commands.
+                         *
+                         * If the device processes commands and generates an IRQ before DxgkDdiStartDevice returns,
+                         * then OS stops using the device. Apparently Windows treats the early IRQ as an error.
+                         */
                         Status = svgaCreateMiniportMob(pSvga);
+                    }
                 }
             }
         }
@@ -2651,9 +2646,9 @@ void SvgaMobFree(VBOXWDDM_EXT_VMSVGA *pSvga,
 }
 
 
-NTSTATUS SvgaMobAlloc(VBOXWDDM_EXT_VMSVGA *pSvga,
-                      SVGAMobId *pMobid,
-                      PVMSVGAGBO pGbo)
+static NTSTATUS svgaMobAlloc(VBOXWDDM_EXT_VMSVGA *pSvga,
+                             SVGAMobId *pMobid,
+                             PVMSVGAGBO pGbo)
 {
     PVMSVGAMOB pMob = (PVMSVGAMOB)GaMemAllocZero(sizeof(VMSVGAMOB));
     AssertReturn(pMob, STATUS_INSUFFICIENT_RESOURCES);
@@ -2677,6 +2672,37 @@ NTSTATUS SvgaMobAlloc(VBOXWDDM_EXT_VMSVGA *pSvga,
 
     *pMobid = VMSVGAMOB_ID(pMob);
     return STATUS_SUCCESS;
+}
+
+
+NTSTATUS SvgaMobAlloc(VBOXWDDM_EXT_VMSVGA *pSvga,
+                      SVGAMobId *pMobid,
+                      PVMSVGAGBO pGbo)
+{
+    /* This function also performs one time initialization of miniport MOB. */
+    if (RT_LIKELY(pSvga->mobidMiniport != SVGA3D_INVALID_ID))
+    { /* likely */ }
+    else
+    {
+        NTSTATUS Status = svgaMobAlloc(pSvga, &pSvga->mobidMiniport, pSvga->pMiniportGbo);
+        if (NT_SUCCESS(Status))
+        {
+            uint32_t cbCmd = 0;
+            SvgaMobDefine(pSvga, SVGA3D_INVALID_ID, NULL, 0, &cbCmd);
+            void *pvCmd = SvgaCmdBufReserve(pSvga, cbCmd, SVGA3D_INVALID_ID);
+            if (pvCmd)
+            {
+                SvgaMobDefine(pSvga, pSvga->mobidMiniport, pvCmd, cbCmd, &cbCmd);
+                SvgaCmdBufCommit(pSvga, cbCmd);
+            }
+            else
+                AssertFailedReturnStmt(SvgaMobFree(pSvga, &pSvga->mobidMiniport), STATUS_INSUFFICIENT_RESOURCES);
+        }
+        else
+            AssertFailedReturn(Status);
+    }
+
+    return svgaMobAlloc(pSvga, pMobid, pGbo);
 }
 
 
