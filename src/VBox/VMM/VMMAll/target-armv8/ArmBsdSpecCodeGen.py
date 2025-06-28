@@ -56,6 +56,7 @@ from ArmAst import ArmAstField
 from ArmAst import ArmAstReturn
 from ArmAst import ArmAstIfList
 from ArmAst import ArmAstCppExpr
+from ArmAst import ArmAstCppStmt
 import ArmBsdSpec as spec;
 
 # Imports from the parent directory.
@@ -1094,6 +1095,8 @@ class SysRegAccessorInfo(object):
         self.cCallsToIsFeatureImplemented = 0;
         self.cInstructionReferences       = 0;
         self.cInstrEssenceRefs            = 0;  # References to uInstrEssence (idSysReg + idGprReg + direction)
+        ## This is updated by morphCodeToC() and will be zero the code is ready for compilation.
+        self.cIncompleteNodes             = -1;
 
 
 class SysRegGeneratorBase(object):
@@ -1102,8 +1105,10 @@ class SysRegGeneratorBase(object):
     kdELxToNum = { 'EL0': 0, 'EL1': 1, 'EL2': 2, 'EL3': 3, }
 
     def __init__(self, sInstr):
-        self.sInstr     = sInstr;
-        self.aoInfo     = []           # type: List[SysRegAccessorInfo]
+        self.sInstr         = sInstr;
+        self.aoInfo         = []        # type: List[SysRegAccessorInfo]
+        self.cComplete      = 0;
+        self.cIncomplete    = 0;
 
     def generateOneHandler(self, oInfo):
         return [ '', '/// @todo %s / %s' % (self.sInstr, oInfo.sEnc,) ];
@@ -1150,6 +1155,19 @@ class SysRegGeneratorBase(object):
                     oNode.oElseStatement = oNode.aoIfStatements[idxLast];
                     oNode.aoIfConditions = oNode.aoIfConditions[:idxLast];
                     oNode.aoIfStatements = oNode.aoIfStatements[:idxLast];
+
+            # If the first condition is true, just use the corresponding statement.
+            if oNode.aoIfConditions and oNode.aoIfConditions[0].isBoolAndTrue():
+                return oNode.aoIfStatements[0];
+
+            # If all branches in an if-list has all the same branches, drop the
+            # conditionals and use the else statement.
+            if oNode.oElseStatement and oNode.aoIfStatements:
+                idxIfStmt = 0;
+                while idxIfStmt < len(oNode.aoIfStatements) and oNode.oElseStatement.isSame(oNode.aoIfStatements[idxIfStmt]):
+                    idxIfStmt += 1;
+                if idxIfStmt >= len(oNode.aoIfStatements):
+                    return oNode.oElseStatement;
 
         elif isinstance(oNode, ArmAstBinaryOp):
             # EL3 not implemented, so eliminate PSTATE.EL == 3 and similar. ## @todo EL3
@@ -1277,17 +1295,35 @@ class SysRegGeneratorBase(object):
                 return oNode;
 
         _ = fEliminationAllowed;
-        _ = oInfo;
         return oNode;
 
     def transformCodePass2(self, oInfo, oCode):
         """ Code transformation pass 2: C++ translation. """
         return oCode.transform(self.transformCodePass2Callback, True, oInfo);
 
+    def checkCConversionCallback(self, oNode, oInfo):
+        """ Walker callback used by morphCodeToC() to look for nodes that aren't suitable for C. """
+        if isinstance(oNode, ArmAstBinaryOp):
+            if ArmAstBinaryOp.kdOps[oNode.sOp] in (ArmAstBinaryOp.ksOpTypeCompare, ArmAstBinaryOp.ksOpTypeLogical,
+                                                   ArmAstBinaryOp.ksOpTypeArithmetical, ArmAstBinaryOp.ksOpTypeBitwise):
+                return True;
+        elif isinstance(oNode, ArmAstReturn):
+            if oNode.oValue:
+                return True;
+        elif isinstance(oNode, (ArmAstBool, ArmAstCppExpr, ArmAstCppStmt, ArmAstIfList, ArmAstInteger, ArmAstUnaryOp,)):
+            return True;
+
+        oInfo.cIncompleteNodes += 1;
+        return True;
+
     def morphCodeToC(self, oInfo):
         """ Morphs the accessor code and assigns the result to self.oCode """
         assert oInfo.oCode is None;
         oInfo.oCode = self.transformCodePass2(oInfo, self.transformCodePass1(oInfo, oInfo.oAccessor.oAccess.clone()));
+
+        # Update the completion status.
+        oInfo.cIncompleteNodes = 0;
+        oInfo.oCode.walk(self.checkCConversionCallback, oInfo);
         return True;
 
 
@@ -1302,20 +1338,38 @@ class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
             '',
             '/**',
             ' * %s - %s' % (oInfo.oAccessor.oEncoding.sAsmValue, oInfo.oAccessor.oEncoding.dNamedValues,),
+            ' * Transformation status: %u - %s'
+            % (oInfo.cIncompleteNodes, 'complete' if oInfo.cIncompleteNodes == 0 else 'incomplete'),
             ' */',
             'static VBOXSTRICTRC iemCImplA64_mrs_%s(PVMCPU pVCpu, uint64_t *puDst%s)'
             % (oInfo.oAccessor.oEncoding.sAsmValue, ', uint32_t uInstrEssence' if oInfo.cInstrEssenceRefs > 0 else ''),
             '{',
         ];
+        if oInfo.cInstrEssenceRefs > 0 or not oInfo.oCode:
+            asLines += [
+                '    RT_NOREF(pVCpu, puDst%s);' % (', uInstrEssence' if oInfo.cInstrEssenceRefs > 0 else ''),
+                '#ifdef IEM_SYSREG_TODO',
+            ];
+        elif isinstance(oInfo.oCode, ArmAstReturn):
+
+            asLines.append('    RT_NOREF(puDst);');
         if oInfo.cCallsToIsFeatureImplemented > 0:
             asLines.append('    const CPUMFEATURESARMV8 * const pGstFeats = IEM_GET_GUEST_CPU_FEATURES(pVCpu);');
         if oInfo.oCode:
             asLines.extend(oInfo.oCode.toStringList('    ', 'C'));
 
+        if oInfo.cInstrEssenceRefs > 0 or not oInfo.oCode:
+            asLines += [
+                '#endif',
+                '    return VERR_IEM_ASPECT_NOT_IMPLEMENTED;'
+            ];
+        elif not isinstance(oInfo.oCode, ArmAstReturn):
+            asLines.append('    return VINF_SUCCESS;');
+
         asLines.append('    /* -------- Original code specification: -------- */');
         asLines.extend([ '    // ' + sLine for sLine in oInfo.oAccessor.oAccess.toStringList()]);
+
         asLines += [
-            '    return VERR_IEM_ASPECT_NOT_IMPLEMENTED;',
             '}',
         ];
         return asLines;
@@ -1958,6 +2012,18 @@ class IEMArmGenerator(object):
             oGenerator.aoInfo.sort(key = operator.attrgetter('sEnc'));
 
         #
+        # Morph the code into IEM suitable C code.
+        #
+        for oGenerator in dAccessors.values():
+            for oInfo in oGenerator.aoInfo:
+                if oInfo.sEnc[0] == 'A':
+                    oGenerator.morphCodeToC(oInfo);
+                    if oInfo.cIncompleteNodes > 0:
+                        oGenerator.cIncomplete += 1;
+                    else:
+                        oGenerator.cComplete   += 1;
+
+        #
         # File header.
         #
         asLines = self.generateLicenseHeader(spec.g_oArmRegistersVerInfo);
@@ -1985,7 +2051,11 @@ class IEMArmGenerator(object):
                 '',
                 '',
                 '/*',
-                ' * %s - %u registers' % (oGenerator.sInstr, len(oGenerator.aoInfo),),
+                ' * %s' % (oGenerator.sInstr,),
+                ' *',
+                ' * %4u registers' % (len(oGenerator.aoInfo),),
+                ' * %4u completly'  % (oGenerator.cComplete,),
+                ' * %4u incomplete' % (oGenerator.cIncomplete,),
                 ' */',
             ];
 
@@ -1993,7 +2063,6 @@ class IEMArmGenerator(object):
             for oInfo in oGenerator.aoInfo:
                 asLines.append('');
                 if oInfo.sEnc[0] == 'A':
-                    oGenerator.morphCodeToC(oInfo);
                     asLines += oGenerator.generateOneHandler(oInfo);
                 else:
                     asLines += [

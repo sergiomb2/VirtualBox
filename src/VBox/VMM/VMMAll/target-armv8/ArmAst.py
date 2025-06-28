@@ -306,6 +306,22 @@ class ArmAstBase(object):
     def __repr__(self):
         return self.toString();
 
+    def _walker(self, fnCallback, oCallbackArg, fDepthFirst, *aoChildren):
+        """ Helper for walking. """
+        if fDepthFirst:
+            for oChild in aoChildren:
+                oChild.walk(fnCallback, oCallbackArg, fDepthFirst);
+            fnCallback(self, oCallbackArg);
+        else:
+            fnCallback(self, oCallbackArg);
+            for oChild in aoChildren:
+                oChild.walk(fnCallback, oCallbackArg, fDepthFirst);
+        return True;
+
+    def isLeaf(self):
+        """ Checks if this is a leaf node or not. """
+        return False;
+
     #
     # Convenience matching routines, matching node type and type specific value.
     #
@@ -372,6 +388,26 @@ class ArmAstBase(object):
         _ = sFunctionName; _ = aoArgMatches;
         return False;
 
+
+class ArmAstLeafBase(ArmAstBase):
+    """
+    Base class for simple leaf nodes.
+
+    This implements the transformation and walking methods.
+    """
+    def __init__(self, sType):
+        ArmAstBase.__init__(self, ArmAstBase.ksTypeField);
+
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        _ = fDepthFirst;
+        fnCallback(self, oCallbackArg);
+        return True;
+
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
+        return fnCallback(self, fEliminationAllowed, oCallbackArg);
+
+    def isLeaf(self):
+        return True;
 
 
 class ArmAstBinaryOp(ArmAstBase):
@@ -490,6 +526,9 @@ class ArmAstBinaryOp(ArmAstBase):
                         return True;
             ## @todo switch sides and whatnot.
         return False;
+
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst, self.oLeft, self.oRight);
 
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         # Recurse first.
@@ -700,6 +739,9 @@ class ArmAstUnaryOp(ArmAstBase):
                     return True;
         return False;
 
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst, self.oExpr);
+
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         fChildElimination = ArmAstUnaryOp.kdOps[self.sOp] in (ArmAstUnaryOp.ksOpTypeLogical,);
         self.oExpr = self.oExpr.transform(fnCallback, fChildElimination, oCallbackArg);
@@ -755,6 +797,9 @@ class ArmAstSlice(ArmAstBase):
                     return True;
         return False;
 
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst, self.oFrom, self.oTo);
+
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         self.oFrom = self.oFrom.transform(fnCallback, False, oCallbackArg);
         self.oTo   = self.oTo.transform(fnCallback, False, oCallbackArg);
@@ -793,6 +838,9 @@ class ArmAstSquareOp(ArmAstBase):
                     return True;
         return False;
 
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst, self.oVar, *self.aoValues);
+
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         self.oVar = self.oVar.transform(fnCallback, fEliminationAllowed, oCallbackArg);
         if self.oVar:
@@ -802,7 +850,6 @@ class ArmAstSquareOp(ArmAstBase):
             return fnCallback(self, fEliminationAllowed, oCallbackArg);
         assert fEliminationAllowed;
         return None;
-
 
     def toString(self):
         return '%s[%s]' % (self.oVar.toString(), ','.join([oValue.toString() for oValue in self.aoValues]),);
@@ -848,6 +895,9 @@ class ArmAstTuple(ArmAstBase):
                 return True;
         return False;
 
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst, *self.aoValues);
+
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         self.aoValues = [oValue.transform(fnCallback, False, oCallbackArg) for oValue in self.aoValues];
         for oValue in self.aoValues:
@@ -882,6 +932,9 @@ class ArmAstDotAtom(ArmAstBase):
                         return False;
                 return True;
         return False;
+
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst, *self.aoValues);
 
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         self.aoValues = [oValue.transform(fnCallback, False, oCallbackArg) for oValue in self.aoValues];
@@ -929,6 +982,9 @@ class ArmAstConcat(ArmAstBase):
                         return False;
                 return True;
         return False;
+
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst, *self.aoValues);
 
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         self.aoValues = [oValue.transform(fnCallback, False, oCallbackArg) for oValue in self.aoValues];
@@ -999,6 +1055,9 @@ class ArmAstFunction(ArmAstBase):
                     return True;
         return False;
 
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst, *self.aoArgs);
+
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         self.aoArgs = [oArgs.transform(fnCallback, False, oCallbackArg) for oArgs in self.aoArgs];
         for oArgs in self.aoArgs:
@@ -1031,13 +1090,13 @@ class ArmAstFunction(ArmAstBase):
         return False;
 
 
-class ArmAstIdentifier(ArmAstBase):
+class ArmAstIdentifier(ArmAstLeafBase):
     koReValidName        = re.compile('^[_A-Za-z][_A-Za-z0-9]*$');
     koReValidNameRelaxed = re.compile('^[_A-Za-z][_A-Za-z0-9<>]*$');
     kaoReValidName       = (koReValidName, koReValidNameRelaxed)
 
     def __init__(self, sName, fRelaxedName = False):
-        ArmAstBase.__init__(self, ArmAstBase.ksTypeIdentifier);
+        ArmAstLeafBase.__init__(self, ArmAstBase.ksTypeIdentifier);
         assert self.kaoReValidName[fRelaxedName].match(sName), 'sName=%s' % (sName);
         self.sName = sName;
 
@@ -1049,9 +1108,6 @@ class ArmAstIdentifier(ArmAstBase):
             if self.sName == oOther.sName:
                 return True;
         return False;
-
-    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
-        return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
     def toString(self):
         return self.sName;
@@ -1071,9 +1127,9 @@ class ArmAstIdentifier(ArmAstBase):
         return self.sName;
 
 
-class ArmAstBool(ArmAstBase):
+class ArmAstBool(ArmAstLeafBase):
     def __init__(self, fValue):
-        ArmAstBase.__init__(self, ArmAstBase.ksTypeBool);
+        ArmAstLeafBase.__init__(self, ArmAstBase.ksTypeBool);
         assert fValue is True or fValue is False, '%s' % (fValue,);
         self.fValue = fValue;
 
@@ -1085,9 +1141,6 @@ class ArmAstBool(ArmAstBase):
             if self.fValue == oOther.fValue:
                 return True;
         return False;
-
-    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
-        return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
     def toString(self):
         return 'true' if self.fValue is True else 'false';
@@ -1107,9 +1160,9 @@ class ArmAstBool(ArmAstBase):
         return self.fValue is False;
 
 
-class ArmAstInteger(ArmAstBase):
+class ArmAstInteger(ArmAstLeafBase):
     def __init__(self, iValue):
-        ArmAstBase.__init__(self, ArmAstBase.ksTypeInteger);
+        ArmAstLeafBase.__init__(self, ArmAstBase.ksTypeInteger);
         self.iValue = int(iValue);
 
     def clone(self):
@@ -1120,9 +1173,6 @@ class ArmAstInteger(ArmAstBase):
             if self.iValue == oOther.iValue:
                 return True;
         return False;
-
-    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
-        return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
     def toString(self):
         return '%#x' % (self.iValue,);
@@ -1163,6 +1213,9 @@ class ArmAstSet(ArmAstBase):
                 return True;
         return False;
 
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst, *self.aoValues);
+
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         self.aoValues = [oValue.transform(fnCallback, False, oCallbackArg) for oValue in self.aoValues];
         for oValue in self.aoValues:
@@ -1183,9 +1236,9 @@ class ArmAstSet(ArmAstBase):
         return -1;
 
 
-class ArmAstValue(ArmAstBase):
+class ArmAstValue(ArmAstLeafBase):
     def __init__(self, sValue):
-        ArmAstBase.__init__(self, ArmAstBase.ksTypeValue);
+        ArmAstLeafBase.__init__(self, ArmAstBase.ksTypeValue);
         self.sValue = sValue;
 
     def clone(self):
@@ -1196,9 +1249,6 @@ class ArmAstValue(ArmAstBase):
             if self.sValue == oOther.sValue:
                 return True;
         return False;
-
-    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
-        return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
     def toString(self):
         return self.sValue;
@@ -1245,11 +1295,11 @@ class ArmAstValue(ArmAstBase):
         return (fValue, fFixed, fWildcard, cBitsWidth);
 
 
-class ArmAstEquationValue(ArmAstBase):
+class ArmAstEquationValue(ArmAstLeafBase):
     koSimpleName = re.compile('^[_A-Za-z][_A-Za-z0-9]+$');
 
     def __init__(self, sValue, iFirstBit, cBitsWidth):
-        ArmAstBase.__init__(self, ArmAstBase.ksTypeValue);
+        ArmAstLeafBase.__init__(self, ArmAstBase.ksTypeValue);
         self.sValue     = sValue;
         self.iFirstBit  = iFirstBit;
         self.cBitsWidth = cBitsWidth;
@@ -1264,9 +1314,6 @@ class ArmAstEquationValue(ArmAstBase):
                     if self.cBitsWidth == oOther.cBitsWidth:
                         return True;
         return False;
-
-    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
-        return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
     def toString(self):
         if self.koSimpleName.match(self.sValue):
@@ -1331,6 +1378,9 @@ class ArmAstValuesGroup(ArmAstBase):
                 return True;
         return False;
 
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst, *self.aoValues);
+
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         self.aoValues = [oValue.transform(fnCallback, False, oCallbackArg) for oValue in self.aoValues];
         for oValue in self.aoValues:
@@ -1348,9 +1398,9 @@ class ArmAstValuesGroup(ArmAstBase):
         return sum(oValue.getWidth(oHelper) for oValue in self.aoValues);
 
 
-class ArmAstString(ArmAstBase):
+class ArmAstString(ArmAstLeafBase):
     def __init__(self, sValue):
-        ArmAstBase.__init__(self, ArmAstBase.ksTypeValue);
+        ArmAstLeafBase.__init__(self, ArmAstBase.ksTypeValue);
         self.sValue = sValue;
 
     def clone(self):
@@ -1361,9 +1411,6 @@ class ArmAstString(ArmAstBase):
             if self.sValue == oOther.sValue:
                 return True;
         return False;
-
-    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
-        return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
     def toString(self):
         return '"' + self.sValue + '"';
@@ -1377,9 +1424,9 @@ class ArmAstString(ArmAstBase):
         return -1;
 
 
-class ArmAstField(ArmAstBase):
+class ArmAstField(ArmAstLeafBase):
     def __init__(self, sField, sName, sState = 'AArch64', sSlices = None, sInstance = None):
-        ArmAstBase.__init__(self, ArmAstBase.ksTypeField);
+        ArmAstLeafBase.__init__(self, ArmAstBase.ksTypeField);
         self.sField    = sField;
         self.sName     = sName;
         self.sState    = sState;
@@ -1401,9 +1448,6 @@ class ArmAstField(ArmAstBase):
                                 return True;
         return False;
 
-    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
-        return fnCallback(self, fEliminationAllowed, oCallbackArg);
-
     def toString(self):
         return '%s.%s.%s' % (self.sState, self.sName, self.sField,);
 
@@ -1416,9 +1460,9 @@ class ArmAstField(ArmAstBase):
         return cBitsWidth;
 
 
-class ArmAstRegisterType(ArmAstBase):
+class ArmAstRegisterType(ArmAstLeafBase):
     def __init__(self, sName, sState = 'AArch64', sSlices = None, sInstance = None):
-        ArmAstBase.__init__(self, ArmAstBase.ksTypeRegisterType);
+        ArmAstLeafBase.__init__(self, ArmAstBase.ksTypeRegisterType);
         self.sName     = sName;
         self.sState    = sState;
         self.sSlices   = sSlices;
@@ -1440,9 +1484,6 @@ class ArmAstRegisterType(ArmAstBase):
 
     def toString(self):
         return '%s.%s' % (self.sState, self.sName,);
-
-    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
-        return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
     def toCExpr(self, oHelper):
         #(sCName, _) = oHelper.getFieldInfo(None, self.sName, self.sState);
@@ -1469,6 +1510,9 @@ class ArmAstType(ArmAstBase):
             if self.oName.isSame(oOther.oName):
                 return True;
         return False;
+
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst, self.oName);
 
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         self.oName = self.oName.transform(fnCallback, False, oCallbackArg);
@@ -1502,6 +1546,9 @@ class ArmAstTypeAnnotation(ArmAstBase):
                 if self.oType.isSame(oOther.oType):
                     return True;
         return False;
+
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst, self.oVar, self.oType);
 
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         self.oVar = self.oVar.transform(fnCallback, False, oCallbackArg);
@@ -1569,6 +1616,9 @@ class ArmAstNop(ArmAstStatementBase):
     def isSame(self, oOther):
         return isinstance(oOther, ArmAstNop);
 
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst);
+
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
@@ -1577,6 +1627,9 @@ class ArmAstNop(ArmAstStatementBase):
 
     def toStringList(self, sIndent = '', sLang = None):
         return [ 'NOP();', ];
+
+    def isLeaf(self):
+        return True;
 
 
 
@@ -1597,6 +1650,9 @@ class ArmAstAssignment(ArmAstStatementBase):
                 if self.oValue.isSame(oOther.oValue):
                     return True;
         return False;
+
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst, self.oVar, self.oValue);
 
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         self.oVar = self.oVar.transform(fnCallback, fEliminationAllowed, oCallbackArg);
@@ -1630,6 +1686,11 @@ class ArmAstReturn(ArmAstStatementBase):
             if self.oValue.isSame(oOther.oValue):
                 return True;
         return False;
+
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        if self.oValue:
+            return self._walker(fnCallback, oCallbackArg, fDepthFirst, self.oValue);
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst);
 
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         if self.oValue:
@@ -1699,6 +1760,14 @@ class ArmAstIfList(ArmAstStatementBase):
                         return False;
                     return True;
         return False;
+
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        aoChildren = [];
+        for idxIf, oIfCond in enumerate(self.aoIfConditions):
+            aoChildren.extend([oIfCond, self.aoIfStatements[idxIf]]);
+        if self.oElseStatement:
+            aoChildren.append(self.oElseStatement);
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst, *aoChildren);
 
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         aoNewIfConditions = [];
@@ -1851,10 +1920,10 @@ class ArmAstIfList(ArmAstStatementBase):
 # Some quick C++ AST nodes.
 #
 
-class ArmAstCppExpr(ArmAstBase):
+class ArmAstCppExpr(ArmAstLeafBase):
     """ C++ AST node. """
     def __init__(self, sExpr, cBitsWidth = -1):
-        ArmAstBase.__init__(self, 'C++');
+        ArmAstLeafBase.__init__(self, 'C++');
         self.sExpr      = sExpr;
         self.cBitsWidth = cBitsWidth;
 
@@ -1867,9 +1936,6 @@ class ArmAstCppExpr(ArmAstBase):
                 if self.cBitsWidth == oOther.cBitsWidth:
                     return True;
         return False;
-
-    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
-        return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
     def toString(self):
         return self.sExpr;
@@ -1901,6 +1967,9 @@ class ArmAstCppStmt(ArmAstStatementBase):
                 return True;
         return False;
 
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst);
+
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg):
         return fnCallback(self, fEliminationAllowed, oCallbackArg);
 
@@ -1910,4 +1979,7 @@ class ArmAstCppStmt(ArmAstStatementBase):
     def toStringList(self, sIndent = '', sLang = None):
         _ = sLang;
         return [ sIndent + sStmt for sStmt in self.asStmts ];
+
+    def isLeaf(self):
+        return True;
 
