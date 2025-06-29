@@ -944,6 +944,12 @@ class ArmAstSquareOp(ArmAstBase):
                     elif isinstance(aoValueMatches[i], str):
                         if not oValue.isMatchingIdentifier(aoValueMatches[i]):
                             return False;
+                    elif aoValueMatches[i] is int:
+                        if not isinstance(oValue, ArmAstInteger):
+                            return False;
+                    elif aoValueMatches[i] is str:
+                        if not isinstance(oValue, ArmAstIdentifier):
+                            return False;
                     elif aoValueMatches[i] is not None:
                         raise Exception('Unexpected #%u: %s' % (i, aoValueMatches[i],));
                 return True;
@@ -1101,6 +1107,12 @@ class ArmAstFunction(ArmAstBase):
                             return False;
                     elif isinstance(aoArgMatches[i], str):
                         if not oArg.toString() != aoArgMatches[i]:
+                            return False;
+                    elif aoArgMatches[i] is int:
+                        if not isinstance(oArg, ArmAstInteger):
+                            return False;
+                    elif aoArgMatches[i] is str:
+                        if not isinstance(oArg, ArmAstIdentifier):
                             return False;
                     elif aoArgMatches[i] is not None:
                         raise Exception('Unexpected #%u: %s' % (i, aoArgMatches[i],));
@@ -1269,7 +1281,7 @@ class ArmAstValue(ArmAstLeafBase):
         return cBitsWidth;
 
     @staticmethod
-    def parseValue(sValue, cBitsWidth):
+    def parseValue(sValue, cBitsWidth = 0):
         """
         Returns (fValue, fFixed, fWildcard, cBitsWidth) tuple on success, raises AssertionError otherwise.
         """

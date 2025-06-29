@@ -46,6 +46,7 @@ import time;
 # Our imports:
 from ArmAst import ArmAstBinaryOp
 from ArmAst import ArmAstUnaryOp
+from ArmAst import ArmAstConcat
 from ArmAst import ArmAstDotAtom
 from ArmAst import ArmAstFunction
 from ArmAst import ArmAstIdentifier
@@ -1346,6 +1347,43 @@ class SysRegGeneratorBase(object):
     # Pass 2 - C++ translation.
     #
 
+    def lookupRegisterField(self, sState, sRegisterName, sField, sWhatFor):
+        """
+        Helper to lookup a register field, returning (oReg, oField).
+        Raises exceptions if not found or too complicated.
+        """
+        oReg = spec.g_ddoAllArmRegistersByStateByName[sState].get(sRegisterName); # ArmRegister
+        if not oReg:
+            raise Exception('%s: Register "%s" not found (field "%s" lookup)' % (sWhatFor, sRegisterName, sField,));
+
+        aoFields = oReg.daoFields.get(sField); # List[ArmFieldsBase]
+        if not aoFields:
+            raise Exception('%s: Field "%s" not found in register "%s"' % (sWhatFor, sField, sRegisterName,));
+
+        # Iff this is an conditional field, there may be more than one entry in
+        # aoFields and these all are relative to the ArmFieldsConditionalField
+        # parent.  So, we just check that it's a simple one and return the
+        # parent instaed of the children in aoFields.
+        oField = aoFields[-1]; # ArmFieldsBase
+        if (    isinstance(oField.oParent, spec.ArmFieldsConditionalField)
+            and len(oField.oParent.aoRanges) == 1
+            and oField.oParent.aoRanges[0].cBitsWidth == 1):
+            return (oReg, oField.oParent);
+
+        if len(aoFields) != 1 or isinstance(oField.oParent, spec.ArmFieldsConditionalField):
+            raise Exception('%s: Ambigious register field: %s (%s)'
+                            % (sWhatFor, sField,
+                               ['%s:%s (parent=%s:%s)'
+                                % (type(oField), oField.toString(), type(oField.oParent), oField.oParent.toString(),)
+                                for oField in aoFields],));
+
+        if len(oField.aoRanges) != 1:
+            raise Exception('%s: Distributed register field in Concat() argument list: %s (%s)'
+                            % (sWhatFor, sField, oField.toString(),));
+
+        return (oReg, oField);
+
+
     def transformCodePass2_IsFeatureImplemented(self, oNode, oInfo):
         """ Pass 2: IsFeatureImplemented(FEAT_xxxx) -> pGstFeats->fXxxx. """
         if len(oNode.aoArgs) == 1 and isinstance(oNode.aoArgs[0], ArmAstIdentifier):
@@ -1361,6 +1399,119 @@ class SysRegGeneratorBase(object):
             return ArmAstCppExpr('false /** @todo pGstFeats->%s */' % (sFeatureNm,));
         raise Exception('Unexpected IsFeatureImplemented arguments: %s' % (oNode.aoArgs,));
 
+
+    class VBoxAstCppConcatEntry(object):
+        """ An entry in a concat value list. """
+        def __init__(self, oOrgValue, cBitsWidth, fValue = None, oExtra = None, iFirstBit = -1):
+            self.oOrgValue  = oOrgValue # type: ArmAstFunction | ArmAstValue | ArmAstField | ArmAstDotAtom | ArmAstConcat
+            ## Fixed field value or None.
+            self.fValue     = fValue;
+            ## Extra info depending on type.
+            self.oExtra     = oExtra;
+            ## The number of bits wide the field is.
+            self.cBitsWidth = cBitsWidth;
+            ## The position in the result.
+            self.iFirstBit  = iFirstBit;
+
+        def clone(self):
+            return SysRegGeneratorBase.VBoxAstCppConcatEntry(self.oOrgValue, self.cBitsWidth, fValue = self.fValue,
+                                                             oExtra = self.oExtra, iFirstBit = self.iFirstBit);
+
+    class VBoxAstCppConcat(ArmAstCppExpr):
+        """ Converted ArmAstConcat. """
+        def __init__(self, aoInfoEntries, oOriginal):
+            ArmAstCppExpr.__init__(self, oOriginal.toString(), aoInfoEntries[0].iFirstBit + aoInfoEntries[0].cBitsWidth);
+            self.aoInfoEntries = aoInfoEntries # type: List[VBoxAstCppConcatEntry]
+            ## @todo generate C++ code for it...
+
+        def toString(self):
+            return '/*todo:*/ %s' % (super().toString());
+
+        def toCExpr(self, oHelper):
+            _ = oHelper;
+            return self.toString();
+
+
+    ## PSTATE field info.
+    #   0. number of bits
+    #   1. AArch64 bit position.
+    kdPstateFields = {
+        'SP':       (1,  0, ), ## @todo ?
+        'EL':       (2,  2, ),
+        'F':        (1,  6, ),
+        'I':        (1,  7, ),
+        'A':        (1,  8, ),
+        'D':        (1,  9, ),
+        'SSBS':     (1, 12, ),
+        'ALLINT':   (1, 13, ),
+        'PAN':      (1, 22, ),
+        'UAO':      (1, 23, ),
+        'DIT':      (1, 24, ),
+        'TCO':      (1, 25, ),
+        'V':        (1, 28, ),
+        'C':        (1, 29, ),
+        'Z':        (1, 30, ),
+        'N':        (1, 31, ),
+        'PM':       (1, 32, ),
+    };
+
+    def transformCodePass2_Concat(self, oNode):  # (ArmAstConcat) -> ArmAstBase
+        """ Pass 2: Generic ArmAstConcat. """
+        # Process the values and create a parallel list of VBoxAstCppConcatEntry objects.
+        aoInfoEntries = []
+        for oValue in oNode.aoValues:
+            if isinstance(oValue, ArmAstFunction):
+                if oValue.isMatchingFunctionCall('Zeros', int) and oValue.aoArgs[0].iValue > 0 and oValue.aoArgs[0].iValue <= 64:
+                    aoInfoEntries.append(self.VBoxAstCppConcatEntry(oValue, oValue.aoArgs[0].iValue, fValue = 0));
+                else:
+                    raise Exception('Unexpected function in Concat() argument list: %s (%s)' % (oValue, oNode,));
+            elif isinstance(oValue, ArmAstValue):
+                (fValue, _, fWildcard, cBitsWidth) = oValue.parseValue(oValue.sValue);
+                if fWildcard != 0:
+                    raise Exception('Unexpected wildcard value in Concat() argument list: %s (%s)' % (oValue, oNode,));
+                aoInfoEntries.append(self.VBoxAstCppConcatEntry(oValue, cBitsWidth, fValue = fValue));
+            elif isinstance(oValue, ArmAstField):
+                (oReg, oField) = self.lookupRegisterField(oValue.sState, oValue.sName, oValue.sField, 'Concat/%s' % (oNode,));
+                aoInfoEntries.append(self.VBoxAstCppConcatEntry(oValue, oField.aoRanges[0].cBitsWidth, oExtra = (oReg, oField)));
+            elif isinstance(oValue, ArmAstDotAtom):
+                if len(oValue.aoValues) == 2 and oValue.aoValues[0].isMatchingIdentifier('PSTATE'):
+                    sField = oValue.aoValues[1].getIdentifierName();
+                    tInfo  = self.kdPstateFields.get(sField);
+                    if not tInfo:
+                        raise Exception('Unexpected PSTAT field in Concat() argument list: %s (%s)' % (oValue, oNode,));
+                    aoInfoEntries.append(self.VBoxAstCppConcatEntry(oValue, tInfo[0], oExtra = tInfo));
+                else:
+                    raise Exception('Unexpected DotAtom in Concat() argument list: %s (%s)' % (oValue, oNode,));
+            elif isinstance(oValue, self.VBoxAstCppConcat):
+                for oInfoEntry in oValue.aoInfoEntries:
+                    aoInfoEntries.append(oInfoEntry.clone())
+            else:
+                raise Exception('Unexpected value in Concat() argument list: %s: %s (%s)' % (type(oValue), oValue, oNode,));
+
+        # Assign bit positions.  This is done in reverse order as the Concat
+        # arguments are in most to least significant bit order.
+        iBit = 0;
+        cNonValues = 0;
+        for oInfoEntry in reversed(aoInfoEntries):
+            oInfoEntry.iFirstBit = iBit;
+            iBit += oInfoEntry.cBitsWidth;
+            cNonValues += 1 if oInfoEntry.fValue is None else 0;
+
+        # If all the entries have fixed values, we can convert this to a C++
+        # constant of the appropriate size.
+        if cNonValues == 0:
+            sExpr  = 'UINT%u_C(' % (iBit,);
+            fValue = 0;
+            for oInfoEntry in aoInfoEntries:
+                fValue |= oInfoEntry.fValue << oInfoEntry.iFirstBit;
+            sExpr += '%#x)' % (fValue, );
+            return ArmAstCppExpr(sExpr, iBit);
+
+        return self.VBoxAstCppConcat(aoInfoEntries, oNode);
+
+    def transformCodePass2_BinaryOp_ConcatAndValue(self, oNode): # pylint: disable=invalid-name
+        """ Pass 2: (AArch64.MDCR_EL2.TDE):(AArch64.MDCR_EL2.TDA) != '00' and similar """
+        return oNode;
 
     def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo, aoStack):
         """ Callback for pass 2: C++ translation. """
@@ -1381,6 +1532,15 @@ class SysRegGeneratorBase(object):
                     oNode.oLeft  = ArmAstCppExpr('IEM_F_MODE_ARM_GET_EL(pVCpu->iem.s.fExec)');
                     oNode.oRight = ArmAstInteger(idxEl);
                 return oNode;
+
+            ## (AArch64.MDCR_EL2.TDE):(AArch64.MDCR_EL2.TDA) != '00' and similar:
+            #if (    isinstance(oNode.oLeft, ArmAstConcat)
+            #    and isinstance(oNode.oRight, ArmAstValue)
+            #    and ArmAstBinaryOp.kdOps[oNode.sOp] in (ArmAstBinaryOp.ksOpTypeLogical, ArmAstBinaryOp.ksOpTypeCompare) ):
+            #    return self.transformCodePass2_BinaryOp_Concat_And_Value(oNode);
+
+        elif isinstance(oNode, ArmAstConcat):
+            return self.transformCodePass2_Concat(oNode);
 
         _ = fEliminationAllowed;
         _ = aoStack;
