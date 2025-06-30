@@ -651,20 +651,20 @@ static uint16_t gicReDistGetHighestPriorityPendingIntr(PCGICCPU pGicCpu, uint32_
             {
                 if (pGicCpu->abIntrPriority[idxPending] < bPriority)
                 {
-                    uint16_t const cIntrPerElement = sizeof(pGicCpu->bmIntrGroup[0]) * 8;
                     idxHighest = (uint16_t)idxPending;
                     bPriority  = pGicCpu->abIntrPriority[idxPending];
-                    fIntrGrp   = RT_BOOL(  pGicCpu->bmIntrGroup[idxHighest / cIntrPerElement]
-                                         & RT_BIT_64(idxHighest % cIntrPerElement))
-                               ? (GIC_INTR_GROUP_1NS | GIC_INTR_GROUP_1S)
-                               : GIC_INTR_GROUP_0;
                 }
                 idxPending = ASMBitNextSet(pvIntrs, cIntrs, idxPending);
             } while (idxPending != -1);
             if (idxHighest != UINT16_MAX)
             {
-                uIntId  = gicReDistGetIntIdFromIndex(idxHighest);
-                idxIntr = idxHighest;
+                uint16_t const cIntrPerElement = sizeof(pGicCpu->bmIntrGroup[0]) * 8;
+                uIntId   = gicReDistGetIntIdFromIndex(idxHighest);
+                idxIntr  = idxHighest;
+                fIntrGrp = RT_BOOL(  pGicCpu->bmIntrGroup[idxHighest / cIntrPerElement]
+                                   & RT_BIT_64(idxHighest % cIntrPerElement))
+                         ? (GIC_INTR_GROUP_1NS | GIC_INTR_GROUP_1S)
+                         : GIC_INTR_GROUP_0;
                 Assert(   GIC_IS_INTR_SGI_OR_PPI(uIntId)
                        || GIC_IS_INTR_EXT_PPI(uIntId));
             }
@@ -741,20 +741,20 @@ static uint16_t gicDistGetHighestPriorityPendingIntr(PCGICDEV pGicDev, PCVMCPUCC
                 if (   pGicDev->abIntrPriority[idxPending] < bPriority
                     && pGicDev->au32IntrRouting[idxPending] == pVCpu->idCpu)
                 {
-                    uint16_t const cIntrPerElement = sizeof(pGicDev->IntrGroup.au32[0]) * 8;
                     idxHighest = (uint16_t)idxPending;
                     bPriority  = pGicDev->abIntrPriority[idxPending];
-                    fIntrGrp   = RT_BOOL(  pGicDev->IntrGroup.au32[idxHighest / cIntrPerElement]
-                                         & RT_BIT_64(idxHighest % cIntrPerElement))
-                               ? (GIC_INTR_GROUP_1NS | GIC_INTR_GROUP_1S)
-                               : GIC_INTR_GROUP_0;
                 }
                 idxPending = ASMBitNextSet(pvIntrs, cIntrs, idxPending);
             } while (idxPending != -1);
             if (idxHighest != UINT16_MAX)
             {
-                uIntId  = gicDistGetIntIdFromIndex(idxHighest);
-                idxIntr = idxHighest;
+                uint16_t const cIntrPerElement = sizeof(pGicDev->IntrGroup.au32[0]) * 8;
+                uIntId   = gicDistGetIntIdFromIndex(idxHighest);
+                idxIntr  = idxHighest;
+                fIntrGrp = RT_BOOL(  pGicDev->IntrGroup.au32[idxHighest / cIntrPerElement]
+                                   & RT_BIT_64(idxHighest % cIntrPerElement))
+                         ? (GIC_INTR_GROUP_1NS | GIC_INTR_GROUP_1S)
+                         : GIC_INTR_GROUP_0;
                 Assert(   GIC_IS_INTR_SPI(uIntId)
                        || GIC_IS_INTR_EXT_SPI(uIntId));
             }
