@@ -150,6 +150,8 @@ typedef struct VMSVGACBCONTEXT
     RTLISTANCHOR         QueueSubmitted;           /* Buffers which are being processed by the host. */
     uint32_t             cSubmitted;               /* How many buffers were submitted to the host.
                                                     * Less than SVGA_CB_MAX_QUEUED_PER_CONTEXT */
+    uint32_t             cCompleted;               /* Used by SvgaCmdBufProcess to count how many buffers
+                                                    * were completed by the host */
 } VMSVGACBCONTEXT, *PVMSVGACBCONTEXT;
 
 typedef struct VMSVGACBSTATE

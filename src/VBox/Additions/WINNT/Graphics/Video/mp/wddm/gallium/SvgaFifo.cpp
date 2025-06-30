@@ -824,7 +824,9 @@ void SvgaCmdBufProcess(PVBOXWDDM_EXT_VMSVGA pSvga)
     for (unsigned i = 0; i < RT_ELEMENTS(pCBState->aCBContexts); ++i)
     {
         PVMSVGACBCONTEXT pCBCtx = &pCBState->aCBContexts[i];
+
         PVMSVGACB pIter, pNext;
+        pCBCtx->cCompleted = 0;
         RTListForEachSafe(&pCBCtx->QueueSubmitted, pIter, pNext, VMSVGACB, nodeQueue)
         {
             /* Buffers are processed sequentially, so if this one has not been processed,
@@ -836,7 +838,7 @@ void SvgaCmdBufProcess(PVBOXWDDM_EXT_VMSVGA pSvga)
             /* Remove the command buffer from the submitted queue and add to the local queue. */
             RTListNodeRemove(&pIter->nodeQueue);
             RTListAppend(&listCompleted, &pIter->nodeQueue);
-            --pCBCtx->cSubmitted;
+            ++pCBCtx->cCompleted;
         }
 
         /* Try to submit pending buffers. */
@@ -892,6 +894,21 @@ void SvgaCmdBufProcess(PVBOXWDDM_EXT_VMSVGA pSvga)
                 break;
         }
     }
+
+    /* Decrement 'cSubmitted' after freeing completed command buffers
+     * in order to make sure that SvgaCmdBufIsIdle returns true only
+     * if there are no buffers being processed.
+     */
+    KeAcquireSpinLock(&pCBState->SpinLock, &OldIrql);
+    for (unsigned i = 0; i < RT_ELEMENTS(pCBState->aCBContexts); ++i)
+    {
+        PVMSVGACBCONTEXT pCBCtx = &pCBState->aCBContexts[i];
+        if (pCBCtx->cCompleted <= pCBCtx->cSubmitted)
+            pCBCtx->cSubmitted -= pCBCtx->cCompleted;
+        else
+            AssertFailedStmt(pCBCtx->cSubmitted = 0);
+    }
+    KeReleaseSpinLock(&pCBState->SpinLock, OldIrql);
 }
 
 
