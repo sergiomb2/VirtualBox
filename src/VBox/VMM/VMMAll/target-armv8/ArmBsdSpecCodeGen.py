@@ -44,20 +44,21 @@ import sys;
 import time;
 
 # Our imports:
+from ArmAst import ArmAstAssignment
 from ArmAst import ArmAstBinaryOp
-from ArmAst import ArmAstUnaryOp
-from ArmAst import ArmAstConcat
-from ArmAst import ArmAstDotAtom
-from ArmAst import ArmAstFunction
-from ArmAst import ArmAstIdentifier
 from ArmAst import ArmAstBool
-from ArmAst import ArmAstInteger
-from ArmAst import ArmAstValue
-from ArmAst import ArmAstField
-from ArmAst import ArmAstReturn
-from ArmAst import ArmAstIfList
+from ArmAst import ArmAstConcat
 from ArmAst import ArmAstCppExpr
 from ArmAst import ArmAstCppStmt
+from ArmAst import ArmAstDotAtom
+from ArmAst import ArmAstField
+from ArmAst import ArmAstFunction
+from ArmAst import ArmAstIdentifier
+from ArmAst import ArmAstIfList
+from ArmAst import ArmAstInteger
+from ArmAst import ArmAstReturn
+from ArmAst import ArmAstUnaryOp
+from ArmAst import ArmAstValue
 import ArmBsdSpec as spec;
 
 # Imports from the parent directory.
@@ -1129,7 +1130,8 @@ class SysRegGeneratorBase(object):
         elif isinstance(oNode, ArmAstReturn):
             if oNode.oValue:
                 return True;
-        elif isinstance(oNode, (ArmAstBool, ArmAstCppExpr, ArmAstCppStmt, ArmAstIfList, ArmAstInteger, ArmAstUnaryOp,)):
+        elif isinstance(oNode, (ArmAstBool, ArmAstCppExpr, ArmAstCppStmt, ArmAstIfList, ArmAstInteger, ArmAstUnaryOp,
+                                ArmAstAssignment, self.VBoxAstCppConcat)):
             return True;
 
         oInfo.cIncompleteNodes += 1;
@@ -1347,9 +1349,18 @@ class SysRegGeneratorBase(object):
     # Pass 2 - C++ translation.
     #
 
+    ## Mapping register names to CPUMCTX members.
+    ## The value is: (sName|fReservedValue,)
+    kdRegToCpumCtx = {
+        'AArch64.CNTKCTL_EL1':      ( 'CntKCtl.u64',    ), # Concat uses EL0PCTEN and EL0VCTEN
+        'AArch64.CNTHCTL_EL2':      ( 'CntHCtlEl2.u64', ), # Concat uses EL0PCTEN and EL0VCTEN
+        'AArch64.MDCR_EL2':         ( 'MdcrEl2.u64',    ), # Concat uses TDA, TDE and TDRA
+        'AArch64.PMUSERENR_EL0':    ( 0,                ), # Concat uses EN; we don't support it to report zero.
+    };
+
     def lookupRegisterField(self, sState, sRegisterName, sField, sWhatFor):
         """
-        Helper to lookup a register field, returning (oReg, oField).
+        Helper to lookup a register field, returning (oReg, oField, sCpumCtxName|fReservedValue).
         Raises exceptions if not found or too complicated.
         """
         oReg = spec.g_ddoAllArmRegistersByStateByName[sState].get(sRegisterName); # ArmRegister
@@ -1360,6 +1371,11 @@ class SysRegGeneratorBase(object):
         if not aoFields:
             raise Exception('%s: Field "%s" not found in register "%s"' % (sWhatFor, sField, sRegisterName,));
 
+        tCpumCtxInfo = self.kdRegToCpumCtx.get('%s.%s' % (sState, sRegisterName));
+        if not tCpumCtxInfo:
+            raise Exception('%s: No CPUMCTX mapping for register %s.%s (looking up field %s)!'
+                            % (sWhatFor, sState, sRegisterName, sField,));
+
         # Iff this is an conditional field, there may be more than one entry in
         # aoFields and these all are relative to the ArmFieldsConditionalField
         # parent.  So, we just check that it's a simple one and return the
@@ -1368,7 +1384,10 @@ class SysRegGeneratorBase(object):
         if (    isinstance(oField.oParent, spec.ArmFieldsConditionalField)
             and len(oField.oParent.aoRanges) == 1
             and oField.oParent.aoRanges[0].cBitsWidth == 1):
-            return (oReg, oField.oParent);
+            oField = oField.oParent; # ArmFieldsConditionalField
+            if oField.sName is None:
+                oField.sName = sField; # HACK ALERT!!
+            return (oReg, oField, tCpumCtxInfo[0],);
 
         if len(aoFields) != 1 or isinstance(oField.oParent, spec.ArmFieldsConditionalField):
             raise Exception('%s: Ambigious register field: %s (%s)'
@@ -1381,7 +1400,8 @@ class SysRegGeneratorBase(object):
             raise Exception('%s: Distributed register field in Concat() argument list: %s (%s)'
                             % (sWhatFor, sField, oField.toString(),));
 
-        return (oReg, oField);
+        #print('reg.field: %s.%s' % (oReg.sName, oField.sName));
+        return (oReg, oField, tCpumCtxInfo[0],);
 
 
     def transformCodePass2_IsFeatureImplemented(self, oNode, oInfo):
@@ -1402,20 +1422,26 @@ class SysRegGeneratorBase(object):
 
     class VBoxAstCppConcatEntry(object):
         """ An entry in a concat value list. """
-        def __init__(self, oOrgValue, cBitsWidth, fValue = None, oExtra = None, iFirstBit = -1):
+        def __init__(self, oOrgValue, cBitsWidth, fValue = None, oCpumCtx = None, oField = None, iFirstBit = -1):
             self.oOrgValue  = oOrgValue # type: ArmAstFunction | ArmAstValue | ArmAstField | ArmAstDotAtom | ArmAstConcat
             ## Fixed field value or None.
             self.fValue     = fValue;
-            ## Extra info depending on type.
-            self.oExtra     = oExtra;
+            ## Either a CPUMCTX field (typically uint64_t) or an integer value to use.
+            self.oCpumCtx   = oCpumCtx  # type: str | int
+            ## The field details.
+            self.oField     = oField    # type: spec.ArmFieldsBase
             ## The number of bits wide the field is.
             self.cBitsWidth = cBitsWidth;
             ## The position in the result.
             self.iFirstBit  = iFirstBit;
+            if isinstance(oCpumCtx, int):
+                assert self.fValue is None or self.fValue == oCpumCtx;
+                self.fValue = oCpumCtx;
 
         def clone(self):
             return SysRegGeneratorBase.VBoxAstCppConcatEntry(self.oOrgValue, self.cBitsWidth, fValue = self.fValue,
-                                                             oExtra = self.oExtra, iFirstBit = self.iFirstBit);
+                                                             oCpumCtx = self.oCpumCtx, oField = self.oField,
+                                                             iFirstBit = self.iFirstBit);
 
     class VBoxAstCppConcat(ArmAstCppExpr):
         """ Converted ArmAstConcat. """
@@ -1424,12 +1450,66 @@ class SysRegGeneratorBase(object):
             self.aoInfoEntries = aoInfoEntries # type: List[VBoxAstCppConcatEntry]
             ## @todo generate C++ code for it...
 
-        def toString(self):
-            return '/*todo:*/ %s' % (super().toString());
+            # Convert the info items to C++ code.
+            asExprs = [];
+            i       = 0;
+            fFixed  = 0;
+            while i < len(aoInfoEntries):
+                oInfoEntry = aoInfoEntries[i];
+                if oInfoEntry.fValue is not None or isinstance(oInfoEntry.oCpumCtx, int):
+                    fFixed |= oInfoEntry.fValue << oInfoEntry.iFirstBit;
+                else:
+                    assert isinstance(oInfoEntry.oCpumCtx, str);
+                    assert oInfoEntry.oField;
+                    sNames      = oInfoEntry.oField.sName;
+                    iFirstBit   = oInfoEntry.oField.aoRanges[0].iFirstBit;
+                    cBitsWidth  = oInfoEntry.oField.aoRanges[0].cBitsWidth;
+                    #print('debug/concat: i=%s %uL%u: %s/%uL%u -> %s'
+                    #      % (i, oInfoEntry.iFirstBit, oInfoEntry.cBitsWidth, sNames, iFirstBit, cBitsWidth, oInfoEntry.oCpumCtx));
+                    while (    i + 1 < len(aoInfoEntries)
+                           and aoInfoEntries[i + 1].oCpumCtx is oInfoEntry.oCpumCtx
+                           and aoInfoEntries[i + 1].oField.aoRanges[0].iFirstBit == iFirstBit - cBitsWidth):
+                        i += 1;
+                        #print('debug/concat: i=%s %uL%u: %s/%uL%u ++'
+                        #      % (i, aoInfoEntries[i].iFirstBit, aoInfoEntries[i].cBitsWidth, oInfoEntry.oField.sName,
+                        #         aoInfoEntries[i].oField.aoRanges[0].iFirstBit, aoInfoEntries[i].oField.aoRanges[0].cBitsWidth));
+                        iFirstBit -= aoInfoEntries[i].oField.aoRanges[0].cBitsWidth;
+                        sNames    += ',' + oInfoEntry.oField.sName;
 
-        def toCExpr(self, oHelper):
-            _ = oHelper;
-            return self.toString();
+                    fMask = ((1 << cBitsWidth) - 1) << iFirstBit;
+                    if iFirstBit == oInfoEntry.iFirstBit:
+                        asExprs.append('(pVCpu->cpum.GstCtx.%s & UINT64_C(%#x)/*%s*/)'
+                                       % (oInfoEntry.oCpumCtx, fMask, sNames));
+                    elif iFirstBit > oInfoEntry.iFirstBit:
+                        asExprs.append('((pVCpu->cpum.GstCtx.%s & UINT64_C(%#x)/*%s*/) >> %d)'
+                                       % (oInfoEntry.oCpumCtx, fMask, sNames, iFirstBit - oInfoEntry.iFirstBit));
+                    else:
+                        asExprs.append('((pVCpu->cpum.GstCtx.%s & UINT64_C(%#x)/*%s*/) << %d)'
+                                       % (oInfoEntry.oCpumCtx, fMask, sNames, oInfoEntry.iFirstBit - iFirstBit));
+                i += 1;
+            if fFixed != 0:
+                asExprs.append('UINT64_C(%#x)' % (fFixed,));
+
+            self.asExprs = asExprs;
+            self.sExpr   = '(%s)' % (' | '.join(asExprs),) if len(asExprs) > 1 else asExprs[0];
+
+        def toStringEx(self, cchMaxWidth):
+            if len(self.sExpr) <= cchMaxWidth:
+                return self.sExpr;
+            return '(  %s)' % ('\n | '.join(self.asExprs),);
+
+        def areAllFromSameRegister(self):
+            """ Checks if all the entries are from the same register or are zero. """
+            oCpumCtx = self.aoInfoEntries[0].oCpumCtx;
+            idx      = 1;
+            while idx < len(self.aoInfoEntries) and not isinstance(oCpumCtx, str):
+                oCpumCtx = self.aoInfoEntries[idx].oCpumCtx;
+                idx += 1;
+            for oInfoEntry in self.aoInfoEntries:
+                if oInfoEntry.oCpumCtx is not oCpumCtx:
+                    if oInfoEntry.fValue is None or self.oInfoEntry.fValue != 0:
+                        return False;
+            return True;
 
 
     ## PSTATE field info.
@@ -1471,15 +1551,18 @@ class SysRegGeneratorBase(object):
                     raise Exception('Unexpected wildcard value in Concat() argument list: %s (%s)' % (oValue, oNode,));
                 aoInfoEntries.append(self.VBoxAstCppConcatEntry(oValue, cBitsWidth, fValue = fValue));
             elif isinstance(oValue, ArmAstField):
-                (oReg, oField) = self.lookupRegisterField(oValue.sState, oValue.sName, oValue.sField, 'Concat/%s' % (oNode,));
-                aoInfoEntries.append(self.VBoxAstCppConcatEntry(oValue, oField.aoRanges[0].cBitsWidth, oExtra = (oReg, oField)));
+                (_, oField, oCpumCtx) = self.lookupRegisterField(oValue.sState, oValue.sName, oValue.sField,
+                                                                 'Concat/%s' % (oNode,));
+                aoInfoEntries.append(self.VBoxAstCppConcatEntry(oValue, oField.aoRanges[0].cBitsWidth,
+                                                                oCpumCtx = oCpumCtx, oField = oField));
             elif isinstance(oValue, ArmAstDotAtom):
                 if len(oValue.aoValues) == 2 and oValue.aoValues[0].isMatchingIdentifier('PSTATE'):
                     sField = oValue.aoValues[1].getIdentifierName();
                     tInfo  = self.kdPstateFields.get(sField);
                     if not tInfo:
                         raise Exception('Unexpected PSTAT field in Concat() argument list: %s (%s)' % (oValue, oNode,));
-                    aoInfoEntries.append(self.VBoxAstCppConcatEntry(oValue, tInfo[0], oExtra = tInfo));
+                    oField = spec.ArmFieldsBase(None, [spec.ArmRange(tInfo[1], tInfo[0])], sField); ## @todo aarch32
+                    aoInfoEntries.append(self.VBoxAstCppConcatEntry(oValue, tInfo[0], oCpumCtx = 'fPState', oField = oField));
                 else:
                     raise Exception('Unexpected DotAtom in Concat() argument list: %s (%s)' % (oValue, oNode,));
             elif isinstance(oValue, self.VBoxAstCppConcat):
@@ -1511,6 +1594,31 @@ class SysRegGeneratorBase(object):
 
     def transformCodePass2_BinaryOp_ConcatAndValue(self, oNode): # pylint: disable=invalid-name
         """ Pass 2: (AArch64.MDCR_EL2.TDE):(AArch64.MDCR_EL2.TDA) != '00' and similar """
+        # First process the value.
+        (fValue, _, fWildcard, _) = oNode.oRight.getParsedValue();
+        #(fValue, fFixed, fWildcard, cBitsWidth) = oNode.oRight.getParsedValue();
+
+        #
+        # Drop the comparison and shifting if we're checking that any of the
+        # fields are non-zero.
+        #
+        if fValue == 0 and fWildcard == 0 and oNode.sOp == '!=':
+            if oNode.oLeft.areAllFromSameRegister():
+                fMask    = 0;
+                oCpumCtx = None;
+                asNames  = [];
+                for oInfoEntry in oNode.oLeft.aoInfoEntries:
+                    if oInfoEntry.fValue is None:
+                        fMask |= ((1 << oInfoEntry.oField.aoRanges[0].cBitsWidth) - 1) << oInfoEntry.oField.aoRanges[0].iFirstBit;
+                        oCpumCtx = oInfoEntry.oCpumCtx;
+                        assert oInfoEntry.oField.sName;
+                        asNames.append(oInfoEntry.oField.sName);
+                    else:
+                        assert oInfoEntry.fValue == 0;
+                oNode.oLeft.asExprs = ['pVCpu->cpum.GstCtx.%s & UINT64_C(%#x) /*%s*/' % (oCpumCtx, fMask, ','.join(asNames))];
+                oNode.oLeft.sExpr = '(%s)' % (oNode.oLeft.asExprs[0],)
+                return oNode.oLeft;
+
         return oNode;
 
     def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo, aoStack):
@@ -1534,10 +1642,10 @@ class SysRegGeneratorBase(object):
                 return oNode;
 
             ## (AArch64.MDCR_EL2.TDE):(AArch64.MDCR_EL2.TDA) != '00' and similar:
-            #if (    isinstance(oNode.oLeft, ArmAstConcat)
-            #    and isinstance(oNode.oRight, ArmAstValue)
-            #    and ArmAstBinaryOp.kdOps[oNode.sOp] in (ArmAstBinaryOp.ksOpTypeLogical, ArmAstBinaryOp.ksOpTypeCompare) ):
-            #    return self.transformCodePass2_BinaryOp_Concat_And_Value(oNode);
+            if (    isinstance(oNode.oLeft, self.VBoxAstCppConcat)
+                and isinstance(oNode.oRight, ArmAstValue)
+                and ArmAstBinaryOp.kdOps[oNode.sOp] in (ArmAstBinaryOp.ksOpTypeLogical, ArmAstBinaryOp.ksOpTypeCompare) ):
+                return self.transformCodePass2_BinaryOp_ConcatAndValue(oNode);
 
         elif isinstance(oNode, ArmAstConcat):
             return self.transformCodePass2_Concat(oNode);
@@ -1569,7 +1677,7 @@ class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
             % (oInfo.oAccessor.oEncoding.sAsmValue, ', uint32_t uInstrEssence' if oInfo.cInstrEssenceRefs > 0 else ''),
             '{',
         ];
-        if oInfo.cInstrEssenceRefs > 0 or not oInfo.oCode:
+        if oInfo.cIncompleteNodes > 0 or not oInfo.oCode:
             asLines += [
                 '    RT_NOREF(pVCpu, puDst%s);' % (', uInstrEssence' if oInfo.cInstrEssenceRefs > 0 else ''),
                 '#ifdef IEM_SYSREG_TODO',
@@ -1582,7 +1690,7 @@ class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
         if oInfo.oCode:
             asLines.extend(oInfo.oCode.toStringList('    ', 'C'));
 
-        if oInfo.cInstrEssenceRefs > 0 or not oInfo.oCode:
+        if oInfo.cIncompleteNodes > 0 or not oInfo.oCode:
             asLines += [
                 '#endif',
                 '    return VERR_IEM_ASPECT_NOT_IMPLEMENTED;'

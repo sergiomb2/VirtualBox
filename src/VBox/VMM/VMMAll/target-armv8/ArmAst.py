@@ -300,6 +300,10 @@ class ArmAstBase(object):
         _ = cchMaxWidth;
         return self.toString();
 
+    def toDebugString(self):
+        """ For debugging the tree structure... """
+        return '{%s: %s}' % (type(self).__name__, self.toString(),);
+
     def __str__(self):
         return self.toString();
 
@@ -1279,6 +1283,12 @@ class ArmAstValue(ArmAstLeafBase):
         _ = oHelper;
         (_, _, _, cBitsWidth) = ArmAstValue.parseValue(self.sValue, 0);
         return cBitsWidth;
+
+    def getParsedValue(self):
+        """
+        Returns (fValue, fFixed, fWildcard, cBitsWidth) tuple on success.
+        """
+        return self.parseValue(self.sValue, 0);
 
     @staticmethod
     def parseValue(sValue, cBitsWidth = 0):
