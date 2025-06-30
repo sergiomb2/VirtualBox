@@ -44,21 +44,22 @@ import sys;
 import time;
 
 # Our imports:
-from ArmAst import ArmAstAssignment
-from ArmAst import ArmAstBinaryOp
-from ArmAst import ArmAstBool
-from ArmAst import ArmAstConcat
-from ArmAst import ArmAstCppExpr
-from ArmAst import ArmAstCppStmt
-from ArmAst import ArmAstDotAtom
-from ArmAst import ArmAstField
-from ArmAst import ArmAstFunction
-from ArmAst import ArmAstIdentifier
-from ArmAst import ArmAstIfList
-from ArmAst import ArmAstInteger
-from ArmAst import ArmAstReturn
-from ArmAst import ArmAstUnaryOp
-from ArmAst import ArmAstValue
+from ArmAst import ArmAstAssignment;
+from ArmAst import ArmAstBinaryOp;
+from ArmAst import ArmAstBool;
+from ArmAst import ArmAstConcat;
+from ArmAst import ArmAstCppExpr;
+from ArmAst import ArmAstCppStmt;
+from ArmAst import ArmAstDotAtom;
+from ArmAst import ArmAstField;
+from ArmAst import ArmAstFunction;
+from ArmAst import ArmAstIdentifier;
+from ArmAst import ArmAstIfList;
+from ArmAst import ArmAstInteger;
+from ArmAst import ArmAstReturn;
+from ArmAst import ArmAstString;
+from ArmAst import ArmAstUnaryOp;
+from ArmAst import ArmAstValue;
 import ArmBsdSpec as spec;
 
 # Imports from the parent directory.
@@ -1212,6 +1213,19 @@ class SysRegGeneratorBase(object):
                 return ArmAstBool(True);
         raise Exception('Unexpected: %s' % (oNode.toString(),));
 
+    kaoImpDefBoolRetTrue = (
+        re.compile('^ID_AA64.+ trapped by HCR_EL2\\..*$'),  # e.g. ID_AA64ISAR2_EL1 trapped by HCR_EL2.TID3
+    );
+    def transformCodePass1_ImpDefBool(self, oNode):
+        """ Pass 1: ImpDefBool("blah blah"). """
+        if len(oNode.aoArgs) == 1 and isinstance(oNode.aoArgs[0], ArmAstString):
+            sValue = oNode.aoArgs[0].sValue;
+            for oRe in self.kaoImpDefBoolRetTrue:
+                if oRe.match(sValue):
+                    return ArmAstBool(True);
+            return oNode;
+        raise Exception('Unexpected: %s' % (oNode.toString(),));
+
     def transformCodePass1_AArch64_SystemAccessTrap(self, oNode, oInfo): # pylint: disable=invalid-name
         """ Pass 1: AArch64_SystemAccessTrap(EL2,0x18) and such. """
         if len(oNode.aoArgs) == 2:
@@ -1298,16 +1312,21 @@ class SysRegGeneratorBase(object):
                 if oNode.oRight.getWidth(None) == 1:
                     oReg = spec.g_ddoAllArmRegistersByStateByName[oNode.oLeft.sState][oNode.oLeft.sName]; # ArmRegister
                     aoFields = oReg.daoFields.get(oNode.oLeft.sField); # List[ArmFieldsBase]
-                    if aoFields and len(aoFields) == 1:
-                        if len(aoFields[0].aoRanges) == 1 and aoFields[0].aoRanges[0].cBitsWidth == 1:
-                            if oNode.sOp == '==' and oNode.oRight.sValue == "'1'":
-                                return oNode.oLeft;
-                            if oNode.sOp == '==' and oNode.oRight.sValue == "'0'":
-                                return ArmAstUnaryOp('!', oNode.oLeft);
-                            if oNode.sOp == '!=' and oNode.oRight.sValue == "'0'":
-                                return oNode.oLeft;
-                            if oNode.sOp == '!=' and oNode.oRight.sValue == "'1'":
-                                return ArmAstUnaryOp('!', oNode.oLeft);
+                    if (    aoFields
+                        and len(aoFields[0].aoRanges) == 1
+                        and aoFields[0].aoRanges[0].cBitsWidth == 1
+                        and (   len(aoFields) == 1
+                             or (    isinstance(aoFields[0].oParent, spec.ArmFieldsConditionalField)
+                                 and len(aoFields[0].oParent.aoRanges) == 1
+                                 and aoFields[0].oParent.aoRanges[0].cBitsWidth == 1))):
+                        if oNode.sOp == '==' and oNode.oRight.sValue == "'1'":
+                            return oNode.oLeft;
+                        if oNode.sOp == '==' and oNode.oRight.sValue == "'0'":
+                            return ArmAstUnaryOp('!', oNode.oLeft);
+                        if oNode.sOp == '!=' and oNode.oRight.sValue == "'0'":
+                            return oNode.oLeft;
+                        if oNode.sOp == '!=' and oNode.oRight.sValue == "'1'":
+                            return ArmAstUnaryOp('!', oNode.oLeft);
 
         elif isinstance(oNode, ArmAstFunction):
             # Since we don't implement any external debug state (no EDSCR.STATUS),
@@ -1328,6 +1347,8 @@ class SysRegGeneratorBase(object):
                 return self.transformCodePass1_IsFeatureImplemented(oNode);
             if oNode.sName == 'IsCurrentSecurityState':
                 return self.transformCodePass1_IsCurrentSecurityState(oNode);
+            if oNode.sName == 'ImpDefBool':
+                return self.transformCodePass1_ImpDefBool(oNode);
 
             if oNode.sName == 'AArch64_SystemAccessTrap':
                 return self.transformCodePass1_AArch64_SystemAccessTrap(oNode, oInfo);
@@ -1355,10 +1376,46 @@ class SysRegGeneratorBase(object):
         'AArch64.CNTKCTL_EL1':      ( 'CntKCtl.u64',    ), # Concat uses EL0PCTEN and EL0VCTEN
         'AArch64.CNTHCTL_EL2':      ( 'CntHCtlEl2.u64', ), # Concat uses EL0PCTEN and EL0VCTEN
         'AArch64.MDCR_EL2':         ( 'MdcrEl2.u64',    ), # Concat uses TDA, TDE and TDRA
-        'AArch64.PMUSERENR_EL0':    ( 0,                ), # Concat uses EN; we don't support it to report zero.
+        'AArch64.PMUSERENR_EL0':    ( 0, ), # Concat uses EN; we don't support it, so report zero.
+
+        'AArch64.AMUSERENR_EL0':    ( 0, ), # We don't support this, so report zero.
+        'AArch64.CNTP_CTL_EL0':     ( 0, ), # We don't support this, so report zero.
+        'AArch64.CPACR_EL1':        ( 'Cpacr.u64',   ),
+        'AArch64.CPTR_EL2':         ( 'CptrEl2.u64', ),
+        'AArch64.GCSCRE0_EL1':      ( 0, ), # FEAT_GCS / ARMv9.4; we don't support this, returning zero for now.
+        'AArch64.HCR_EL2':          ( 'HcrEl2.u64',  ),
+        'AArch64.HCRX_EL2':         ( 0, ), # FEAT_HCX / ARMv8.7; we don't support this, returning zero for now.
+        'AArch64.HDFGRTR_EL2':      ( 0, ), # FEAT_FGT / ARMv8.6; we don't support this, returning zero for now.
+        'AArch64.HDFGWTR_EL2':      ( 0, ), # FEAT_FGT / ARMv8.6; we don't support this, returning zero for now.
+        'AArch64.HFGRTR_EL2':       ( 0, ), # FEAT_FGT / ARMv8.6; we don't support this, returning zero for now.
+        'AArch64.HFGWTR_EL2':       ( 0, ), # FEAT_FGT / ARMv8.6; we don't support this, returning zero for now.
+        ## @todo 'AArch64.ICC_SRE_EL1': ( '.u64', ), - GIC has debug logging of this, but no handling.
+        ## @todo 'AArch64.ICC_SRE_EL2': ( '.u64', ), - GIC lists this in the range, but not sure how to get at any value...
+        ## @todo 'AArch64.ICH_HCR_EL2': ( '.u64', ), - This is part of GICv3, but our GIC doesn't mention it.
+        'AArch64.MDSCR_EL1':        ( 'Mdscr.u64', ),
+        ## @todo 'AArch64.MPAM2_EL2':   ( '.u64', ), - FEAT_MPAM / ARMv8.4; not sure if zero is a passable value here...
+        ## @todo 'AArch64.MPAMBW2_EL2': ( '.u64', ), - FEAT_MPAM_PE_BW_CTRL / ARMv9.3; ditto.
+        ## @todo 'AArch64.MPAMHCR_EL2': ( '.u64', ), - FEAT_MPAM / ARMv8.4; not sure if zero is a passable value here...
+        ## @todo 'AArch64.MPAMIDR_EL1': ( '.u64', ), - FEAT_MPAM / ARMv8.4; not sure if zero is a passable value here...
+        'AArch64.OSLSR_EL1':        ( 'fOsLck.u64', ),
+        'AArch64.PMSCR_EL1':        ( 0, ), # FEAT_SPE / ARMv8.1
+        ## @todo 'AArch64.PMSELR_EL0':  ( '.u64', ), - FEAT_PMUv3 / ARMv8.0; not sure if zero is a passable value here...
+        ## @todo 'AArch64.PMUACR_EL1':  ( '.u64', ), - FEAT_PMUv3p9; not sure if zero is a passable value here...
+        ## @todo 'AArch64.SCR_EL3':     ( '.u64', ), - we don't do EL3, so some stuff isn't eliminated properly...
+        'AArch64.SCTLR_EL1':        ( 'Sctlr.u64', ),
+        'AArch64.SCTLR_EL2':        ( 'SctlrEl2.u64', ),
+        ## @todo 'AArch64.SPMSELR_EL0': ( '.u64', ), - FEAT_SPMU / ARMv8.8
+        ## @todo 'AArch64.TRCIDR0':     ( '.u64', ), - FEAT_ETE / ARMv9.0
+        ## @todo 'AArch64.TRCIDR2':     ( '.u64', ), - FEAT_ETE / ARMv9.0
+        ## @todo 'AArch64.TRCIDR3':     ( '.u64', ), - FEAT_ETE / ARMv9.0
+        ## @todo 'AArch64.TRCIDR4':     ( '.u64', ), - FEAT_ETE / ARMv9.0
+        ## @todo 'AArch64.TRCIDR5':     ( '.u64', ), - FEAT_ETE / ARMv9.0
+        ## @todo 'AArch64.TRFCR_EL1':   ( '.u64', ), - FEAT_TRF  / ??
+
+
     };
 
-    def lookupRegisterField(self, sState, sRegisterName, sField, sWhatFor):
+    def lookupRegisterField(self, sState, sRegisterName, sField, sWhatFor, fWarnOnly = False):
         """
         Helper to lookup a register field, returning (oReg, oField, sCpumCtxName|fReservedValue).
         Raises exceptions if not found or too complicated.
@@ -1369,12 +1426,16 @@ class SysRegGeneratorBase(object):
 
         aoFields = oReg.daoFields.get(sField); # List[ArmFieldsBase]
         if not aoFields:
-            raise Exception('%s: Field "%s" not found in register "%s"' % (sWhatFor, sField, sRegisterName,));
+            oXcpt = Exception('%s: Field "%s" not found in register "%s"' % (sWhatFor, sField, sRegisterName,));
+            if fWarnOnly: print('warning: %s' % (oXcpt)); return (None, None, None);
+            raise oXcpt;
 
         tCpumCtxInfo = self.kdRegToCpumCtx.get('%s.%s' % (sState, sRegisterName));
         if not tCpumCtxInfo:
-            raise Exception('%s: No CPUMCTX mapping for register %s.%s (looking up field %s)!'
-                            % (sWhatFor, sState, sRegisterName, sField,));
+            oXcpt = Exception('%s: No CPUMCTX mapping for register %s.%s (looking up field %s)'
+                              % (sWhatFor, sState, sRegisterName, sField,));
+            if fWarnOnly: print('warning: %s' % (oXcpt)); return (None, None, None);
+            raise oXcpt;
 
         # Iff this is an conditional field, there may be more than one entry in
         # aoFields and these all are relative to the ArmFieldsConditionalField
@@ -1382,19 +1443,25 @@ class SysRegGeneratorBase(object):
         # parent instaed of the children in aoFields.
         oField = aoFields[-1]; # ArmFieldsBase
         if (    isinstance(oField.oParent, spec.ArmFieldsConditionalField)
-            and len(oField.oParent.aoRanges) == 1
-            and oField.oParent.aoRanges[0].cBitsWidth == 1):
+            and len(oField.oParent.aoRanges)  == 1
+            and len(oField.aoRanges)          == 1
+            and oField.aoRanges[0].cBitsWidth == oField.oParent.aoRanges[0].cBitsWidth
+            and oField.aoRanges[0].iFirstBit  == 0):
             oField = oField.oParent; # ArmFieldsConditionalField
             if oField.sName is None:
                 oField.sName = sField; # HACK ALERT!!
             return (oReg, oField, tCpumCtxInfo[0],);
 
         if len(aoFields) != 1 or isinstance(oField.oParent, spec.ArmFieldsConditionalField):
-            raise Exception('%s: Ambigious register field: %s (%s)'
-                            % (sWhatFor, sField,
-                               ['%s:%s (parent=%s:%s)'
-                                % (type(oField), oField.toString(), type(oField.oParent), oField.oParent.toString(),)
-                                for oField in aoFields],));
+            oXcpt = Exception('%s: Ambigious register field in %s: %s (%s)'
+                              % (sWhatFor, sRegisterName, sField,
+                                 ['%s:%s (parent=%s:%s)'
+                                  % (type(oField).__name__, oField.toString(),
+                                     type(oField.oParent).__name__, oField.oParent.toString(),)
+                                  for oField in aoFields] ));
+            if fWarnOnly: print('warning: %s' % (oXcpt)); return (None, None, None);
+            raise oXcpt;
+
 
         if len(oField.aoRanges) != 1:
             raise Exception('%s: Distributed register field in Concat() argument list: %s (%s)'
@@ -1465,7 +1532,7 @@ class SysRegGeneratorBase(object):
                     iFirstBit   = oInfoEntry.oField.aoRanges[0].iFirstBit;
                     cBitsWidth  = oInfoEntry.oField.aoRanges[0].cBitsWidth;
                     #print('debug/concat: i=%s %uL%u: %s/%uL%u -> %s'
-                    #      % (i, oInfoEntry.iFirstBit, oInfoEntry.cBitsWidth, sNames, iFirstBit, cBitsWidth, oInfoEntry.oCpumCtx));
+                    #     % (i, oInfoEntry.iFirstBit, oInfoEntry.cBitsWidth, sNames, iFirstBit, cBitsWidth, oInfoEntry.oCpumCtx));
                     while (    i + 1 < len(aoInfoEntries)
                            and aoInfoEntries[i + 1].oCpumCtx is oInfoEntry.oCpumCtx
                            and aoInfoEntries[i + 1].oField.aoRanges[0].iFirstBit == iFirstBit - cBitsWidth):
@@ -1507,7 +1574,7 @@ class SysRegGeneratorBase(object):
                 idx += 1;
             for oInfoEntry in self.aoInfoEntries:
                 if oInfoEntry.oCpumCtx is not oCpumCtx:
-                    if oInfoEntry.fValue is None or self.oInfoEntry.fValue != 0:
+                    if oInfoEntry.fValue is None or oInfoEntry.fValue != 0:
                         return False;
             return True;
 
@@ -1621,6 +1688,48 @@ class SysRegGeneratorBase(object):
 
         return oNode;
 
+    def transformCodePass2_Field(self, oNode): # (ArmAstField) -> ArmAstBase
+        """ Pass2: Deal with field accesses (except for AST.Concat). """
+        (_, oField, oCpumCtx) = self.lookupRegisterField(oNode.sState, oNode.sName, oNode.sField, 'Generic field',
+                                                         fWarnOnly = True);
+        if not oField:
+            return oNode;
+        assert len(oField.aoRanges) == 1;
+
+        cBitsWidth = oField.aoRanges[0].cBitsWidth;
+        iFirstBit  = oField.aoRanges[0].iFirstBit;
+
+        if isinstance(oCpumCtx, int):
+            iValue  = oCpumCtx >> iFirstBit;
+            iValue &= (1 << cBitsWidth) - 1;
+            return ArmAstInteger(iValue); # Drops the cBitsWidth...
+
+        sExpr = '(pVCpu->cpum.GstCtx.%s & UINT%u_C(%#x))' \
+              % (oCpumCtx, 64 if cBitsWidth >= 32 else 32, ((1 << cBitsWidth) - 1) << iFirstBit,);
+        if iFirstBit != 0:
+            sExpr = '((%s) >> %u)' % (sExpr, iFirstBit,);
+        return ArmAstCppExpr(sExpr, cBitsWidth);
+
+    def transformCodePass2_Identifier(self, oNode, oInfo): # type: (ArmAstIdentifier, SysRegAccessorInfo) -> ArmAstBase
+        """ Pass2: Deal with register identifiers during assignments. """
+        _ = oInfo;
+        sState = 'AArch64' if self.isA64Instruction() else 'AArch32';
+        oReg   = spec.g_ddoAllArmRegistersByStateByName[sState].get(oNode.sName); # ArmRegister
+        if not oReg:
+            raise Exception('Assignment/Identifier: Register "%s" not found' % (oNode.sName, ));
+
+        tCpumCtxInfo = self.kdRegToCpumCtx.get('%s.%s' % (sState, oNode.sName));
+        if not tCpumCtxInfo:
+            oXcpt = Exception('Assignment/Identifier: No CPUMCTX mapping for register %s.%s' % (sState, oNode.sName,));
+            print('warning: %s' % (oXcpt));
+            return oNode;
+            #raise oXcpt;
+
+        if isinstance(tCpumCtxInfo[0], int):
+            return ArmAstInteger(tCpumCtxInfo[0]); # Drops the bitcount...
+        return ArmAstCppExpr('pVCpu->cpum.GstCtx.%s' % (tCpumCtxInfo[0],), 64);
+
+
     def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo, aoStack):
         """ Callback for pass 2: C++ translation. """
         if isinstance(oNode, ArmAstFunction):
@@ -1650,8 +1759,17 @@ class SysRegGeneratorBase(object):
         elif isinstance(oNode, ArmAstConcat):
             return self.transformCodePass2_Concat(oNode);
 
+        elif (    isinstance(oNode, ArmAstField)
+              and (   not aoStack
+                   or not isinstance(aoStack[-1], ArmAstConcat))):
+            return self.transformCodePass2_Field(oNode);
+
+        elif (    isinstance(oNode, ArmAstIdentifier)
+              and aoStack
+              and isinstance(aoStack[-1], ArmAstAssignment)):
+            return self.transformCodePass2_Identifier(oNode, oInfo);
+
         _ = fEliminationAllowed;
-        _ = aoStack;
         return oNode;
 
     def transformCodePass2(self, oInfo, oCode):
@@ -1757,6 +1875,12 @@ class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
         ];
         return asLines;
 
+
+    def transformCodePass2_Identifier(self, oNode, oInfo): # type: (ArmAstIdentifier, SysRegAccessorInfo) -> ArmAstBase
+        # Iff this is anything in the ID block, replace it with a lookup call.
+        if oInfo.oAccessor.oEncoding.compareCStyle(3, 0, 0, range(8), None) == 0:
+            return ArmAstCppExpr('CPUMCpuIdLookupSysReg(pVCpu, %s)' % (oInfo.sEnc), cBitsWidth = 64);
+        return super().transformCodePass2_Identifier(oNode, oInfo);
 
     def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo, aoStack):
         """ Callback used by the second pass."""

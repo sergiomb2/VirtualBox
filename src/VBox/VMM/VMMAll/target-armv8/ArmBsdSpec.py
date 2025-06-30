@@ -598,6 +598,13 @@ class ArmRange(object):
         self.iFirstBit  = iFirstBit;
         self.cBitsWidth = cBitsWidth;
 
+    def isEqualTo(self, oOther):
+        """ Compare two ranges. """
+        if isinstance(oOther, ArmRange):
+            if self.iFirstBit == oOther.iFirstBit:
+                if self.cBitsWidth == oOther.cBitsWidth:
+                    return True;
+        return False;
 
 class ArmFieldsBase(object):
     """ Base class for all fields. """
@@ -897,6 +904,45 @@ class ArmRegEncoding(object):
                 print('wtf: %s' % (oXcpt,))
                 raise oXcpt;
         return 'ARMV8_AARCH64_SYSREG_ID_CREATE(' + ','.join(asArgs) + ')';
+
+    def compareCStyle(self, iOp0, iOp1, iCRn, iCRm, iOp2):
+        """
+        Do C-style compare.  Arguments can be integers for exact matches,
+        ranges for spans, and None for anything.
+
+        Returns 0 if match.
+        Postive return value if the five values given are higher than this one.
+        Negative return value if the five values given are smaller than this one.
+        """
+        for sMine, oOther in ( ('op0', iOp0), ('op1', iOp1), ('CRn', iCRn), ('CRm', iCRm), ('op2', iOp2),):
+            if oOther is not None:
+                oMyValue = self.dNamedValues.get(sMine);
+                if oMyValue:
+                    (iMyValue, _, fWildcard, _) = oMyValue.getParsedValue();
+                    if fWildcard == 0:
+                        if isinstance(oOther, range):
+                            if iMyValue not in oOther:
+                                iOtherFirst = next(oOther);
+                                assert iOtherFirst != iMyValue;
+                                return iOtherFirst - iMyValue;
+                        elif oOther != iMyValue:
+                            return oOther - iMyValue;
+                    else:
+                        (iMyFirstValue, _, _, _) = ArmAstValue.parseValue(oMyValue.sValue.replace('x', '0'), 0);
+                        (iMyLastValue,  _, _, _) = ArmAstValue.parseValue(oMyValue.sValue.replace('x', '1'), 0);
+                        if isinstance(oOther, range):
+                            if not set(oOther) & set(range(iMyFirstValue, iMyLastValue + 1)):
+                                return next(oOther) - iMyFirstValue;
+                        elif oOther < iMyFirstValue:
+                            return oOther - iMyFirstValue;
+                        elif oOther > iMyLastValue:
+                            return oOther - iMyLastValue;
+                elif isinstance(oOther, range):
+                    iOtherFirst = next(oOther);
+                    return -1 if iOtherFirst < 0 else 1;
+                else:
+                    return -1 if oOther < 0 else 1;
+        return 0;
 
     khAttribSet = frozenset(['_type', 'asmvalue', 'encodings']);
     @staticmethod
