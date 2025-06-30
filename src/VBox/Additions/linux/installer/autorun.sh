@@ -41,8 +41,9 @@ mywhich() {
 # May clobber $gtx*
 # Calls mywhich
 getxterm() {
-    # gnome-terminal and mate-terminal use -e differently to other emulators
-    for gxti in "konsole --title -e" "gnome-terminal --title -x" "mate-terminal --title -x" "xterm -T -e"; do
+    # gnome-terminal and mate-terminal use -e differently to other emulators.
+    # ptyxis appends all arguments (instead of -x) via '--'. Needed for OL10 and RHEL10.
+    for gxti in "ptyxis --title --" "konsole --title -e" "gnome-terminal --title -x" "mate-terminal --title -x" "xterm -T -e"; do
         set $gxti
         gxtpath="`mywhich $1`"
         case "$gxtpath" in ?*)
