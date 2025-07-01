@@ -1503,26 +1503,27 @@ class SysRegGeneratorBase(object):
                 elif oNode.sOp == '>' and oNode.oRight.isMatchingIdentifier('EL2'): # PSTATE.EL > EL2.
                     return ArmAstBool(False);
 
-            # Simplify boolean fields checks.
-            if isinstance(oNode.oLeft, ArmAstField) and isinstance(oNode.oRight, ArmAstValue):
-                if oNode.oRight.getWidth(None) == 1:
-                    oReg = spec.g_ddoAllArmRegistersByStateByName[oNode.oLeft.sState][oNode.oLeft.sName]; # ArmRegister
-                    aoFields = oReg.daoFields.get(oNode.oLeft.sField); # List[ArmFieldsBase]
-                    if (    aoFields
-                        and len(aoFields[0].aoRanges) == 1
-                        and aoFields[0].aoRanges[0].cBitsWidth == 1
-                        and (   len(aoFields) == 1
-                             or (    isinstance(aoFields[0].oParent, spec.ArmFieldsConditionalField)
-                                 and len(aoFields[0].oParent.aoRanges) == 1
-                                 and aoFields[0].oParent.aoRanges[0].cBitsWidth == 1))):
-                        if oNode.sOp == '==' and oNode.oRight.sValue == "'1'":
-                            return oNode.oLeft;
-                        if oNode.sOp == '==' and oNode.oRight.sValue == "'0'":
-                            return ArmAstUnaryOp('!', oNode.oLeft);
-                        if oNode.sOp == '!=' and oNode.oRight.sValue == "'0'":
-                            return oNode.oLeft;
-                        if oNode.sOp == '!=' and oNode.oRight.sValue == "'1'":
-                            return ArmAstUnaryOp('!', oNode.oLeft);
+            # This isn't 100% safe, better do it later on when we generate the C code.
+            ## Simplify boolean fields checks.
+            #if isinstance(oNode.oLeft, ArmAstField) and isinstance(oNode.oRight, ArmAstValue):
+            #    if oNode.oRight.getWidth(None) == 1:
+            #        oReg = spec.g_ddoAllArmRegistersByStateByName[oNode.oLeft.sState][oNode.oLeft.sName]; # ArmRegister
+            #        aoFields = oReg.daoFields.get(oNode.oLeft.sField); # List[ArmFieldsBase]
+            #        if (    aoFields
+            #            and len(aoFields[0].aoRanges) == 1
+            #            and aoFields[0].aoRanges[0].cBitsWidth == 1
+            #            and (   len(aoFields) == 1
+            #                 or (    isinstance(aoFields[0].oParent, spec.ArmFieldsConditionalField)
+            #                     and len(aoFields[0].oParent.aoRanges) == 1
+            #                     and aoFields[0].oParent.aoRanges[0].cBitsWidth == 1))):
+            #            if oNode.sOp == '==' and oNode.oRight.sValue == "'1'":
+            #                return oNode.oLeft;
+            #            if oNode.sOp == '==' and oNode.oRight.sValue == "'0'":
+            #                return ArmAstUnaryOp('!', oNode.oLeft);
+            #            if oNode.sOp == '!=' and oNode.oRight.sValue == "'0'":
+            #                return oNode.oLeft;
+            #            if oNode.sOp == '!=' and oNode.oRight.sValue == "'1'":
+            #                return ArmAstUnaryOp('!', oNode.oLeft);
 
         elif isinstance(oNode, ArmAstFunction):
             # Since we don't implement any external debug state (no EDSCR.STATUS),
@@ -1564,6 +1565,12 @@ class SysRegGeneratorBase(object):
                 if sReg and sReg != 'PSTATE' and sField:
                     return ArmAstField(sField, sReg);
 
+        elif isinstance(oNode, ArmAstValue):
+            # Convert non-wildcard Values.Value nodes into integer nodes with specific width.
+            (fValue, _, fWildcard, cBitsWidth) = oNode.getParsedValue();
+            if fWildcard == 0:
+                return ArmAstInteger(fValue, cBitsWidth);
+
         _ = fEliminationAllowed;
         _ = aoStack;
         return oNode;
@@ -1601,10 +1608,12 @@ class SysRegGeneratorBase(object):
             if fWarnOnly: print('warning: %s' % (oXcpt)); return (None, None, None);
             raise oXcpt;
 
+        #
         # Iff this is an conditional field, there may be more than one entry in
         # aoFields and these all are relative to the ArmFieldsConditionalField
         # parent.  So, we just check that it's a simple one and return the
         # parent instaed of the children in aoFields.
+        #
         oField = aoFields[-1]; # ArmFieldsBase
         if (    isinstance(oField.oParent, spec.ArmFieldsConditionalField)
             and len(oField.oParent.aoRanges)  == 1
@@ -1788,8 +1797,8 @@ class SysRegGeneratorBase(object):
                     aoInfoEntries.append(self.VBoxAstCppConcatEntry(oValue, oValue.aoArgs[0].iValue, fValue = 0));
                 else:
                     raise Exception('Unexpected function in Concat() argument list: %s (%s)' % (oValue, oNode,));
-            elif isinstance(oValue, ArmAstValue):
-                (fValue, _, fWildcard, cBitsWidth) = oValue.parseValue(oValue.sValue);
+            elif isinstance(oValue, (ArmAstValue, ArmAstInteger)):
+                (fValue, _, fWildcard, cBitsWidth) = oValue.getParsedValue();
                 if fWildcard != 0:
                     raise Exception('Unexpected wildcard value in Concat() argument list: %s (%s)' % (oValue, oNode,));
                 aoInfoEntries.append(self.VBoxAstCppConcatEntry(oValue, cBitsWidth, fValue = fValue));
@@ -1835,7 +1844,7 @@ class SysRegGeneratorBase(object):
 
         return self.VBoxAstCppConcat(aoInfoEntries, oNode);
 
-    def transformCodePass2_BinaryOp_ConcatAndValue(self, oNode): # pylint: disable=invalid-name
+    def transformCodePass2_BinaryOp_ConcatAndValueOrInt(self, oNode): # pylint: disable=invalid-name
         """ Pass 2: (AArch64.MDCR_EL2.TDE):(AArch64.MDCR_EL2.TDA) != '00' and similar """
         # First process the value.
         (fValue, _, fWildcard, _) = oNode.oRight.getParsedValue();
@@ -1864,7 +1873,7 @@ class SysRegGeneratorBase(object):
 
         return oNode;
 
-    def transformCodePass2_BinaryOp_DotAtomAndValue(self, oNode): # pylint: disable=invalid-name
+    def transformCodePass2_BinaryOp_DotAtomAndValueOrInt(self, oNode): # pylint: disable=invalid-name
         """ Pass 2: PSTATE.SP == '0' and suchlike. """
         if len(oNode.oLeft.aoValues) == 2:
             (fValue, _, fWildcard, cBitsWidth) = oNode.oRight.getParsedValue();
@@ -1901,7 +1910,7 @@ class SysRegGeneratorBase(object):
         oSet = oNode.oRight;
         if isinstance(oSet, ArmAstSet):
             for iValue, oValue in enumerate(oSet.aoValues):
-                if not isinstance(oValue, ArmAstValue):
+                if not isinstance(oValue, (ArmAstValue, ArmAstInteger)):
                     raise Exception('Set value #%u is not an Values.Value node: %s' % (iValue, oNode.toString(),));
         elif isinstance(oSet, ArmAstValue):
             oSet = ArmAstSet([oNode.oRight,]);
@@ -1990,13 +1999,13 @@ class SysRegGeneratorBase(object):
 
             ## (AArch64.MDCR_EL2.TDE):(AArch64.MDCR_EL2.TDA) != '00' and similar:
             if (    isinstance(oNode.oLeft, self.VBoxAstCppConcat)
-                and isinstance(oNode.oRight, ArmAstValue)
+                and isinstance(oNode.oRight, (ArmAstValue, ArmAstInteger))
                 and ArmAstBinaryOp.kdOps[oNode.sOp] in (ArmAstBinaryOp.ksOpTypeLogical, ArmAstBinaryOp.ksOpTypeCompare) ):
-                return self.transformCodePass2_BinaryOp_ConcatAndValue(oNode);
+                return self.transformCodePass2_BinaryOp_ConcatAndValueOrInt(oNode);
 
             # PSTATE.SP == '0' and similar:
-            if isinstance(oNode.oLeft, ArmAstDotAtom) and isinstance(oNode.oRight, ArmAstValue):
-                return self.transformCodePass2_BinaryOp_DotAtomAndValue(oNode);
+            if isinstance(oNode.oLeft, ArmAstDotAtom) and isinstance(oNode.oRight, (ArmAstValue, ArmAstInteger)):
+                return self.transformCodePass2_BinaryOp_DotAtomAndValueOrInt(oNode);
 
             ## iemGetEffHcrEl2NVx(pVCpu, pGstFeats) IN ('1x1') and such fun stuff.
             if oNode.sOp == 'IN':

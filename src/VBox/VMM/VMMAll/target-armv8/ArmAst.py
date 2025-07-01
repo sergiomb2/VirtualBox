@@ -1246,6 +1246,14 @@ class ArmAstInteger(ArmAstLeafBase):
     def getIntegerValue(self):
         return self.iValue;
 
+    def getParsedValue(self):
+        """
+        For compatibility with ArmAstValue.
+        Returns (fValue, fFixed, fWildcard, cBitsWidth) tuple on success.
+        """
+        cBitsWidth = self.getWidth(None);
+        return (self.iValue, (1 << cBitsWidth) - 1, 0, cBitsWidth);
+
 
 class ArmAstSet(ArmAstValuesBase):
     def __init__(self, aoValues):
