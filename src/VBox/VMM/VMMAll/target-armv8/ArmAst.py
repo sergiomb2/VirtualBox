@@ -622,17 +622,6 @@ class ArmAstBinaryOp(ArmAstBase):
                 return True;
         return False;
 
-    def toString(self):
-        sLeft = self.oLeft.toString();
-        if ArmAstBinaryOp.needParentheses(self.oLeft, self.sOp):
-            sLeft = '(%s)' % (sLeft);
-
-        sRight = self.oRight.toString();
-        if ArmAstBinaryOp.needParentheses(self.oRight, self.sOp):
-            sRight = '(%s)' % (sRight);
-
-        return '%s %s %s' % (sLeft, self.sOp, sRight);
-
     @staticmethod
     def getOpForLang(sOp, sLang):
         if sLang == 'C':
@@ -641,14 +630,9 @@ class ArmAstBinaryOp(ArmAstBase):
 
     def toStringEx(self, sLang = None, cchMaxWidth = 120):
         """ Extended version of toString() that can split the expression up into multiple lines (newline sep). """
-        ## @todo doesn't take sLang into account. sigh.
-        ## First try as-is without any wrapping.
-        #sRet = self.toString();
-        #if len(sRet) <= cchMaxWidth:
-        #    return sRet;
-
-        # Okay, so it's too long.  We create a list of binary ops that can be
-        # grouped together with self.sOp and display then one on each line.
+        #
+        # Create a list of binary ops that can be grouped together with self.sOp.
+        #
         cchIndent   = len(self.getOpForLang(self.sOp, sLang)) + 1;
         dOpGrouping = self.kdOpGroupings[self.sOp];
         aoList      = [ self.oLeft, self.sOp, self.oRight ];
@@ -662,9 +646,13 @@ class ArmAstBinaryOp(ArmAstBase):
                 idx -= 1;
             idx += 1;
 
-        # Now do the formatting.
+        #
+        # Now do the formatting.  This is constructing two alternative strings,
+        # one where everything is potentially on a single line and a multiline one.
+        #
         cchNewMaxWidth = max(cchMaxWidth - cchIndent, 16);
-        sRet           = '';
+        sRetSameLine   = '';
+        sRetMultiLine  = '';
         idx            = 0;
         sCurOp         = ' ' * (cchIndent - 1);
         iCurOpPrio     = self.kdOpPrecedence[self.sOp];
@@ -675,15 +663,23 @@ class ArmAstBinaryOp(ArmAstBase):
             sNodeExpr   = oNode.toStringEx(sLang, cchNewMaxWidth);
             if isinstance(oNode, ArmAstBinaryOp) and self.kdOpPrecedence[oNode.sOp] > min(iNextOpPrio, iCurOpPrio):
                 sNodeExpr = '(' + sNodeExpr.replace('\n', '\n ') + ')';
-            if idx > 0:
-                sRet += '\n';
-            sRet += '%-*s%s' % (cchIndent, self.getOpForLang(sCurOp, sLang), sNodeExpr.replace('\n', '\n' + ' ' * cchIndent),);
+            if idx == 0:
+                sRetSameLine = sNodeExpr;
+            else:
+                sRetSameLine  += ' %s %s' % (self.getOpForLang(sCurOp, sLang).strip(), sNodeExpr);
+                sRetMultiLine += '\n';
+            sRetMultiLine += '%-*s%s' % (cchIndent,
+                                         self.getOpForLang(sCurOp, sLang), sNodeExpr.replace('\n', '\n' + ' ' * cchIndent),);
 
             # next;
             sCurOp     = sNextOp;
             iCurOpPrio = iNextOpPrio;
             idx       += 2;
-        return sRet;
+
+        # Pick which string to return.
+        if len(sRetSameLine) <= cchMaxWidth and '\n' not in sRetSameLine:
+            return sRetSameLine;
+        return sRetMultiLine;
 
     def toCExpr(self, oHelper):
         # Logical, compare, arithmetical & bitwise operations are straight forward.
