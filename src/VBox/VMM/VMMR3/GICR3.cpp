@@ -1119,6 +1119,10 @@ DECLCALLBACK(int) gicR3Construct(PPDMDEVINS pDevIns, int iInstance, PCFGMNODE pC
          PDMDevHlpSTAMRegisterF(pDevIns, a_pvReg, STAMTYPE_COUNTER, STAMVISIBILITY_ALWAYS, STAMUNIT_OCCURENCES, \
                                 a_pszDesc, a_pszNameFmt)
 
+    /* Distributor. */
+    GIC_REG_COUNTER(&pGicDev->StatSetSpi, "SetSpi", "Number of set SPI callbacks.");
+    GIC_REG_COUNTER(&pGicDev->StatSetLpi, "SetLpi", "Number of set LPI callbacks.");
+
     /* Redistributor. */
     for (VMCPUID idCpu = 0; idCpu < pVM->cCpus; idCpu++)
     {
@@ -1129,7 +1133,6 @@ DECLCALLBACK(int) gicR3Construct(PPDMDEVINS pDevIns, int iInstance, PCFGMNODE pC
         GICCPU_REG_COUNTER(&pGicCpu->StatMmioWrite,   "%u/MmioWrite",    "Number of MMIO writes.");
         GICCPU_REG_COUNTER(&pGicCpu->StatSysRegRead,  "%u/SysRegRead",   "Number of system register reads.");
         GICCPU_REG_COUNTER(&pGicCpu->StatSysRegWrite, "%u/SysRegWrite",  "Number of system register writes.");
-        GICCPU_REG_COUNTER(&pGicCpu->StatSetSpi,      "%u/SetSpi",       "Number of set SPI callbacks.");
         GICCPU_REG_COUNTER(&pGicCpu->StatSetPpi,      "%u/SetPpi",       "Number of set PPI callbacks.");
         GICCPU_REG_COUNTER(&pGicCpu->StatSetSgi,      "%u/SetSgi",       "Number of SGIs generated.");
         GICCPU_REG_COUNTER(&pGicCpu->StatIntrAck,     "%u/IntrAck",      "Number of interrupts acknowledged.");

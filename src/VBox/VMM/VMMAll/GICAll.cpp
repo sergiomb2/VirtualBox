@@ -2826,11 +2826,11 @@ static DECLCALLBACK(int) gicSetSpi(PVMCC pVM, uint32_t uSpiIntId, bool fAsserted
 
 #ifdef VBOX_WITH_STATISTICS
     PVMCPU pVCpu = VMMGetCpuById(pVM, 0);
-    STAM_COUNTER_INC(&pVCpu->gic.s.StatSetSpi);
     PGICCPU pGicCpu = VMCPU_TO_GICCPU(pVCpu);
     AssertCompile(RT_ELEMENTS(pGicCpu->bmIntrConfig) == RT_ELEMENTS(pGicCpu->bmIntrPending));
     AssertCompile(sizeof(pGicCpu->bmIntrConfig) == sizeof(pGicCpu->bmIntrPending));
 #endif
+    STAM_COUNTER_INC(&pGicDev->StatSetSpi);
     STAM_PROFILE_START(&pGicCpu->StatProfSetSpi, a);
 
     uint16_t const uIntId  = GIC_INTID_RANGE_SPI_START + uSpiIntId;
@@ -2926,6 +2926,7 @@ DECL_HIDDEN_CALLBACK(int) gicSendMsi(PVMCC pVM, PCIBDF uBusDevFn, PCMSIMSG pMsi,
               ("Addr=%#RX64 MMIO frame=%#RX64\n", pMsi->Addr.u64, pGicDev->GCPhysGits));
     AssertMsg((pMsi->Addr.u64 & GITS_REG_OFFSET_MASK) == GITS_TRANSLATION_REG_TRANSLATER,
               ("Addr=%#RX64 offset=%#RX32\n", pMsi->Addr.u64, GITS_TRANSLATION_REG_TRANSLATER));
+    STAM_COUNTER_INC(&pGicDev->StatSetLpi);
 
     gitsSetLpi(pDevIns, &pGicDev->Gits, uDevId, uEventId, true /* fAsserted */);
 
