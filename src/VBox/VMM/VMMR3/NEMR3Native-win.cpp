@@ -1801,6 +1801,21 @@ DECLHIDDEN(int) nemR3NativeInitAfterCPUM(PVM pVM)
     }
     pVM->nem.s.fCreatedEmts = true;
 
+    /* Determine the size of the xsave area if supported. */
+    if (pVM->nem.s.fXsaveSupported)
+    {
+        pVCpu = pVM->apCpusR3[0];
+        hrc = WHvGetVirtualProcessorXsaveState(pVM->nem.s.hPartition, pVCpu->idCpu, NULL, 0, &pVM->nem.s.cbXSaveArea);
+        AssertLogRelMsgReturn(hrc == WHV_E_INSUFFICIENT_BUFFER, ("WHvGetVirtualProcessorState(%p, %u,%x,,) -> %Rhrc (Last=%#x/%u)\n",
+                              pVM->nem.s.hPartition, pVCpu->idCpu, WHvVirtualProcessorStateTypeXsaveState,
+                              hrc, RTNtLastStatusValue(), RTNtLastErrorValue()), VERR_NEM_VM_CREATE_FAILED);
+        LogRel(("NEM: cbXSaveArea=%u\n", pVM->nem.s.cbXSaveArea));
+        AssertLogRelMsgReturn(pVM->nem.s.cbXSaveArea <= sizeof(pVCpu->cpum.GstCtx.XState),
+                              ("Returned XSAVE area exceeds what VirtualBox supported (%u > %zu)\n",
+                              pVM->nem.s.cbXSaveArea, sizeof(pVCpu->cpum.GstCtx.XState)),
+                              VERR_NEM_VM_CREATE_FAILED);
+    }
+
     LogRel(("NEM: Successfully set up partition (device handle %p, partition ID %#llx)\n", hPartitionDevice, idHvPartition));
 
     /*

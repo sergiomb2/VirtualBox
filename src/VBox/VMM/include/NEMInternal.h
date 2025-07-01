@@ -278,6 +278,8 @@ typedef struct NEM
     /** Set if A20 is enabled. */
     bool                        fA20Enabled : 1;
 #  endif
+    /** Size of the xsave area returned by Hyper-V, required for setting the state. */
+    uint32_t                    cbXSaveArea;
 # endif
     /** The reported CPU vendor.   */
     CPUMCPUVENDOR               enmCpuVendor;

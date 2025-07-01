@@ -471,10 +471,10 @@ NEM_TMPL_STATIC int nemHCWinCopyStateToHyperV(PVMCC pVM, PVMCPUCC pVCpu)
                 pVCpu->cpum.GstCtx.XState.Hdr.bmXComp = pVCpu->cpum.GstCtx.XState.Hdr.bmXState | XSAVE_C_X;
             if (WHvSetVirtualProcessorState)
                 hrc = WHvSetVirtualProcessorState(pVM->nem.s.hPartition, pVCpu->idCpu, WHvVirtualProcessorStateTypeXsaveState,
-                                                  &pVCpu->cpum.GstCtx.XState, sizeof(pVCpu->cpum.GstCtx.XState));
+                                                  &pVCpu->cpum.GstCtx.XState, pVM->nem.s.cbXSaveArea);
             else
                 hrc = WHvSetVirtualProcessorXsaveState(pVM->nem.s.hPartition, pVCpu->idCpu, &pVCpu->cpum.GstCtx.XState,
-                                                       sizeof(pVCpu->cpum.GstCtx.XState));
+                                                       pVM->nem.s.cbXSaveArea);
             if (pVM->nem.s.fXsaveComp)
                 pVCpu->cpum.GstCtx.XState.Hdr.bmXComp &= ~XSAVE_C_X;
             if (FAILED(hrc))
@@ -997,9 +997,9 @@ NEM_TMPL_STATIC int nemHCWinCopyStateFromHyperV(PVMCC pVM, PVMCPUCC pVCpu, uint6
         if (fWhat & (CPUMCTX_EXTRN_X87 | CPUMCTX_EXTRN_SSE_AVX | CPUMCTX_EXTRN_OTHER_XSAVE))
         {
             if (WHvGetVirtualProcessorState)
-                hrc = WHvGetVirtualProcessorState(pVM->nem.s.hPartition, pVCpu->idCpu, WHvVirtualProcessorStateTypeXsaveState, &pVCpu->cpum.GstCtx.XState, sizeof(pVCpu->cpum.GstCtx.XState), NULL);
+                hrc = WHvGetVirtualProcessorState(pVM->nem.s.hPartition, pVCpu->idCpu, WHvVirtualProcessorStateTypeXsaveState, &pVCpu->cpum.GstCtx.XState, pVM->nem.s.cbXSaveArea, NULL);
             else
-                hrc = WHvGetVirtualProcessorXsaveState(pVM->nem.s.hPartition, pVCpu->idCpu, &pVCpu->cpum.GstCtx.XState, sizeof(pVCpu->cpum.GstCtx.XState), NULL);
+                hrc = WHvGetVirtualProcessorXsaveState(pVM->nem.s.hPartition, pVCpu->idCpu, &pVCpu->cpum.GstCtx.XState, pVM->nem.s.cbXSaveArea, NULL);
             if (FAILED(hrc))
             {
                 AssertLogRelMsgFailed(("WHvGetVirtualProcessorState(%p, %u,%x,,) -> %Rhrc (Last=%#x/%u)\n",
@@ -1009,10 +1009,10 @@ NEM_TMPL_STATIC int nemHCWinCopyStateFromHyperV(PVMCC pVM, PVMCPUCC pVCpu, uint6
             }
             /** @todo r=aeichner Hyper-V might return the compacted form which IEM doesn't handle so far.
              *                   This isn't an issue currently as we don't support anything beyond AVX/AVX2 right now, so we can just clear this bit.
+             *                   Also, Hyper-V seems to return the whole state for all extensions like AVX512 etc. (there is no way to instruct Hyper-V to disable certain
+             *                   components). So we strip everything we don't support right now to be on the safe side wrt. IEM.
              */
-            AssertLogRelMsgReturn(!(pVCpu->cpum.GstCtx.XState.Hdr.bmXComp & ~(XSAVE_C_X87 | XSAVE_C_SSE | XSAVE_C_YMM | XSAVE_C_X)),
-                                  ("bmXComp=%RX64\n", pVCpu->cpum.GstCtx.XState.Hdr.bmXComp), VERR_NEM_IPE_2);
-            pVCpu->cpum.GstCtx.XState.Hdr.bmXComp &= ~XSAVE_C_X;
+            pVCpu->cpum.GstCtx.XState.Hdr.bmXComp &= (XSAVE_C_X87 | XSAVE_C_SSE | XSAVE_C_YMM);
         }
     }
 
