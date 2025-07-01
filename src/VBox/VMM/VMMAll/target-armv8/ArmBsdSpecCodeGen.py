@@ -480,6 +480,10 @@ g_dRegToCpumCtx = {
     ## @todo 'AArch64.TRCIDR5':     ( '.u64', ), - FEAT_ETE / ARMv9.0
     ## @todo 'AArch64.TRFCR_EL1':   ( '.u64', ), - FEAT_TRF  / ??
 
+    'AArch64.SP_EL0':           ('aSpReg[0].u64',),
+    'AArch64.SP_EL1':           ('aSpReg[1].u64',),
+    'AArch64.SP_EL2':           ('SpEl2.u64',),
+
     'AArch64.SPSR_EL1':         ('Spsr.u64',),
     'AArch64.ELR_EL1':          ('Elr.u64',),
     'AArch64.SCTLR_EL1':        ('Sctlr.u64',),
@@ -604,7 +608,6 @@ g_dRegToCpumCtx = {
     'AArch64.MDCR_EL2':         ('MdcrEl2.u64',),
     'AArch64.SCTLR_EL2':        ('SctlrEl2.u64',),
     'AArch64.SPSR_EL2':         ('SpsrEl2.u64',),
-    'AArch64.SP_EL2':           ('SpEl2.u64',),
     'AArch64.TCR_EL2':          ('TcrEl2.u64',),
     'AArch64.TPIDR_EL2':        ('TpidrEl2.u64',),
     'AArch64.TTBR0_EL2':        ('Ttbr0El2.u64',),
@@ -1353,6 +1356,23 @@ class SysRegGeneratorBase(object):
             return ArmAstBool(True); # EL0 and EL1 are mandatory.
         raise Exception('Unexpected HaveEL call: %s' % (oNode.toString(),));
 
+    def transformCodePass1_ELIsInHost(self, oNode):
+        """ Pass 1: ELIsInHost(ELx) - Translate this into appropriate AST. """
+        if oNode.aoArgs[0].isMatchingIdentifier('EL0') or oNode.aoArgs[0].isMatchingIdentifier('EL2'):
+            ## @todo skipping the LEUsingAArch32(EL2) check
+            oCommon = ArmAstBinaryOp.andListToTree([
+                ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_VHE')]),
+                ArmAstFunction('EL2Enabled', []),
+                ArmAstBinaryOp(ArmAstUnaryOp('!', ArmAstFunction('IsFeatureImplemented', [ArmAstIdentifier('FEAT_E2H0')])),
+                               '||', ArmAstField('E2H', 'HCR_EL2')),
+            ]);
+            if oNode.aoArgs[0].isMatchingIdentifier('EL0'):
+                return ArmAstBinaryOp(oCommon, '&&', ArmAstField('TGE', 'HCR_EL2'));
+            return oCommon;
+        if oNode.aoArgs[0].isMatchingIdentifier('EL3') or oNode.aoArgs[0].isMatchingIdentifier('EL1'):
+            return ArmAstBool(False); # Only EL0 and EL2 can be in hosted. mode.
+        raise Exception('Unexpected ELIsInHost call: %s' % (oNode.toString(),));
+
     def transformCodePass1_IsFeatureImplemented(self, oNode):
         """ Pass 1: IsFeatureImplemented - replace with False for features we just don't implement. """
         if len(oNode.aoArgs) != 1 or not isinstance(oNode.aoArgs[0], ArmAstIdentifier):
@@ -1519,6 +1539,8 @@ class SysRegGeneratorBase(object):
                 return self.transformCodePass1_HaveAArch64();
             if oNode.sName == 'HaveEL':
                 return self.transformCodePass1_HaveEL(oNode);
+            if oNode.sName == 'ELIsInHost':
+                return self.transformCodePass1(oInfo, self.transformCodePass1_ELIsInHost(oNode));
             if oNode.sName == 'IsFeatureImplemented':
                 return self.transformCodePass1_IsFeatureImplemented(oNode);
             if oNode.sName == 'IsCurrentSecurityState':
