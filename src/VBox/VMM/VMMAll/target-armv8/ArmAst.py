@@ -293,16 +293,16 @@ class ArmAstBase(object):
         return ArmAstBase.kfnTypeMap[dJson['_type']](dJson, sMode);
 
     def toString(self):
-        return 'todo<%s>' % (self.sType,);
+        return self.toStringEx();
 
-    def toStringEx(self, cchMaxWidth):
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
         """ Extended version of toString() that can split the expression up into multiple lines (newline sep). """
-        _ = cchMaxWidth;
-        return self.toString();
+        _ = cchMaxWidth; _ = sLang;
+        raise Exception('Child did not implement toStringEx: %s' % (type(self),));
 
-    def toDebugString(self):
+    def toDebugString(self, sLang = None, cchMaxWidth = 120):
         """ For debugging the tree structure... """
-        return '{%s: %s}' % (type(self).__name__, self.toString(),);
+        return '{%s: %s}' % (type(self).__name__, self.toStringEx(sLang, cchMaxWidth),);
 
     def __str__(self):
         return self.toString();
@@ -633,23 +633,30 @@ class ArmAstBinaryOp(ArmAstBase):
 
         return '%s %s %s' % (sLeft, self.sOp, sRight);
 
-    def toStringEx(self, cchMaxWidth):
+    @staticmethod
+    def getOpForLang(sOp, sLang):
+        if sLang == 'C':
+            return ArmAstBinaryOp.kdOpsToC.get(sOp, sOp);
+        return sOp;
+
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
         """ Extended version of toString() that can split the expression up into multiple lines (newline sep). """
-        # First try as-is without any wrapping.
-        sRet = self.toString();
-        if len(sRet) <= cchMaxWidth:
-            return sRet;
+        ## @todo doesn't take sLang into account. sigh.
+        ## First try as-is without any wrapping.
+        #sRet = self.toString();
+        #if len(sRet) <= cchMaxWidth:
+        #    return sRet;
 
         # Okay, so it's too long.  We create a list of binary ops that can be
         # grouped together with self.sOp and display then one on each line.
-        cchIndent   = len(self.sOp) + 1;
+        cchIndent   = len(self.getOpForLang(self.sOp, sLang)) + 1;
         dOpGrouping = self.kdOpGroupings[self.sOp];
         aoList      = [ self.oLeft, self.sOp, self.oRight ];
         idx = 0;
         while idx < len(aoList):
             oEntry = aoList[idx];
             if isinstance(oEntry, str):
-                cchIndent = max(cchIndent, len(oEntry) + 1);
+                cchIndent = max(cchIndent, len(self.getOpForLang(oEntry, sLang)) + 1);
             elif isinstance(oEntry, ArmAstBinaryOp) and oEntry.sOp in dOpGrouping:
                 aoList = aoList[:idx] + [ oEntry.oLeft, oEntry.sOp, oEntry.oRight ] + aoList[idx + 1:];
                 idx -= 1;
@@ -665,12 +672,12 @@ class ArmAstBinaryOp(ArmAstBase):
             oNode       = aoList[idx];
             sNextOp     = aoList[idx + 1] if idx + 1 < len(aoList) else sCurOp;
             iNextOpPrio = self.kdOpPrecedence[sNextOp] if idx + 1 < len(aoList) else iCurOpPrio;
-            sNodeExpr   = oNode.toStringEx(cchNewMaxWidth);
+            sNodeExpr   = oNode.toStringEx(sLang, cchNewMaxWidth);
             if isinstance(oNode, ArmAstBinaryOp) and self.kdOpPrecedence[oNode.sOp] > min(iNextOpPrio, iCurOpPrio):
                 sNodeExpr = '(' + sNodeExpr.replace('\n', '\n ') + ')';
             if idx > 0:
                 sRet += '\n';
-            sRet += sCurOp + ' ' + sNodeExpr.replace('\n', '\n' + ' ' * cchIndent);
+            sRet += '%-*s%s' % (cchIndent, self.getOpForLang(sCurOp, sLang), sNodeExpr.replace('\n', '\n' + ' ' * cchIndent),);
 
             # next;
             sCurOp     = sNextOp;
@@ -836,10 +843,10 @@ class ArmAstUnaryOp(ArmAstBase):
     def needParentheses(oNode):
         return isinstance(oNode, ArmAstBinaryOp)
 
-    def toString(self):
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
         if ArmAstUnaryOp.needParentheses(self.oExpr):
-            return '%s(%s)' % (self.sOp, self.oExpr.toString(),);
-        return '%s%s' % (self.sOp, self.oExpr.toString(),);
+            return '%s(%s)' % (self.sOp, self.oExpr.toStringEx(sLang, cchMaxWidth),);
+        return '%s%s' % (self.sOp, self.oExpr.toStringEx(sLang, cchMaxWidth),);
 
     def toCExpr(self, oHelper):
         if ArmAstUnaryOp.needParentheses(self.oExpr):
@@ -879,8 +886,8 @@ class ArmAstSlice(ArmAstBase):
         aoStack.pop();
         return fnCallback(self, fEliminationAllowed, oCallbackArg, aoStack);
 
-    def toString(self):
-        return '[%s:%s]' % (self.oFrom.toString(), self.oTo.toString());
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        return '[%s:%s]' % (self.oFrom.toStringEx(sLang, cchMaxWidth), self.oTo.toStringEx(sLang, cchMaxWidth));
 
     def toCExpr(self, oHelper):
         _ = oHelper;
@@ -927,8 +934,9 @@ class ArmAstSquareOp(ArmAstBase):
         assert fEliminationAllowed;
         return None;
 
-    def toString(self):
-        return '%s[%s]' % (self.oVar.toString(), ','.join([oValue.toString() for oValue in self.aoValues]),);
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        return '%s[%s]' % (self.oVar.toStringEx(sLang, cchMaxWidth),
+                           ','.join([oValue.toStringEx(sLang, cchMaxWidth) for oValue in self.aoValues]),);
 
     def toCExpr(self, oHelper):
         _ = oHelper;
@@ -967,8 +975,8 @@ class ArmAstTuple(ArmAstValuesBase):
     def clone(self):
         return ArmAstTuple([oValue.clone() for oValue in self.aoValues]);
 
-    def toString(self):
-        return '(%s)' % (','.join([oValue.toString() for oValue in self.aoValues]),);
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        return '(%s)' % (','.join([oValue.toStringEx(sLang, cchMaxWidth) for oValue in self.aoValues]),);
 
     def toCExpr(self, oHelper):
         _ = oHelper;
@@ -986,8 +994,8 @@ class ArmAstDotAtom(ArmAstValuesBase):
     def clone(self):
         return ArmAstDotAtom([oValue.clone() for oValue in self.aoValues]);
 
-    def toString(self):
-        return '.'.join([oValue.toString() for oValue in self.aoValues]);
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        return '.'.join([oValue.toStringEx(sLang, cchMaxWidth) for oValue in self.aoValues]);
 
     def toCExpr(self, oHelper):
         _ = oHelper;
@@ -1018,7 +1026,7 @@ class ArmAstConcat(ArmAstValuesBase):
     def clone(self):
         return ArmAstConcat([oValue.clone() for oValue in self.aoValues]);
 
-    def toString(self):
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
         sRet = '';
         for oValue in self.aoValues:
             if sRet:
@@ -1026,7 +1034,7 @@ class ArmAstConcat(ArmAstValuesBase):
             if isinstance(oValue, ArmAstIdentifier):
                 sRet += oValue.sName;
             else:
-                sRet += '(%s)' % (oValue.toString());
+                sRet += '(%s)' % (oValue.toStringEx(sLang, cchMaxWidth));
         return sRet;
 
     def toCExpr(self, oHelper):
@@ -1092,8 +1100,11 @@ class ArmAstFunction(ArmAstBase):
         aoStack.pop();
         return fnCallback(self, fEliminationAllowed, oCallbackArg, aoStack);
 
-    def toString(self):
-        return '%s(%s)' % (self.sName, ','.join([oArg.toString() for oArg in self.aoArgs]),);
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        sArgList = ','.join([oArg.toStringEx(sLang, max(cchMaxWidth - len(self.sName) - 1, 60)) for oArg in self.aoArgs]);
+        if '\n' in sArgList:
+            sArgList = sArgList.replace('\n', '\n' + ' ' * (len(self.sName) + 1));
+        return '%s(%s)' % (self.sName, sArgList,);
 
     def toCExpr(self, oHelper):
         return oHelper.convertFunctionCall(self);
@@ -1143,7 +1154,8 @@ class ArmAstIdentifier(ArmAstLeafBase):
                 return True;
         return False;
 
-    def toString(self):
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        _ = sLang; _ = cchMaxWidth;
         return self.sName;
 
     def toCExpr(self, oHelper):
@@ -1176,7 +1188,8 @@ class ArmAstBool(ArmAstLeafBase):
                 return True;
         return False;
 
-    def toString(self):
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        _ = sLang; _ = cchMaxWidth;
         return 'true' if self.fValue is True else 'false';
 
     def toCExpr(self, oHelper):
@@ -1195,20 +1208,26 @@ class ArmAstBool(ArmAstLeafBase):
 
 
 class ArmAstInteger(ArmAstLeafBase):
-    def __init__(self, iValue):
+    def __init__(self, iValue, cBitsWidth = -1):
         ArmAstLeafBase.__init__(self, ArmAstBase.ksTypeInteger);
         self.iValue = int(iValue);
+        self.cBitsWidth = cBitsWidth;
+        assert cBitsWidth == -1 or (cBitsWidth > 0 and 0 <= iValue < (1 << cBitsWidth));
 
     def clone(self):
-        return ArmAstInteger(self.iValue);
+        return ArmAstInteger(self.iValue, self.cBitsWidth);
 
     def isSame(self, oOther):
         if isinstance(oOther, ArmAstInteger):
             if self.iValue == oOther.iValue:
-                return True;
+                if self.cBitsWidth == oOther.cBitsWidth:
+                    return True;
         return False;
 
-    def toString(self):
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        _ = sLang; _ = cchMaxWidth;
+        if self.iValue < 10:
+            return '%u' % (self.iValue,);
         return '%#x' % (self.iValue,);
 
     def toCExpr(self, oHelper):
@@ -1221,6 +1240,8 @@ class ArmAstInteger(ArmAstLeafBase):
 
     def getWidth(self, oHelper):
         _ = oHelper;
+        if self.cBitsWidth > 0:
+            return self.cBitsWidth;
         return self.iValue.bit_length() + (self.iValue < 0)
 
     def isMatchingInteger(self, iValue):
@@ -1237,8 +1258,8 @@ class ArmAstSet(ArmAstValuesBase):
     def clone(self):
         return ArmAstSet([oValue.clone() for oValue in self.aoValues]);
 
-    def toString(self):
-        return '(%s)' % (', '.join([oValue.toString() for oValue in self.aoValues]),);
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        return '(%s)' % (', '.join([oValue.toStringEx(sLang, cchMaxWidth) for oValue in self.aoValues]),);
 
     def toCExpr(self, oHelper):
         _ = oHelper;
@@ -1254,6 +1275,7 @@ class ArmAstSet(ArmAstValuesBase):
 class ArmAstValue(ArmAstLeafBase):
     def __init__(self, sValue):
         ArmAstLeafBase.__init__(self, ArmAstBase.ksTypeValue);
+        assert isinstance(sValue, str);
         self.sValue = sValue;
 
     def clone(self):
@@ -1265,7 +1287,8 @@ class ArmAstValue(ArmAstLeafBase):
                 return True;
         return False;
 
-    def toString(self):
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        _ = sLang; _ = cchMaxWidth;
         return self.sValue;
 
     def toCExpr(self, oHelper):
@@ -1336,7 +1359,8 @@ class ArmAstEquationValue(ArmAstLeafBase):
                         return True;
         return False;
 
-    def toString(self):
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        _ = sLang; _ = cchMaxWidth;
         if self.koSimpleName.match(self.sValue):
             return '%s[%u:%u]' % (self.sValue, self.iFirstBit, self.iFirstBit + self.cBitsWidth - 1,);
         return '(%s)[%u:%u]' % (self.sValue, self.iFirstBit, self.iFirstBit + self.cBitsWidth - 1,);
@@ -1410,8 +1434,9 @@ class ArmAstValuesGroup(ArmAstBase):
         aoStack.pop();
         return fnCallback(self, fEliminationAllowed, oCallbackArg, aoStack);
 
-    def toString(self):
-        return ':'.join([oValue.toString() for oValue in self.aoValues]);
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        ## @todo deal width cchMaxWidth.
+        return ':'.join([oValue.toStringEx(sLang, cchMaxWidth) for oValue in self.aoValues]);
 
     def toCExpr(self, oHelper):
         _ = oHelper;
@@ -1435,7 +1460,8 @@ class ArmAstString(ArmAstLeafBase):
                 return True;
         return False;
 
-    def toString(self):
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        _ = sLang; _ = cchMaxWidth;
         return '"' + self.sValue + '"';
 
     def toCExpr(self, oHelper):
@@ -1471,7 +1497,8 @@ class ArmAstField(ArmAstLeafBase):
                                 return True;
         return False;
 
-    def toString(self):
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        _ = sLang; _ = cchMaxWidth;
         return '%s.%s.%s' % (self.sState, self.sName, self.sField,);
 
     def toCExpr(self, oHelper):
@@ -1505,7 +1532,8 @@ class ArmAstRegisterType(ArmAstLeafBase):
                             return True;
         return False;
 
-    def toString(self):
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        _ = sLang; _ = cchMaxWidth;
         return '%s.%s' % (self.sState, self.sName,);
 
     def toCExpr(self, oHelper):
@@ -1544,8 +1572,8 @@ class ArmAstType(ArmAstBase):
         aoStack.pop();
         return fnCallback(self, fEliminationAllowed, oCallbackArg, aoStack);
 
-    def toString(self):
-        return self.oName.toString();
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        return self.oName.toStringEx(sLang, cchMaxWidth);
 
     def toCExpr(self, oHelper):
         _ = oHelper;
@@ -1584,8 +1612,8 @@ class ArmAstTypeAnnotation(ArmAstBase):
         aoStack.pop();
         return fnCallback(self, fEliminationAllowed, oCallbackArg, aoStack);
 
-    def toString(self):
-        return '(%s) %s' % (self.oType.toString(), self.oVar.toString(),);
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        return '(%s) %s' % (self.oType.toStringEx(sLang, cchMaxWidth), self.oVar.toStringEx(sLang, cchMaxWidth),);
 
     def toCExpr(self, oHelper):
         _ = oHelper;
@@ -1609,12 +1637,12 @@ class ArmAstStatementBase(ArmAstBase):
     def __init__(self, sType):
         ArmAstBase.__init__(self, sType);
 
-    def toString(self):
-        return '\n'.join(self.toStringList());
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        return '\n'.join(self.toStringList(sLang = sLang, cchMaxWidth = cchMaxWidth));
 
-    def toStringList(self, sIndent = '', sLang = None):
-        _ = sIndent; _ = sLang;
-        raise Exception('not implemented');
+    def toStringList(self, sIndent = '', sLang = None, cchMaxWidth = 120):
+        _ = sIndent; _ = sLang; _ = cchMaxWidth;
+        raise Exception('child class must implement toStringList!');
 
     def toCExpr(self, oHelper):
         _ = oHelper;
@@ -1649,10 +1677,8 @@ class ArmAstNop(ArmAstStatementBase):
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg, aoStack):
         return fnCallback(self, fEliminationAllowed, oCallbackArg, aoStack);
 
-    def toString(self):
-        return 'NOP();';
-
-    def toStringList(self, sIndent = '', sLang = None):
+    def toStringList(self, sIndent = '', sLang = None, cchMaxWidth = 120):
+        _ = sLang; _ = cchMaxWidth;
         return [ 'NOP();', ];
 
     def isLeaf(self):
@@ -1693,12 +1719,16 @@ class ArmAstAssignment(ArmAstStatementBase):
         assert fEliminationAllowed;
         return None;
 
-    def toString(self):
-        return '%s = %s;' % (self.oVar.toString(), self.oValue.toString());
-
-    def toStringList(self, sIndent = '', sLang = None):
-        _ = sLang;
-        return [ sIndent + self.toString(), ];
+    def toStringList(self, sIndent = '', sLang = None, cchMaxWidth = 120):
+        sVar   = self.oVar.toStringEx(sLang, cchMaxWidth);
+        cchVar = len(sVar);
+        if '\n' in sVar:
+            sVar += '\n   ' + sIndent;
+            cchVar = 3;
+        sValue = self.oValue.toStringEx(sLang, cchMaxWidth);
+        if '\n' in sValue:
+            sValue = sValue.replace('\n', '\n' + ' ' * (cchVar + 3) + sIndent);
+        return ('%s%s = %s;' % (sIndent, sVar, sValue)).split('\n');
 
 
 class ArmAstReturn(ArmAstStatementBase):
@@ -1730,14 +1760,13 @@ class ArmAstReturn(ArmAstStatementBase):
             aoStack.pop();
         return fnCallback(self, fEliminationAllowed, oCallbackArg, aoStack);
 
-    def toString(self):
+    def toStringList(self, sIndent = '', sLang = None, cchMaxWidth = 120):
         if self.oValue:
-            return 'return %s;' % (self.oValue.toString(),);
-        return 'return;';
-
-    def toStringList(self, sIndent = '', sLang = None):
-        _ = sLang;
-        return [ sIndent + self.toString(), ];
+            sValue = self.oValue.toStringEx(sLang, max(cchMaxWidth - 7, 60));
+            if '\n' not in sValue:
+                return [ '%sreturn %s;' % (sIndent, sValue,) ];
+            return ('%sreturn %s;' % (sIndent, sValue.replace('\n', '\n' + '       ' + sIndent),)).split('\n');
+        return [ '%sreturn;' % (sIndent,) ];
 
 
 class ArmAstIfList(ArmAstStatementBase):
@@ -1831,18 +1860,20 @@ class ArmAstIfList(ArmAstStatementBase):
             return None;
         return fnCallback(ArmAstNop(), fEliminationAllowed, oCallbackArg, aoStack);
 
-    def toStringList(self, sIndent = '', sLang = None):
-        asLines = [];
-        sNextIndent = sIndent + '    ';
+    def toStringList(self, sIndent = '', sLang = None, cchMaxWidth = 120):
+        asLines         = [];
+        sNextIndent     = sIndent + '    ';
+        cchMaxWidth     = max(cchMaxWidth,     60);
+        cchNextMaxWidth = max(cchMaxWidth - 4, 60);
         for i, oIfCond in enumerate(self.aoIfConditions):
-            sIfCond = oIfCond.toStringEx(cchMaxWidth = max(120 - len(sIndent), 60));
+            sIfCond = oIfCond.toStringEx(sLang, cchMaxWidth);
             if '\n' in sIfCond:
                 sIfCond = sIfCond.replace('\n', '\n         ' + sIndent if i > 0 else '\n    ' + sIndent);
             asLines.extend(('%s%sif (%s)' % (sIndent, 'else ' if i > 0 else '', sIfCond,)).split('\n'));
 
             oIfStmt = self.aoIfStatements[i];
             if isinstance(oIfStmt, ArmAstStatementBase):
-                asStmts = oIfStmt.toStringList(sNextIndent, sLang);
+                asStmts = oIfStmt.toStringList(sNextIndent, sLang, cchNextMaxWidth);
                 if sLang == 'C' and len(asStmts) != 1:
                     asLines.append(sIndent + '{');
                     asLines.extend(asStmts);
@@ -1850,15 +1881,17 @@ class ArmAstIfList(ArmAstStatementBase):
                 else:
                     asLines.extend(asStmts);
             else:
-                asLines.append(sNextIndent + oIfStmt.toString());
+                sTmp = sNextIndent + oIfStmt.toStringEx(sLang, cchNextMaxWidth);
+                asLines.extend(sTmp.replace('\n', '\n' + sNextIndent).split('\n'));
 
         if self.oElseStatement:
             if self.aoIfConditions:
                 asLines.append(sIndent + 'else');
             else:
-                sNextIndent = sIndent; # Trick.
+                sNextIndent     = sIndent;     # Trick.
+                cchNextMaxWidth = cchMaxWidth; # Trick.
             if isinstance(self.oElseStatement, ArmAstStatementBase):
-                asStmts = self.oElseStatement.toStringList(sNextIndent, sLang);
+                asStmts = self.oElseStatement.toStringList(sNextIndent, sLang, cchNextMaxWidth);
                 if sLang == 'C' and len(asStmts) != 1:
                     asLines.append(sIndent + '{');
                     asLines.extend(asStmts);
@@ -1866,7 +1899,8 @@ class ArmAstIfList(ArmAstStatementBase):
                 else:
                     asLines.extend(asStmts);
             else:
-                asLines.append(sNextIndent + self.oElseStatement.toString());
+                sTmp = sNextIndent + self.oElseStatement.toStringEx(sLang, cchNextMaxWidth);
+                asLines.extend(sTmp.replace('\n', '\n' + sNextIndent).split('\n'));
         return asLines;
 
 
@@ -1976,7 +2010,8 @@ class ArmAstCppExpr(ArmAstLeafBase):
                     return True;
         return False;
 
-    def toString(self):
+    def toStringEx(self, sLang = None, cchMaxWidth = 120):
+        _ = sLang; _ = cchMaxWidth;
         return self.sExpr;
 
     def toCExpr(self, oHelper):
@@ -2012,11 +2047,8 @@ class ArmAstCppStmt(ArmAstStatementBase):
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg, aoStack):
         return fnCallback(self, fEliminationAllowed, oCallbackArg, aoStack);
 
-    def toString(self):
-        return '\n'.join(self.asStmts);
-
-    def toStringList(self, sIndent = '', sLang = None):
-        _ = sLang;
+    def toStringList(self, sIndent = '', sLang = None, cchMaxWidth = 120):
+        _ = sLang; _ = cchMaxWidth;
         return [ sIndent + sStmt for sStmt in self.asStmts ];
 
     def isLeaf(self):

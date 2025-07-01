@@ -57,6 +57,7 @@ from ArmAst import ArmAstIdentifier;
 from ArmAst import ArmAstIfList;
 from ArmAst import ArmAstInteger;
 from ArmAst import ArmAstReturn;
+from ArmAst import ArmAstSet;
 from ArmAst import ArmAstString;
 from ArmAst import ArmAstUnaryOp;
 from ArmAst import ArmAstValue;
@@ -1616,6 +1617,13 @@ class SysRegGeneratorBase(object):
             return ArmAstCppExpr('false /** @todo pGstFeats->%s */' % (sFeatureNm,));
         raise Exception('Unexpected IsFeatureImplemented arguments: %s' % (oNode.aoArgs,));
 
+    def transformCodePass2_EffectiveHCR_EL2_NVx(self, oNode, oInfo): # pylint: disable=invalid-name
+        """ Pass 2: EffectiveHCR_EL2_NVx() -> helper call. """
+        if len(oNode.aoArgs) == 0:
+            oInfo.cCallsToIsFeatureImplemented += 1;
+            return ArmAstCppExpr('iemGetEffHcrEl2NVx(pVCpu, pGstFeats)', 3);
+        raise Exception('Unexpected IsFeatureImplemented arguments: %s' % (oNode.aoArgs,));
+
 
     class VBoxAstCppConcatEntry(object):
         """ An entry in a concat value list. """
@@ -1690,7 +1698,8 @@ class SysRegGeneratorBase(object):
             self.asExprs = asExprs;
             self.sExpr   = '(%s)' % (' | '.join(asExprs),) if len(asExprs) > 1 else asExprs[0];
 
-        def toStringEx(self, cchMaxWidth):
+        def toStringEx(self, sLang, cchMaxWidth):
+            _ = sLang;
             if len(self.sExpr) <= cchMaxWidth:
                 return self.sExpr;
             return '(  %s)' % ('\n | '.join(self.asExprs),);
@@ -1818,6 +1827,32 @@ class SysRegGeneratorBase(object):
 
         return oNode;
 
+    def transformCodePass2_BinaryOp_InSet(self, oNode): # pylint: disable=invalid-name
+        """ Pass 2: iemGetEffHcrEl2NVx(pVCpu, pGstFeats) IN ('1x1') and such. """
+        oSet = oNode.oRight;
+        if isinstance(oSet, ArmAstSet):
+            for iValue, oValue in enumerate(oSet.aoValues):
+                if not isinstance(oValue, ArmAstValue):
+                    raise Exception('Set value #%u is not an Values.Value node: %s' % (iValue, oNode.toString(),));
+        elif isinstance(oSet, ArmAstValue):
+            oSet = ArmAstSet([oNode.oRight,]);
+        else:
+            raise Exception('Unexpected use of operator "IN": %s' % (oNode.toString(),));
+
+        if len(oSet.aoValues) == 1:
+            (fValue, fFixed, fWildcard, cBitsWidth) = oSet.aoValues[0].getParsedValue();
+            if fFixed == 0:
+                raise Exception('Bogus wildcard set expression: %s' % (oNode.toString(),));
+
+            if fWildcard != 0:
+                oNode.oLeft = ArmAstBinaryOp(oNode.oLeft, 'AND', ArmAstInteger(fFixed, cBitsWidth))
+            oNode.sOp = '==';
+            oNode.oRight = ArmAstInteger(fValue, cBitsWidth);
+            return oNode
+
+        assert False, str(oNode);
+        return oNode;
+
     def transformCodePass2_Field(self, oNode): # (ArmAstField) -> ArmAstBase
         """ Pass2: Deal with field accesses (except for AST.Concat). """
         (_, oField, oCpumCtx) = self.lookupRegisterField(oNode.sState, oNode.sName, oNode.sField, 'Generic field',
@@ -1832,7 +1867,7 @@ class SysRegGeneratorBase(object):
         if isinstance(oCpumCtx, int):
             iValue  = oCpumCtx >> iFirstBit;
             iValue &= (1 << cBitsWidth) - 1;
-            return ArmAstInteger(iValue); # Drops the cBitsWidth...
+            return ArmAstInteger(iValue, cBitsWidth);
 
         sExpr = '(pVCpu->cpum.GstCtx.%s & UINT%u_C(%#x))' \
               % (oCpumCtx, 64 if cBitsWidth >= 32 else 32, ((1 << cBitsWidth) - 1) << iFirstBit,);
@@ -1856,7 +1891,7 @@ class SysRegGeneratorBase(object):
             #raise oXcpt;
 
         if isinstance(tCpumCtxInfo[0], int):
-            return ArmAstInteger(tCpumCtxInfo[0]); # Drops the bitcount...
+            return ArmAstInteger(tCpumCtxInfo[0], 64);
         return ArmAstCppExpr('pVCpu->cpum.GstCtx.%s' % (tCpumCtxInfo[0],), 64);
 
 
@@ -1871,13 +1906,17 @@ class SysRegGeneratorBase(object):
             if oNode.sName == 'IsFeatureImplemented':
                 return self.transformCodePass2_IsFeatureImplemented(oNode, oInfo);
 
+            # EffectiveHCR_EL2_NVx
+            if oNode.sName == 'EffectiveHCR_EL2_NVx':
+                return self.transformCodePass2_EffectiveHCR_EL2_NVx(oNode, oInfo);
+
         elif isinstance(oNode, ArmAstBinaryOp):
             # PSTATE.EL == EL0 and similar:
             if oNode.oLeft.isMatchingDotAtom('PSTATE', 'EL'):
                 idxEl = self.kdELxToNum.get(oNode.oRight.getIdentifierName(), -1);
                 if idxEl >= 0:
                     oNode.oLeft  = ArmAstCppExpr('IEM_F_MODE_ARM_GET_EL(pVCpu->iem.s.fExec)');
-                    oNode.oRight = ArmAstInteger(idxEl);
+                    oNode.oRight = ArmAstInteger(idxEl, 2);
                 return oNode;
 
             ## (AArch64.MDCR_EL2.TDE):(AArch64.MDCR_EL2.TDA) != '00' and similar:
@@ -1885,6 +1924,10 @@ class SysRegGeneratorBase(object):
                 and isinstance(oNode.oRight, ArmAstValue)
                 and ArmAstBinaryOp.kdOps[oNode.sOp] in (ArmAstBinaryOp.ksOpTypeLogical, ArmAstBinaryOp.ksOpTypeCompare) ):
                 return self.transformCodePass2_BinaryOp_ConcatAndValue(oNode);
+
+            ## iemGetEffHcrEl2NVx(pVCpu, pGstFeats) IN ('1x1') and such fun stuff.
+            if oNode.sOp == 'IN':
+                return self.transformCodePass2_BinaryOp_InSet(oNode);
 
         elif isinstance(oNode, ArmAstConcat):
             return self.transformCodePass2_Concat(oNode);

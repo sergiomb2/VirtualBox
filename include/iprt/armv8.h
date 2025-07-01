@@ -2965,9 +2965,12 @@ typedef const ARMV8SPSREL2 *PCXARMV8SPSREL2;
 #define ARMV8_HCR_EL2_APK                                       RT_BIT_64(40)
 #define ARMV8_HCR_EL2_API                                       RT_BIT_64(41)
 #define ARMV8_HCR_EL2_NV                                        RT_BIT_64(42)
-#define ARMV8_HCR_EL2_NV1                                       RT_BIT_64(43)
+#define ARMV8_HCR_EL2_NV_BIT                                    42
+#define ARMV8_HCR_EL2_NV1                                       RT_BIT_64(ARMV8_HCR_EL2_NV1_BIT)
+#define ARMV8_HCR_EL2_NV1_BIT                                   43
 #define ARMV8_HCR_EL2_AT                                        RT_BIT_64(44)
-#define ARMV8_HCR_EL2_NV2                                       RT_BIT_64(45)
+#define ARMV8_HCR_EL2_NV2                                       RT_BIT_64(ARMV8_HCR_EL2_NV2_BIT)
+#define ARMV8_HCR_EL2_NV2_BIT                                   45
 #define ARMV8_HCR_EL2_FWB                                       RT_BIT_64(46)
 #define ARMV8_HCR_EL2_FIEN                                      RT_BIT_64(47)
 #define ARMV8_HCR_EL2_GPF                                       RT_BIT_64(48)
