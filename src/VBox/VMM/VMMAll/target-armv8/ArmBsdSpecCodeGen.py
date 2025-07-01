@@ -447,6 +447,178 @@ g_dSpecFeatToCpumFeat = {
 };
 
 
+## Mapping register names to CPUMCTX members.
+## The value is: (sName|fReservedValue,)
+g_dRegToCpumCtx = {
+    'AArch64.PMUSERENR_EL0':    ( 0, ), # Concat uses EN; we don't support it, so report zero.
+    'AArch64.AMUSERENR_EL0':    ( 0, ), # We don't support this, so report zero.
+    'AArch64.CNTP_CTL_EL0':     ( 0, ), # We don't support this, so report zero.
+    'AArch64.GCSCRE0_EL1':      ( 0, ), # FEAT_GCS / ARMv9.4; we don't support this, returning zero for now.
+    'AArch64.HCRX_EL2':         ( 0, ), # FEAT_HCX / ARMv8.7; we don't support this, returning zero for now.
+    'AArch64.HDFGRTR_EL2':      ( 0, ), # FEAT_FGT / ARMv8.6; we don't support this, returning zero for now.
+    'AArch64.HDFGWTR_EL2':      ( 0, ), # FEAT_FGT / ARMv8.6; we don't support this, returning zero for now.
+    'AArch64.HFGRTR_EL2':       ( 0, ), # FEAT_FGT / ARMv8.6; we don't support this, returning zero for now.
+    'AArch64.HFGWTR_EL2':       ( 0, ), # FEAT_FGT / ARMv8.6; we don't support this, returning zero for now.
+    ## @todo 'AArch64.ICC_SRE_EL1': ( '.u64', ), - GIC has debug logging of this, but no handling.
+    ## @todo 'AArch64.ICC_SRE_EL2': ( '.u64', ), - GIC lists this in the range, but not sure how to get at any value...
+    ## @todo 'AArch64.ICH_HCR_EL2': ( '.u64', ), - This is part of GICv3, but our GIC doesn't mention it.
+    ## @todo 'AArch64.MPAM2_EL2':   ( '.u64', ), - FEAT_MPAM / ARMv8.4; not sure if zero is a passable value here...
+    ## @todo 'AArch64.MPAMBW2_EL2': ( '.u64', ), - FEAT_MPAM_PE_BW_CTRL / ARMv9.3; ditto.
+    ## @todo 'AArch64.MPAMHCR_EL2': ( '.u64', ), - FEAT_MPAM / ARMv8.4; not sure if zero is a passable value here...
+    ## @todo 'AArch64.MPAMIDR_EL1': ( '.u64', ), - FEAT_MPAM / ARMv8.4; not sure if zero is a passable value here...
+    ## @todo 'AArch64.OSLSR_EL1':        ( 'fOsLck', ),  - this is a bool in our code...
+    'AArch64.PMSCR_EL1':        ( 0, ), # FEAT_SPE / ARMv8.1
+    ## @todo 'AArch64.PMSELR_EL0':  ( '.u64', ), - FEAT_PMUv3 / ARMv8.0; not sure if zero is a passable value here...
+    ## @todo 'AArch64.PMUACR_EL1':  ( '.u64', ), - FEAT_PMUv3p9; not sure if zero is a passable value here...
+    ## @todo 'AArch64.SCR_EL3':     ( '.u64', ), - we don't do EL3, so some stuff isn't eliminated properly...
+    ## @todo 'AArch64.SPMSELR_EL0': ( '.u64', ), - FEAT_SPMU / ARMv8.8
+    ## @todo 'AArch64.TRCIDR0':     ( '.u64', ), - FEAT_ETE / ARMv9.0
+    ## @todo 'AArch64.TRCIDR2':     ( '.u64', ), - FEAT_ETE / ARMv9.0
+    ## @todo 'AArch64.TRCIDR3':     ( '.u64', ), - FEAT_ETE / ARMv9.0
+    ## @todo 'AArch64.TRCIDR4':     ( '.u64', ), - FEAT_ETE / ARMv9.0
+    ## @todo 'AArch64.TRCIDR5':     ( '.u64', ), - FEAT_ETE / ARMv9.0
+    ## @todo 'AArch64.TRFCR_EL1':   ( '.u64', ), - FEAT_TRF  / ??
+
+    'AArch64.SPSR_EL1':         ('Spsr.u64',),
+    'AArch64.ELR_EL1':          ('Elr.u64',),
+    'AArch64.SCTLR_EL1':        ('Sctlr.u64',),
+    'AArch64.TCR_EL1':          ('Tcr.u64',),
+    'AArch64.TTBR0_EL1':        ('Ttbr0.u64',),
+    'AArch64.TTBR1_EL1':        ('Ttbr1.u64',),
+    'AArch64.VBAR_EL1':         ('VBar.u64',),
+    'AArch64.MDSCR_EL1':        ('Mdscr.u64',),
+
+    'AArch64.DBGBCR0_EL1':      ('aBp[0].Ctrl.u64',),
+    'AArch64.DBGBCR1_EL1':      ('aBp[1].Ctrl.u64',),
+    'AArch64.DBGBCR2_EL1':      ('aBp[2].Ctrl.u64',),
+    'AArch64.DBGBCR3_EL1':      ('aBp[3].Ctrl.u64',),
+    'AArch64.DBGBCR4_EL1':      ('aBp[4].Ctrl.u64',),
+    'AArch64.DBGBCR5_EL1':      ('aBp[5].Ctrl.u64',),
+    'AArch64.DBGBCR6_EL1':      ('aBp[6].Ctrl.u64',),
+    'AArch64.DBGBCR7_EL1':      ('aBp[7].Ctrl.u64',),
+    'AArch64.DBGBCR8_EL1':      ('aBp[8].Ctrl.u64',),
+    'AArch64.DBGBCR9_EL1':      ('aBp[9].Ctrl.u64',),
+    'AArch64.DBGBCR10_EL1':     ('aBp[10].Ctrl.u64',),
+    'AArch64.DBGBCR11_EL1':     ('aBp[11].Ctrl.u64',),
+    'AArch64.DBGBCR12_EL1':     ('aBp[12].Ctrl.u64',),
+    'AArch64.DBGBCR13_EL1':     ('aBp[13].Ctrl.u64',),
+    'AArch64.DBGBCR14_EL1':     ('aBp[14].Ctrl.u64',),
+    'AArch64.DBGBCR15_EL1':     ('aBp[15].Ctrl.u64',),
+
+    'AArch64.DBGBVR0_EL1':      ('aBp[0].Value.u64',),
+    'AArch64.DBGBVR1_EL1':      ('aBp[1].Value.u64',),
+    'AArch64.DBGBVR2_EL1':      ('aBp[2].Value.u64',),
+    'AArch64.DBGBVR3_EL1':      ('aBp[3].Value.u64',),
+    'AArch64.DBGBVR4_EL1':      ('aBp[4].Value.u64',),
+    'AArch64.DBGBVR5_EL1':      ('aBp[5].Value.u64',),
+    'AArch64.DBGBVR6_EL1':      ('aBp[6].Value.u64',),
+    'AArch64.DBGBVR7_EL1':      ('aBp[7].Value.u64',),
+    'AArch64.DBGBVR8_EL1':      ('aBp[8].Value.u64',),
+    'AArch64.DBGBVR9_EL1':      ('aBp[9].Value.u64',),
+    'AArch64.DBGBVR10_EL1':     ('aBp[10].Value.u64',),
+    'AArch64.DBGBVR11_EL1':     ('aBp[11].Value.u64',),
+    'AArch64.DBGBVR12_EL1':     ('aBp[12].Value.u64',),
+    'AArch64.DBGBVR13_EL1':     ('aBp[13].Value.u64',),
+    'AArch64.DBGBVR14_EL1':     ('aBp[14].Value.u64',),
+    'AArch64.DBGBVR15_EL1':     ('aBp[15].Value.u64',),
+
+    'AArch64.DBGWCR0_EL1':      ('aWp[0].Ctrl.u64',),
+    'AArch64.DBGWCR1_EL1':      ('aWp[1].Ctrl.u64',),
+    'AArch64.DBGWCR2_EL1':      ('aWp[2].Ctrl.u64',),
+    'AArch64.DBGWCR3_EL1':      ('aWp[3].Ctrl.u64',),
+    'AArch64.DBGWCR4_EL1':      ('aWp[4].Ctrl.u64',),
+    'AArch64.DBGWCR5_EL1':      ('aWp[5].Ctrl.u64',),
+    'AArch64.DBGWCR6_EL1':      ('aWp[6].Ctrl.u64',),
+    'AArch64.DBGWCR7_EL1':      ('aWp[7].Ctrl.u64',),
+    'AArch64.DBGWCR8_EL1':      ('aWp[8].Ctrl.u64',),
+    'AArch64.DBGWCR9_EL1':      ('aWp[9].Ctrl.u64',),
+    'AArch64.DBGWCR10_EL1':     ('aWp[10].Ctrl.u64',),
+    'AArch64.DBGWCR11_EL1':     ('aWp[11].Ctrl.u64',),
+    'AArch64.DBGWCR12_EL1':     ('aWp[12].Ctrl.u64',),
+    'AArch64.DBGWCR13_EL1':     ('aWp[13].Ctrl.u64',),
+    'AArch64.DBGWCR14_EL1':     ('aWp[14].Ctrl.u64',),
+    'AArch64.DBGWCR15_EL1':     ('aWp[15].Ctrl.u64',),
+
+    'AArch64.DBGWVR0_EL1':      ('aWp[0].Value.u64',),
+    'AArch64.DBGWVR1_EL1':      ('aWp[1].Value.u64',),
+    'AArch64.DBGWVR2_EL1':      ('aWp[2].Value.u64',),
+    'AArch64.DBGWVR3_EL1':      ('aWp[3].Value.u64',),
+    'AArch64.DBGWVR4_EL1':      ('aWp[4].Value.u64',),
+    'AArch64.DBGWVR5_EL1':      ('aWp[5].Value.u64',),
+    'AArch64.DBGWVR6_EL1':      ('aWp[6].Value.u64',),
+    'AArch64.DBGWVR7_EL1':      ('aWp[7].Value.u64',),
+    'AArch64.DBGWVR8_EL1':      ('aWp[8].Value.u64',),
+    'AArch64.DBGWVR9_EL1':      ('aWp[9].Value.u64',),
+    'AArch64.DBGWVR10_EL1':     ('aWp[10].Value.u64',),
+    'AArch64.DBGWVR11_EL1':     ('aWp[11].Value.u64',),
+    'AArch64.DBGWVR12_EL1':     ('aWp[12].Value.u64',),
+    'AArch64.DBGWVR13_EL1':     ('aWp[13].Value.u64',),
+    'AArch64.DBGWVR14_EL1':     ('aWp[14].Value.u64',),
+    'AArch64.DBGWVR15_EL1':     ('aWp[15].Value.u64',),
+
+    'AArch64.APDAKeyLo_EL1':    ('Apda.Low.u64',),
+    'AArch64.APDAKeyHi_EL1':    ('Apda.High.u64',),
+
+    'AArch64.APDBKeyLo_EL1':    ('Apdb.Low.u64',),
+    'AArch64.APDBKeyHi_EL1':    ('Apdb.High.u64',),
+
+    'AArch64.APGAKeyLo_EL1':    ('Apga.Low.u64',),
+    'AArch64.APGAKeyHi_EL1':    ('Apga.High.u64',),
+
+    'AArch64.APIAKeyLo_EL1':    ('Apia.Low.u64',),
+    'AArch64.APIAKeyHi_EL1':    ('Apia.High.u64',),
+
+    'AArch64.APIBKeyLo_EL1':    ('Apib.Low.u64',),
+    'AArch64.APIBKeyHi_EL1':    ('Apib.High.u64',),
+
+    'AArch64.AFSR0_EL1':        ('Afsr0.u64',),
+    'AArch64.AFSR1_EL1':        ('Afsr1.u64',),
+    'AArch64.AMAIR_EL1':        ('Amair.u64',),
+    'AArch64.CNTKCTL_EL1':      ('CntKCtl.u64',),
+    'AArch64.CONTEXTIDR_EL1':   ('ContextIdr.u64',),
+    'AArch64.CPACR_EL1':        ('Cpacr.u64',),
+    'AArch64.CSSELR_EL1':       ('Csselr.u64',),
+    'AArch64.ESR_EL1':          ('Esr.u64',),
+    'AArch64.FAR_EL1':          ('Far.u64',),
+    'AArch64.MAIR_EL1':         ('Mair.u64',),
+    'AArch64.PAR_EL1':          ('Par.u64',),
+    'AArch64.TPIDRRO_EL0':      ('TpIdrRoEl0.u64',),
+    'AArch64.TPIDR_EL0':        ('aTpIdr[0].u64',),
+    'AArch64.TPIDR_EL1':        ('aTpIdr[1].u64',),
+    'AArch64.MDCCINT_EL1':      ('MDccInt.u64',),
+    'AArch64.ACTLR_EL1':        ('Actlr.u64',),
+
+    'AArch64.CNTHCTL_EL2':      ('CntHCtlEl2.u64',),
+    'AArch64.CNTHP_CTL_EL2':    ('CntHpCtlEl2.u64',),
+    'AArch64.CNTHP_CVAL_EL2':   ('CntHpCValEl2.u64',),
+    'AArch64.CNTHP_TVAL_EL2':   ('CntHpTValEl2.u64',),
+    'AArch64.CNTVOFF_EL2':      ('CntVOffEl2.u64',),
+    'AArch64.CPTR_EL2':         ('CptrEl2.u64',),
+    'AArch64.ELR_EL2':          ('ElrEl2.u64',),
+    'AArch64.ESR_EL2':          ('EsrEl2.u64',),
+    'AArch64.FAR_EL2':          ('FarEl2.u64',),
+    'AArch64.HCR_EL2':          ('HcrEl2.u64',),
+    'AArch64.HPFAR_EL2':        ('HpFarEl2.u64',),
+    'AArch64.MAIR_EL2':         ('MairEl2.u64',),
+    'AArch64.MDCR_EL2':         ('MdcrEl2.u64',),
+    'AArch64.SCTLR_EL2':        ('SctlrEl2.u64',),
+    'AArch64.SPSR_EL2':         ('SpsrEl2.u64',),
+    'AArch64.SP_EL2':           ('SpEl2.u64',),
+    'AArch64.TCR_EL2':          ('TcrEl2.u64',),
+    'AArch64.TPIDR_EL2':        ('TpidrEl2.u64',),
+    'AArch64.TTBR0_EL2':        ('Ttbr0El2.u64',),
+    'AArch64.TTBR1_EL2':        ('Ttbr1El2.u64',),
+    'AArch64.VBAR_EL2':         ('VBarEl2.u64',),
+    'AArch64.VMPIDR_EL2':       ('VMpidrEl2.u64',),
+    'AArch64.VPIDR_EL2':        ('VPidrEl2.u64',),
+    'AArch64.VTCR_EL2':         ('VTcrEl2.u64',),
+    'AArch64.VTTBR_EL2':        ('VTtbrEl2.u64',),
+    'AArch64.FPCR':             ('fpcr',),
+    'AArch64.FPSR':             ('fpsr',),
+    'AArch64.CNTV_CTL_EL0':     ('CntvCtlEl0',),
+    'AArch64.CNTV_CVAL_EL0':    ('CntvCValEl0',),
+};
+
 
 #
 # Decoder structure helpers.
@@ -1370,51 +1542,6 @@ class SysRegGeneratorBase(object):
     # Pass 2 - C++ translation.
     #
 
-    ## Mapping register names to CPUMCTX members.
-    ## The value is: (sName|fReservedValue,)
-    kdRegToCpumCtx = {
-        'AArch64.CNTKCTL_EL1':      ( 'CntKCtl.u64',    ), # Concat uses EL0PCTEN and EL0VCTEN
-        'AArch64.CNTHCTL_EL2':      ( 'CntHCtlEl2.u64', ), # Concat uses EL0PCTEN and EL0VCTEN
-        'AArch64.MDCR_EL2':         ( 'MdcrEl2.u64',    ), # Concat uses TDA, TDE and TDRA
-        'AArch64.PMUSERENR_EL0':    ( 0, ), # Concat uses EN; we don't support it, so report zero.
-
-        'AArch64.AMUSERENR_EL0':    ( 0, ), # We don't support this, so report zero.
-        'AArch64.CNTP_CTL_EL0':     ( 0, ), # We don't support this, so report zero.
-        'AArch64.CPACR_EL1':        ( 'Cpacr.u64',   ),
-        'AArch64.CPTR_EL2':         ( 'CptrEl2.u64', ),
-        'AArch64.GCSCRE0_EL1':      ( 0, ), # FEAT_GCS / ARMv9.4; we don't support this, returning zero for now.
-        'AArch64.HCR_EL2':          ( 'HcrEl2.u64',  ),
-        'AArch64.HCRX_EL2':         ( 0, ), # FEAT_HCX / ARMv8.7; we don't support this, returning zero for now.
-        'AArch64.HDFGRTR_EL2':      ( 0, ), # FEAT_FGT / ARMv8.6; we don't support this, returning zero for now.
-        'AArch64.HDFGWTR_EL2':      ( 0, ), # FEAT_FGT / ARMv8.6; we don't support this, returning zero for now.
-        'AArch64.HFGRTR_EL2':       ( 0, ), # FEAT_FGT / ARMv8.6; we don't support this, returning zero for now.
-        'AArch64.HFGWTR_EL2':       ( 0, ), # FEAT_FGT / ARMv8.6; we don't support this, returning zero for now.
-        ## @todo 'AArch64.ICC_SRE_EL1': ( '.u64', ), - GIC has debug logging of this, but no handling.
-        ## @todo 'AArch64.ICC_SRE_EL2': ( '.u64', ), - GIC lists this in the range, but not sure how to get at any value...
-        ## @todo 'AArch64.ICH_HCR_EL2': ( '.u64', ), - This is part of GICv3, but our GIC doesn't mention it.
-        'AArch64.MDSCR_EL1':        ( 'Mdscr.u64', ),
-        ## @todo 'AArch64.MPAM2_EL2':   ( '.u64', ), - FEAT_MPAM / ARMv8.4; not sure if zero is a passable value here...
-        ## @todo 'AArch64.MPAMBW2_EL2': ( '.u64', ), - FEAT_MPAM_PE_BW_CTRL / ARMv9.3; ditto.
-        ## @todo 'AArch64.MPAMHCR_EL2': ( '.u64', ), - FEAT_MPAM / ARMv8.4; not sure if zero is a passable value here...
-        ## @todo 'AArch64.MPAMIDR_EL1': ( '.u64', ), - FEAT_MPAM / ARMv8.4; not sure if zero is a passable value here...
-        'AArch64.OSLSR_EL1':        ( 'fOsLck.u64', ),
-        'AArch64.PMSCR_EL1':        ( 0, ), # FEAT_SPE / ARMv8.1
-        ## @todo 'AArch64.PMSELR_EL0':  ( '.u64', ), - FEAT_PMUv3 / ARMv8.0; not sure if zero is a passable value here...
-        ## @todo 'AArch64.PMUACR_EL1':  ( '.u64', ), - FEAT_PMUv3p9; not sure if zero is a passable value here...
-        ## @todo 'AArch64.SCR_EL3':     ( '.u64', ), - we don't do EL3, so some stuff isn't eliminated properly...
-        'AArch64.SCTLR_EL1':        ( 'Sctlr.u64', ),
-        'AArch64.SCTLR_EL2':        ( 'SctlrEl2.u64', ),
-        ## @todo 'AArch64.SPMSELR_EL0': ( '.u64', ), - FEAT_SPMU / ARMv8.8
-        ## @todo 'AArch64.TRCIDR0':     ( '.u64', ), - FEAT_ETE / ARMv9.0
-        ## @todo 'AArch64.TRCIDR2':     ( '.u64', ), - FEAT_ETE / ARMv9.0
-        ## @todo 'AArch64.TRCIDR3':     ( '.u64', ), - FEAT_ETE / ARMv9.0
-        ## @todo 'AArch64.TRCIDR4':     ( '.u64', ), - FEAT_ETE / ARMv9.0
-        ## @todo 'AArch64.TRCIDR5':     ( '.u64', ), - FEAT_ETE / ARMv9.0
-        ## @todo 'AArch64.TRFCR_EL1':   ( '.u64', ), - FEAT_TRF  / ??
-
-
-    };
-
     def lookupRegisterField(self, sState, sRegisterName, sField, sWhatFor, fWarnOnly = False):
         """
         Helper to lookup a register field, returning (oReg, oField, sCpumCtxName|fReservedValue).
@@ -1430,8 +1557,11 @@ class SysRegGeneratorBase(object):
             if fWarnOnly: print('warning: %s' % (oXcpt)); return (None, None, None);
             raise oXcpt;
 
-        tCpumCtxInfo = self.kdRegToCpumCtx.get('%s.%s' % (sState, sRegisterName));
+        tCpumCtxInfo = g_dRegToCpumCtx.get('%s.%s' % (sState, sRegisterName));
         if not tCpumCtxInfo:
+            if sRegisterName == 'OSLSR_EL1' and sState == 'AArch64' and sField == 'OSLK':
+                return (oReg, spec.ArmFieldsField(None, [spec.ArmRange(0, 1),], 'OSLK'), 'fOsLck'); # HACK ALERT: boolean field
+
             oXcpt = Exception('%s: No CPUMCTX mapping for register %s.%s (looking up field %s)'
                               % (sWhatFor, sState, sRegisterName, sField,));
             if fWarnOnly: print('warning: %s' % (oXcpt)); return (None, None, None);
@@ -1718,7 +1848,7 @@ class SysRegGeneratorBase(object):
         if not oReg:
             raise Exception('Assignment/Identifier: Register "%s" not found' % (oNode.sName, ));
 
-        tCpumCtxInfo = self.kdRegToCpumCtx.get('%s.%s' % (sState, oNode.sName));
+        tCpumCtxInfo = g_dRegToCpumCtx.get('%s.%s' % (sState, oNode.sName));
         if not tCpumCtxInfo:
             oXcpt = Exception('Assignment/Identifier: No CPUMCTX mapping for register %s.%s' % (sState, oNode.sName,));
             print('warning: %s' % (oXcpt));

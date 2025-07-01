@@ -177,13 +177,13 @@ typedef struct CPUMCTX
     CPUMCTXSYSREG       aSpReg[2]; /**< @todo extend to 4 entries! */
     /** The program counter. */
     CPUMCTXSYSREG       Pc;
-    /** The SPSR (Saved Program Status Register) (EL1 only). */
+    /** The SPSR_EL1 register (Saved Program Status Register). */
     CPUMCTXSYSREG       Spsr;
-    /** The ELR (Exception Link Register) (EL1 only). */
+    /** The ELR_EL1 register (Exception Link Register). */
     CPUMCTXSYSREG       Elr;
     /** The SCTLR_EL1 register. */
     CPUMCTXSYSREG       Sctlr;
-    /** THe TCR_EL1 register. */
+    /** The TCR_EL1 register. */
     CPUMCTXSYSREG       Tcr;
     /** The TTBR0_EL1 register. */
     CPUMCTXSYSREG       Ttbr0;
@@ -194,19 +194,19 @@ typedef struct CPUMCTX
     /** The MDSCR_EL1 register. */
     CPUMCTXSYSREG       Mdscr;
     uint64_t            uPadding1;
-    /** Breakpoint registers, DBGB{C,V}n_EL1. */
+    /** Breakpoint registers, DBGB{C,V}Rn_EL1. */
     CPUMCTXSYSREGDBG    aBp[16];
-    /** Watchpoint registers, DBGW{C,V}n_EL1. */
+    /** Watchpoint registers, DBGW{C,V}Rn_EL1. */
     CPUMCTXSYSREGDBG    aWp[16];
-    /** APDA key register state. */
+    /** APDA key register state (APDAKeyLo_EL1, APDAKeyHi_EL1). */
     CPUMCTXSYSREGPAKEY  Apda;
-    /** APDB key register state. */
+    /** APDB key register state (APDBKeyLo_EL1, APDBKeyHi_EL1). */
     CPUMCTXSYSREGPAKEY  Apdb;
-    /** APGA key register state. */
+    /** APGA key register state (APGAKeyLo_EL1, APGAKeyHi_EL1). */
     CPUMCTXSYSREGPAKEY  Apga;
-    /** APIA key register state. */
+    /** APIA key register state (APIAKeyLo_EL1, APIAKeyHi_EL1). */
     CPUMCTXSYSREGPAKEY  Apia;
-    /** APIB key register state. */
+    /** APIB key register state (APIBKeyLo_EL1, APIBKeyHi_EL1). */
     CPUMCTXSYSREGPAKEY  Apib;
     /** The AFSR0_EL1 register. */
     CPUMCTXSYSREG       Afsr0;
@@ -234,7 +234,7 @@ typedef struct CPUMCTX
     CPUMCTXSYSREG       TpIdrRoEl0;
     /** The TPIDR_ELn registers. */
     CPUMCTXSYSREG       aTpIdr[2]; /**< @todo extend to 4 entries. */
-    /** TheMDCCINT_EL1 register. */
+    /** The MDCCINT_EL1 register. */
     CPUMCTXSYSREG       MDccInt;
     /** The ACTLR_EL1 register. */
     CPUMCTXSYSREG       Actlr;
@@ -243,11 +243,11 @@ typedef struct CPUMCTX
      * @{ */
     /** The CNTHCTL_EL2 register. */
     CPUMCTXSYSREG       CntHCtlEl2;
-    /** The CNTP_CTL_EL2 register. */
+    /** The CNTHP_CTL_EL2 register. */
     CPUMCTXSYSREG       CntHpCtlEl2;
-    /** The CNTP_CVAL_EL2 register. */
+    /** The CNTHP_CVAL_EL2 register. */
     CPUMCTXSYSREG       CntHpCValEl2;
-    /** The CNTP_TVAL_EL2 register. */
+    /** The CNTHP_TVAL_EL2 register. */
     CPUMCTXSYSREG       CntHpTValEl2;
     /** The CNTVOFF_EL2 register. */
     CPUMCTXSYSREG       CntVOffEl2;
