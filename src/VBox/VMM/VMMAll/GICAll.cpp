@@ -1873,10 +1873,10 @@ static uint16_t gicGetHighestPriorityPendingIntr(PCGICDEV pGicDev, PCVMCPUCC pVC
             if (!fSufficientPriority)
             {
                 uIntId = GIC_INTID_RANGE_SPECIAL_NO_INTERRUPT;
-                pHighestIntr->uIntId    = uIntId;
-                pHighestIntr->idxIntr   = UINT16_MAX;
-                pHighestIntr->bPriority = GIC_IDLE_PRIORITY;
-                Assert(pHighestIntr->fIntrGroupMask == fIntrGroupMask);
+                pHighestIntr->fIntrGroupMask = 0;
+                pHighestIntr->uIntId         = uIntId;
+                pHighestIntr->idxIntr        = UINT16_MAX;
+                pHighestIntr->bPriority      = GIC_IDLE_PRIORITY;
             }
         }
 
