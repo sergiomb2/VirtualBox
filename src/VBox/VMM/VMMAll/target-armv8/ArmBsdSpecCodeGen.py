@@ -1567,7 +1567,7 @@ class SysRegGeneratorBase(object):
 
         elif isinstance(oNode, ArmAstValue):
             # Convert non-wildcard Values.Value nodes into integer nodes with specific width.
-            (fValue, _, fWildcard, cBitsWidth) = oNode.getParsedValue();
+            (fValue, _, fWildcard, cBitsWidth) = oNode.getValueDetails();
             if fWildcard == 0:
                 return ArmAstInteger(fValue, cBitsWidth);
 
@@ -1798,7 +1798,7 @@ class SysRegGeneratorBase(object):
                 else:
                     raise Exception('Unexpected function in Concat() argument list: %s (%s)' % (oValue, oNode,));
             elif isinstance(oValue, (ArmAstValue, ArmAstInteger)):
-                (fValue, _, fWildcard, cBitsWidth) = oValue.getParsedValue();
+                (fValue, _, fWildcard, cBitsWidth) = oValue.getValueDetails();
                 if fWildcard != 0:
                     raise Exception('Unexpected wildcard value in Concat() argument list: %s (%s)' % (oValue, oNode,));
                 aoInfoEntries.append(self.VBoxAstCppConcatEntry(oValue, cBitsWidth, fValue = fValue));
@@ -1847,8 +1847,8 @@ class SysRegGeneratorBase(object):
     def transformCodePass2_BinaryOp_ConcatAndValueOrInt(self, oNode): # pylint: disable=invalid-name
         """ Pass 2: (AArch64.MDCR_EL2.TDE):(AArch64.MDCR_EL2.TDA) != '00' and similar """
         # First process the value.
-        (fValue, _, fWildcard, _) = oNode.oRight.getParsedValue();
-        #(fValue, fFixed, fWildcard, cBitsWidth) = oNode.oRight.getParsedValue();
+        (fValue, _, fWildcard, _) = oNode.oRight.getValueDetails();
+        #(fValue, fFixed, fWildcard, cBitsWidth) = oNode.oRight.getValueDetails();
 
         #
         # Drop the comparison and shifting if we're checking that any of the
@@ -1876,7 +1876,7 @@ class SysRegGeneratorBase(object):
     def transformCodePass2_BinaryOp_DotAtomAndValueOrInt(self, oNode): # pylint: disable=invalid-name
         """ Pass 2: PSTATE.SP == '0' and suchlike. """
         if len(oNode.oLeft.aoValues) == 2:
-            (fValue, _, fWildcard, cBitsWidth) = oNode.oRight.getParsedValue();
+            (fValue, _, fWildcard, cBitsWidth) = oNode.oRight.getValueDetails();
 
             sField = oNode.oLeft.aoValues[1].getIdentifierName();
             if isinstance(sField, str) and sField:
@@ -1918,7 +1918,7 @@ class SysRegGeneratorBase(object):
             raise Exception('Unexpected use of operator "IN": %s' % (oNode.toString(),));
 
         if len(oSet.aoValues) == 1:
-            (fValue, fFixed, fWildcard, cBitsWidth) = oSet.aoValues[0].getParsedValue();
+            (fValue, fFixed, fWildcard, cBitsWidth) = oSet.aoValues[0].getValueDetails();
             if fFixed == 0:
                 raise Exception('Bogus wildcard set expression: %s' % (oNode.toString(),));
 

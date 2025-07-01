@@ -918,7 +918,7 @@ class ArmRegEncoding(object):
             if oOther is not None:
                 oMyValue = self.dNamedValues.get(sMine);
                 if oMyValue:
-                    (iMyValue, _, fWildcard, _) = oMyValue.getParsedValue();
+                    (iMyValue, _, fWildcard, _) = oMyValue.getValueDetails();
                     if fWildcard == 0:
                         if isinstance(oOther, range):
                             if iMyValue not in oOther:
