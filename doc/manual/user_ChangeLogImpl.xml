@@ -81,7 +81,7 @@ Rules for adding a changelog entry to make them look more uniform:
     <itemizedlist>
 
       <listitem>
-        <para></para>
+        <para>GUI: Fixed a bug in clone VM wizard which made impossible to include snaphots in clone result.</para>
       </listitem>
 
     </itemizedlist>
