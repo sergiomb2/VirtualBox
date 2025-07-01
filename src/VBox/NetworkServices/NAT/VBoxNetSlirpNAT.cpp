@@ -704,8 +704,8 @@ int VBoxNetSlirpNAT::initIPv4()
     }
     else
     {
-        if((acNameservers[0].u & RT_H2N_U32_C(IN_CLASSA_NET))
-            == RT_N2H_U32_C(INADDR_LOOPBACK & IN_CLASSA_NET))
+        if (   acNameservers
+            && (acNameservers[0].u & RT_H2N_U32_C(IN_CLASSA_NET)) == RT_N2H_U32_C(INADDR_LOOPBACK & IN_CLASSA_NET))
             LogRel(("Nameserver is on 127/8 network."
                     "Falling back to libslirp DNS proxy.\n"));
         else
