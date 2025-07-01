@@ -1460,14 +1460,17 @@ class SysRegGeneratorBase(object):
             if oNode.aoIfConditions and oNode.aoIfConditions[0].isBoolAndTrue():
                 return oNode.aoIfStatements[0];
 
-            # If all branches in an if-list has all the same branches, drop the
-            # conditionals and use the else statement.
+            # Iff there is an else statement, eliminate any identical conditional
+            # code blocks immediately preceding it.
             if oNode.oElseStatement and oNode.aoIfStatements:
-                idxIf = 0;
-                while idxIf < len(oNode.aoIfStatements) and oNode.oElseStatement.isSame(oNode.aoIfStatements[idxIf]):
-                    idxIf += 1;
-                if idxIf >= len(oNode.aoIfStatements):
-                    return oNode.oElseStatement;
+                cIfStmts = len(oNode.aoIfStatements);
+                while cIfStmts > 0 and oNode.oElseStatement.isSame(oNode.aoIfStatements[cIfStmts - 1]):
+                    cIfStmts -= 1;
+                if cIfStmts < len(oNode.aoIfStatements):
+                    oNode.aoIfConditions = oNode.aoIfConditions[:cIfStmts];
+                    oNode.aoIfStatements = oNode.aoIfStatements[:cIfStmts];
+            if oNode.oElseStatement and not oNode.aoIfStatements:
+                return oNode.oElseStatement;
 
         elif isinstance(oNode, ArmAstBinaryOp):
             # EL3 not implemented, so eliminate PSTATE.EL == 3 and similar. ## @todo EL3
