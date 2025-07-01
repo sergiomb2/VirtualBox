@@ -123,7 +123,7 @@ static DECLCALLBACK(void) vboxTrayLogHeaderFooter(PRTLOGGER pLoggerRelease, RTLO
     }
 }
 
-RTDECL(void) RTLogWriteUser(const char* pachChars, size_t cbChars)
+RTDECL(void) RTLogWriteStdOut(const char* pachChars, size_t cbChars)
 {
     if (pachChars)
         RTPrintf("%s: %.*s", VBOX_VBOXTRAY_TITLE, cbChars, pachChars);
