@@ -1556,6 +1556,14 @@ class SysRegGeneratorBase(object):
                 oNode = self.kdAstForFunctionsWithoutArguments[oNode.sName].clone();
                 return self.transformCodePass1(oInfo, oNode);
 
+        elif isinstance(oNode, ArmAstDotAtom):
+            # Rewrite lazy ones into Field accesses to avoid duplicating code..
+            if len(oNode.aoValues) == 2:
+                sReg   = oNode.aoValues[0].getIdentifierName();
+                sField = oNode.aoValues[1].getIdentifierName();
+                if sReg and sReg != 'PSTATE' and sField:
+                    return ArmAstField(sField, sReg);
+
         _ = fEliminationAllowed;
         _ = aoStack;
         return oNode;
@@ -1767,6 +1775,7 @@ class SysRegGeneratorBase(object):
         'Z':        (1, 30, ),
         'N':        (1, 31, ),
         'PM':       (1, 32, ),
+        'EXLOCK':   (1, 34, ), # FEAT_GCS
     };
 
     def transformCodePass2_Concat(self, oNode):  # (ArmAstConcat) -> ArmAstBase
@@ -1854,6 +1863,38 @@ class SysRegGeneratorBase(object):
                 return oNode.oLeft;
 
         return oNode;
+
+    def transformCodePass2_BinaryOp_DotAtomAndValue(self, oNode): # pylint: disable=invalid-name
+        """ Pass 2: PSTATE.SP == '0' and suchlike. """
+        if len(oNode.oLeft.aoValues) == 2:
+            (fValue, _, fWildcard, cBitsWidth) = oNode.oRight.getParsedValue();
+
+            sField = oNode.oLeft.aoValues[1].getIdentifierName();
+            if isinstance(sField, str) and sField:
+                if oNode.oLeft.aoValues[0].isMatchingIdentifier('PSTATE'):
+                    tInfo = self.kdPstateFields.get(sField);
+                    if not tInfo:
+                        raise Exception('Unexpected PSTATE field in binary op: %s (%s)' % (oNode.oLeft, oNode,));
+                    if tInfo[0] != cBitsWidth:
+                        raise Exception('Mismatching PSTATE field width and value: %s vs %s (%s)'
+                                        % (oNode.oLeft, oNode.oRight, oNode,));
+
+                    sExpr = '(pVCpu->cpum.GstCtx.fPState & UINT64_C(%#x)/*%s*/)' % (((1 << tInfo[0]) - 1) << tInfo[1], sField,);
+                    if tInfo[0] == 1:
+                        if fWildcard:
+                            raise Exception('Wildcard value for single bit PSTATE field: %s (%s)' % (oNode.oLeft, oNode,));
+                        if (oNode.sOp == '==' and fValue == 1) or (oNode.sOp == '!=' and fValue == 0):
+                            return ArmAstCppExpr(sExpr, 1);
+                        if (oNode.sOp == '==' and fValue == 0) or (oNode.sOp == '!=' and fValue == 1):
+                            return ArmAstUnaryOp('!', ArmAstCppExpr(sExpr, 1));
+                    elif fWildcard == 0:
+                        raise Exception('Handle wildcard value for PSTATE field: %s (%s)' % (oNode.oLeft, oNode,));
+                    if tInfo[1] != 0:
+                        sExpr = '(%s >> %u)' % (sExpr, tInfo[1],);
+                    oNode.oLeft  = ArmAstCppExpr(sExpr, tInfo[1]);
+                    oNode.oRight = ArmAstInteger(fValue, cBitsWidth);
+                    return oNode;
+        raise Exception('Unexpected dot-atom + value binary op: %s' % (oNode,));
 
     def transformCodePass2_BinaryOp_InSet(self, oNode): # pylint: disable=invalid-name
         """ Pass 2: iemGetEffHcrEl2NVx(pVCpu, pGstFeats) IN ('1x1') and such. """
@@ -1952,6 +1993,10 @@ class SysRegGeneratorBase(object):
                 and isinstance(oNode.oRight, ArmAstValue)
                 and ArmAstBinaryOp.kdOps[oNode.sOp] in (ArmAstBinaryOp.ksOpTypeLogical, ArmAstBinaryOp.ksOpTypeCompare) ):
                 return self.transformCodePass2_BinaryOp_ConcatAndValue(oNode);
+
+            # PSTATE.SP == '0' and similar:
+            if isinstance(oNode.oLeft, ArmAstDotAtom) and isinstance(oNode.oRight, ArmAstValue):
+                return self.transformCodePass2_BinaryOp_DotAtomAndValue(oNode);
 
             ## iemGetEffHcrEl2NVx(pVCpu, pGstFeats) IN ('1x1') and such fun stuff.
             if oNode.sOp == 'IN':
