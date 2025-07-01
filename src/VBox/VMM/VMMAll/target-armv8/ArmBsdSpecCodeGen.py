@@ -1653,7 +1653,6 @@ class SysRegGeneratorBase(object):
         def __init__(self, aoInfoEntries, oOriginal):
             ArmAstCppExpr.__init__(self, oOriginal.toString(), aoInfoEntries[0].iFirstBit + aoInfoEntries[0].cBitsWidth);
             self.aoInfoEntries = aoInfoEntries # type: List[VBoxAstCppConcatEntry]
-            ## @todo generate C++ code for it...
 
             # Convert the info items to C++ code.
             asExprs = [];
@@ -1672,14 +1671,18 @@ class SysRegGeneratorBase(object):
                     #print('debug/concat: i=%s %uL%u: %s/%uL%u -> %s'
                     #     % (i, oInfoEntry.iFirstBit, oInfoEntry.cBitsWidth, sNames, iFirstBit, cBitsWidth, oInfoEntry.oCpumCtx));
                     while (    i + 1 < len(aoInfoEntries)
-                           and aoInfoEntries[i + 1].oCpumCtx is oInfoEntry.oCpumCtx
-                           and aoInfoEntries[i + 1].oField.aoRanges[0].iFirstBit == iFirstBit - cBitsWidth):
+                           and aoInfoEntries[i + 1].oCpumCtx is oInfoEntry.oCpumCtx):
+                        iCurFirstBit  = aoInfoEntries[i + 1].oField.aoRanges[0].iFirstBit;
+                        cCurBitsWidth = aoInfoEntries[i + 1].oField.aoRanges[0].cBitsWidth;
+                        if iCurFirstBit + cCurBitsWidth != iFirstBit:
+                            break;
                         i += 1;
-                        #print('debug/concat: i=%s %uL%u: %s/%uL%u ++'
-                        #      % (i, aoInfoEntries[i].iFirstBit, aoInfoEntries[i].cBitsWidth, oInfoEntry.oField.sName,
-                        #         aoInfoEntries[i].oField.aoRanges[0].iFirstBit, aoInfoEntries[i].oField.aoRanges[0].cBitsWidth));
-                        iFirstBit -= aoInfoEntries[i].oField.aoRanges[0].cBitsWidth;
-                        sNames    += ',' + oInfoEntry.oField.sName;
+                        oInfoEntry = aoInfoEntries[i];
+                        #print('debug/concat: i=%s %uL%u: %s/%uL%u ++' % (i, oInfoEntry.iFirstBit, oInfoEntry.cBitsWidth,
+                        #                                                 oInfoEntry.oField.sName, iCurFirstBit, cCurBitsWidth));
+                        iFirstBit   = iCurFirstBit;
+                        cBitsWidth += cCurBitsWidth;
+                        sNames     += ',' + aoInfoEntries[i].oField.sName;
 
                     fMask = ((1 << cBitsWidth) - 1) << iFirstBit;
                     if iFirstBit == oInfoEntry.iFirstBit:
@@ -1698,7 +1701,7 @@ class SysRegGeneratorBase(object):
             self.asExprs = asExprs;
             self.sExpr   = '(%s)' % (' | '.join(asExprs),) if len(asExprs) > 1 else asExprs[0];
 
-        def toStringEx(self, sLang, cchMaxWidth):
+        def toStringEx(self, sLang = None, cchMaxWidth = 120):
             _ = sLang;
             if len(self.sExpr) <= cchMaxWidth:
                 return self.sExpr;
@@ -1867,10 +1870,10 @@ class SysRegGeneratorBase(object):
         if isinstance(oCpumCtx, int):
             iValue  = oCpumCtx >> iFirstBit;
             iValue &= (1 << cBitsWidth) - 1;
-            return ArmAstInteger(iValue, cBitsWidth);
+            return ArmAstInteger(iValue, cBitsWidth); ## @todo annotate
 
-        sExpr = '(pVCpu->cpum.GstCtx.%s & UINT%u_C(%#x))' \
-              % (oCpumCtx, 64 if cBitsWidth >= 32 else 32, ((1 << cBitsWidth) - 1) << iFirstBit,);
+        sExpr = '(pVCpu->cpum.GstCtx.%s & UINT%u_C(%#x)/*%s*/)' \
+              % (oCpumCtx, 64 if cBitsWidth >= 32 else 32, ((1 << cBitsWidth) - 1) << iFirstBit, oField.sName);
         if iFirstBit != 0:
             sExpr = '((%s) >> %u)' % (sExpr, iFirstBit,);
         return ArmAstCppExpr(sExpr, cBitsWidth);
