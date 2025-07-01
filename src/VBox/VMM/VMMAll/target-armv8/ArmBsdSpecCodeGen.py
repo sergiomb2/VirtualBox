@@ -1427,25 +1427,26 @@ class SysRegGeneratorBase(object):
             if idxEl is not None and iClass is not None:
                 assert idxEl > 0;
                 if iClass == 0:
-                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapUnknown(pVCpu, %s)' % (idxEl,)));
+                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapUnknown(pVCpu, %s)' % (idxEl,), cBitsWidth = 32));
                 if iClass == 7 and self.isA64Instruction():
                     return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapAdvSimdFpAccessA64(pVCpu, %s)'
-                                                       % (idxEl,)));
+                                                       % (idxEl,), cBitsWidth = 32));
                 if iClass == 7 and not self.isA64Instruction():
                     oInfo.cInstructionReferences += 1;
                     return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapAdvSimdFpAccess(pVCpu, %u, u32Instr)'
-                                                      % (idxEl,)));
+                                                      % (idxEl,), cBitsWidth = 32));
                 if iClass == 20:
                     oInfo.cInstrEssenceRefs += 1;
                     return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrap128Bit(pVCpu, %s, uInstrEssence)'
-                                                      % (idxEl,)));
+                                                      % (idxEl,), cBitsWidth = 32));
                 if iClass == 24:
                     oInfo.cInstrEssenceRefs += 1;
-                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrap(pVCpu, %s, uInstrEssence)' % (idxEl,)));
+                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrap(pVCpu, %s, uInstrEssence)'
+                                                      % (idxEl,), cBitsWidth = 32));
                 if iClass == 25:
-                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapSme(pVCpu, %s)' % (idxEl,)));
+                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapSme(pVCpu, %s)' % (idxEl,), cBitsWidth = 32));
                 if iClass == 29:
-                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapSme(pVCpu, %s)' % (idxEl,)));
+                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapSme(pVCpu, %s)' % (idxEl,), cBitsWidth = 32));
         raise Exception('Unexpected: %s' % (oNode.toString(),));
 
 
@@ -1653,17 +1654,17 @@ class SysRegGeneratorBase(object):
                 raise Exception('Unknown IsFeatureImplemented parameter: %s (see g_dSpecFeatToCpumFeat)' % (sFeatureNm));
             if isinstance(sCpumFeature, str):
                 oInfo.cCallsToIsFeatureImplemented += 1;
-                return ArmAstCppExpr('pGstFeats->%s' % (sCpumFeature,));
+                return ArmAstCppExpr('pGstFeats->%s' % (sCpumFeature,), cBitsWidth = 1);
             if sCpumFeature is True:  return 'true /*%s*/' % (sFeatureNm,);
             if sCpumFeature is False: return 'false /*%s*/' % (sFeatureNm,);
-            return ArmAstCppExpr('false /** @todo pGstFeats->%s */' % (sFeatureNm,));
+            return ArmAstCppExpr('false /** @todo pGstFeats->%s */' % (sFeatureNm,), cBitsWidth = 1);
         raise Exception('Unexpected IsFeatureImplemented arguments: %s' % (oNode.aoArgs,));
 
     def transformCodePass2_EffectiveHCR_EL2_NVx(self, oNode, oInfo): # pylint: disable=invalid-name
         """ Pass 2: EffectiveHCR_EL2_NVx() -> helper call. """
         if len(oNode.aoArgs) == 0:
             oInfo.cCallsToIsFeatureImplemented += 1;
-            return ArmAstCppExpr('iemGetEffHcrEl2NVx(pVCpu, pGstFeats)', 3);
+            return ArmAstCppExpr('iemGetEffHcrEl2NVx(pVCpu, pGstFeats)', cBitsWidth = 3);
         raise Exception('Unexpected IsFeatureImplemented arguments: %s' % (oNode.aoArgs,));
 
 
@@ -1840,7 +1841,7 @@ class SysRegGeneratorBase(object):
             for oInfoEntry in aoInfoEntries:
                 fValue |= oInfoEntry.fValue << oInfoEntry.iFirstBit;
             sExpr += '%#x)' % (fValue, );
-            return ArmAstCppExpr(sExpr, iBit);
+            return ArmAstCppExpr(sExpr, cBitsWidth = iBit);
 
         return self.VBoxAstCppConcat(aoInfoEntries, oNode);
 
@@ -1893,14 +1894,14 @@ class SysRegGeneratorBase(object):
                         if fWildcard:
                             raise Exception('Wildcard value for single bit PSTATE field: %s (%s)' % (oNode.oLeft, oNode,));
                         if (oNode.sOp == '==' and fValue == 1) or (oNode.sOp == '!=' and fValue == 0):
-                            return ArmAstCppExpr(sExpr, 1);
+                            return ArmAstCppExpr(sExpr, cBitsWidth = 1);
                         if (oNode.sOp == '==' and fValue == 0) or (oNode.sOp == '!=' and fValue == 1):
-                            return ArmAstUnaryOp('!', ArmAstCppExpr(sExpr, 1));
+                            return ArmAstUnaryOp('!', ArmAstCppExpr(sExpr, cBitsWidth = 1));
                     elif fWildcard == 0:
                         raise Exception('Handle wildcard value for PSTATE field: %s (%s)' % (oNode.oLeft, oNode,));
                     if tInfo[1] != 0:
                         sExpr = '(%s >> %u)' % (sExpr, tInfo[1],);
-                    oNode.oLeft  = ArmAstCppExpr(sExpr, tInfo[1]);
+                    oNode.oLeft  = ArmAstCppExpr(sExpr, cBitsWidth = tInfo[1]);
                     oNode.oRight = ArmAstInteger(fValue, cBitsWidth);
                     return oNode;
         raise Exception('Unexpected dot-atom + value binary op: %s' % (oNode,));
@@ -1931,6 +1932,26 @@ class SysRegGeneratorBase(object):
         assert False, str(oNode);
         return oNode;
 
+
+    class VBoxAstCppField(ArmAstCppExpr):
+        """ For converted ArmAstField so we optimize them later when processing
+        an ArmAstBinaryOp or ArmAstUnaryOp parent node. """
+        def __init__(self, sExpr, cBitsWidth, sNoShiftExpr = None, cBitsWidthNoShift = None):
+            ArmAstCppExpr.__init__(self, sExpr, cBitsWidth);
+            self.sNoShiftExpr      = sNoShiftExpr;
+            self.cBitsWidthNoShift = cBitsWidthNoShift;
+
+        def dropShift(self):
+            if self.sNoShiftExpr:
+                self.sExpr      = self.sNoShiftExpr;
+                self.cBitsWidth = self.cBitsWidthNoShift;
+            return self;
+
+        def dropExtraParenthesis(self):
+            if self.sExpr[0] == '(' and self.sExpr[-1] == ')':
+                self.sExpr = self.sExpr[1:-1];
+            return self;
+
     def transformCodePass2_Field(self, oNode): # (ArmAstField) -> ArmAstBase
         """ Pass2: Deal with field accesses (except for AST.Concat). """
         (_, oField, oCpumCtx) = self.lookupRegisterField(oNode.sState, oNode.sName, oNode.sField, 'Generic field',
@@ -1947,11 +1968,15 @@ class SysRegGeneratorBase(object):
             iValue &= (1 << cBitsWidth) - 1;
             return ArmAstInteger(iValue, cBitsWidth); ## @todo annotate
 
-        sExpr = '(pVCpu->cpum.GstCtx.%s & UINT%u_C(%#x)/*%s*/)' \
-              % (oCpumCtx, 64 if cBitsWidth >= 32 else 32, ((1 << cBitsWidth) - 1) << iFirstBit, oField.sName);
-        if iFirstBit != 0:
-            sExpr = '((%s) >> %u)' % (sExpr, iFirstBit,);
-        return ArmAstCppExpr(sExpr, cBitsWidth);
+        if cBitsWidth == 1:
+            sExpr = '(pVCpu->cpum.GstCtx.%s & RT_BIT_%u(%d)/*%s*/)' \
+                  % (oCpumCtx, 64 if cBitsWidth >= 32 else 32, iFirstBit, oField.sName);
+        else:
+            sExpr = '(pVCpu->cpum.GstCtx.%s & UINT%u_C(%#x)/*%s*/)' \
+                  % (oCpumCtx, 64 if cBitsWidth >= 32 else 32, ((1 << cBitsWidth) - 1) << iFirstBit, oField.sName);
+        if iFirstBit == 0:
+            return self.VBoxAstCppField(sExpr, cBitsWidth);
+        return self.VBoxAstCppField('((%s) >> %u)' % (sExpr, iFirstBit,), cBitsWidth, sExpr, cBitsWidth + iFirstBit);
 
     def transformCodePass2_Identifier(self, oNode, oInfo): # type: (ArmAstIdentifier, SysRegAccessorInfo) -> ArmAstBase
         """ Pass2: Deal with register identifiers during assignments. """
@@ -1970,7 +1995,7 @@ class SysRegGeneratorBase(object):
 
         if isinstance(tCpumCtxInfo[0], int):
             return ArmAstInteger(tCpumCtxInfo[0], 64);
-        return ArmAstCppExpr('pVCpu->cpum.GstCtx.%s' % (tCpumCtxInfo[0],), 64);
+        return ArmAstCppExpr('pVCpu->cpum.GstCtx.%s' % (tCpumCtxInfo[0],), cBitsWidth = 64);
 
 
     def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo, aoStack):
@@ -1978,7 +2003,7 @@ class SysRegGeneratorBase(object):
         if isinstance(oNode, ArmAstFunction):
             # Undefined() -> return iemRaiseUndefined(pVCpu);
             if oNode.isMatchingFunctionCall('Undefined'):
-                return ArmAstReturn(ArmAstCppExpr('iemRaiseUndefined(pVCpu)'));
+                return ArmAstReturn(ArmAstCppExpr('iemRaiseUndefined(pVCpu)', cBitsWidth = 32));
 
             # IsFeatureImplemented(FEAT_xxxx) -> pGstFeat->fXxxx:
             if oNode.sName == 'IsFeatureImplemented':
@@ -1993,8 +2018,8 @@ class SysRegGeneratorBase(object):
             if oNode.oLeft.isMatchingDotAtom('PSTATE', 'EL'):
                 idxEl = self.kdELxToNum.get(oNode.oRight.getIdentifierName(), -1);
                 if idxEl >= 0:
-                    oNode.oLeft  = ArmAstCppExpr('IEM_F_MODE_ARM_GET_EL(pVCpu->iem.s.fExec)');
-                    oNode.oRight = ArmAstInteger(idxEl, 2);
+                    oNode.oLeft  = ArmAstCppExpr('IEM_F_MODE_ARM_GET_EL(pVCpu->iem.s.fExec)', cBitsWidth = 2);
+                    oNode.oRight = ArmAstInteger(idxEl, cBitsWidth = 2);
                 return oNode;
 
             ## (AArch64.MDCR_EL2.TDE):(AArch64.MDCR_EL2.TDA) != '00' and similar:
@@ -2011,6 +2036,17 @@ class SysRegGeneratorBase(object):
             if oNode.sOp == 'IN':
                 return self.transformCodePass2_BinaryOp_InSet(oNode);
 
+            # Drop unnecessary field shifting when and compares for non-zero field checks.
+            if isinstance(oNode.oLeft, self.VBoxAstCppField):
+                if (   (oNode.sOp == '==' and oNode.oRight.isMatchingIntegerOrValue(1) and oNode.oLeft.cBitsWidth == 1)
+                    or (oNode.sOp == '!=' and oNode.oRight.isMatchingIntegerOrValue(0)) ):
+                    return oNode.oLeft.dropShift();
+                elif ArmAstBinaryOp.kdOps[oNode.sOp] == ArmAstBinaryOp.ksOpTypeLogical:
+                    oNode.oLeft = ArmAstCppExpr(oNode.oLeft.sNoShiftExpr, oNode.oLeft.cBitsWidthNoShift);
+            elif isinstance(oNode.oRight, self.VBoxAstCppField):
+                if ArmAstBinaryOp.kdOps[oNode.sOp] == ArmAstBinaryOp.ksOpTypeLogical:
+                    oNode.oRight = oNode.oRight.dropShift();
+
         elif isinstance(oNode, ArmAstConcat):
             return self.transformCodePass2_Concat(oNode);
 
@@ -2023,6 +2059,12 @@ class SysRegGeneratorBase(object):
               and aoStack
               and isinstance(aoStack[-1], ArmAstAssignment)):
             return self.transformCodePass2_Identifier(oNode, oInfo);
+
+        elif isinstance(oNode, ArmAstIfList):
+            # Drop double parentheses around field extraction expressions when they are the sole if condition.
+            for idxIfCond, oIfCond in enumerate(oNode.aoIfConditions):
+                if isinstance(oIfCond, self.VBoxAstCppField):
+                    oNode.aoIfConditions[idxIfCond] = oIfCond.dropExtraParenthesis();
 
         _ = fEliminationAllowed;
         return oNode;
@@ -2140,7 +2182,7 @@ class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
     def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo, aoStack):
         """ Callback used by the second pass."""
         if oNode.isMatchingSquareOp('X', 't', 64):
-            return ArmAstCppExpr('*puDst', 64);
+            return ArmAstCppExpr('*puDst', cBitsWidth = 64);
 
         return super().transformCodePass2Callback(oNode, fEliminationAllowed, oInfo, aoStack);
 

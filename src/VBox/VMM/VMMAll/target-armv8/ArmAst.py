@@ -369,6 +369,20 @@ class ArmAstBase(object):
         # This is overridden by ArmAstInteger.
         return None;
 
+    def isMatchingIntegerOrValue(self, iValue):
+        """ Checks if this is an integer or a fixed value node with the given value. """
+        # This is overridden by ArmAstInteger and ArmAstValue.
+        _ = iValue;
+        return False;
+
+    def getIntegerOrValue(self):
+        """
+        Return the value of an integer or value node, otherwise return None
+        In the ArmAstValue case, None is returned if any wildcard is used.
+        """
+        # This is overridden by ArmAstInteger and ArmAstValue.
+        return None;
+
     def isMatchingSquareOp(self, sVar, *aoValueMatches):
         """
         Checks if this is a square op node with the given variable and values.
@@ -575,6 +589,38 @@ class ArmAstBinaryOp(ArmAstBase):
     def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
         return self._walker(fnCallback, oCallbackArg, fDepthFirst, self.oLeft, self.oRight);
 
+    @staticmethod
+    def _transformEnsureBool(oNode):
+        """
+        Tries to make sure the reduction of a logical expression to just one of
+        the operands (oNode) still results in a boolean.
+        """
+        if isinstance(oNode, ArmAstBool):
+            return oNode;
+        if isinstance(oNode, ArmAstBinaryOp):
+            if ArmAstBinaryOp.kdOps[oNode.sOp] in (ArmAstBinaryOp.ksOpTypeCompare, ArmAstBinaryOp.ksOpTypeLogical,
+                                                   ArmAstBinaryOp.ksOpTypeSet):
+                return oNode;
+        elif isinstance(oNode, ArmAstUnaryOp):
+            if ArmAstUnaryOp.kdOps[oNode.sOp] == ArmAstBinaryOp.ksOpTypeLogical:
+                return oNode;
+        elif isinstance(oNode, ArmAstFunction):
+            if (   oNode.sName.startswith('Is')   # ASSUMES 'Is' means predicates that return bool.
+                or oNode.sName.startswith('Have') # ASSUMES 'Have' means predicates that return bool.
+                or oNode.sName in ('ELIsInHost', 'EL2Enabled',) ):
+                return oNode;
+        elif isinstance(oNode, ArmAstCppExpr):
+            if oNode.cBitsWidth == 1:
+                return oNode;
+        else:
+            iIntValue = oNode.getIntegerOrValue();
+            if iIntValue is not None:
+                return ArmAstBool(iIntValue != 0);
+
+        # Just wrap it in double boolean negation for now.
+        return ArmAstUnaryOp('!', ArmAstUnaryOp('!', oNode));
+
+
     def transform(self, fnCallback, fEliminationAllowed, oCallbackArg, aoStack):
         # Recurse first.
         aoStack.append(self);
@@ -586,32 +632,63 @@ class ArmAstBinaryOp(ArmAstBase):
 
         if self.oLeft and self.oRight:
             if self.sOp == '||':
-                # Simplify 'true || x', 'x || true', 'false || x, 'x || false, and 'false || false'.
-                if self.oLeft.isBoolAndTrue():
-                    return self.oLeft;
-                if self.oRight.isBoolAndTrue(): # This is ASSUMING no function call sideeffects!
-                    return self.oRight;
-                if self.oLeft.isBoolAndFalse():
-                    return self.oRight;
-                if self.oRight.isBoolAndFalse():
-                    return self.oLeft;
+                # Simplify: 'true || x'; 'x || true'; '1 || x'; 'x || 34'
+                if self.oLeft.isBoolAndTrue() or self.oLeft.getIntegerOrValue() not in (None, 0):
+                    return ArmAstBool(True);
+                if self.oRight.isBoolAndTrue() or self.oRight.getIntegerOrValue() not in (None, 0):
+                    return ArmAstBool(True); # This is ASSUMING no function call sideeffects!
+                # Simplify: 'false || x; '0 || x; 'x || false'; '0 || false'; 'false || false'; '0 || 0'
+                if self.oLeft.isBoolAndFalse() or self.oLeft.isMatchingIntegerOrValue(0):
+                    if self.oRight.isBoolAndFalse() or self.oRight.isMatchingIntegerOrValue(0):
+                        return ArmAstBool(False);
+                    return fnCallback(self._transformEnsureBool(self.oRight), fEliminationAllowed, oCallbackArg, aoStack);
+                if self.oRight.isBoolAndFalse() or self.oRight.isMatchingIntegerOrValue(0):
+                    return fnCallback(self._transformEnsureBool(self.oLeft), fEliminationAllowed, oCallbackArg, aoStack);
 
             elif self.sOp == '&&':
-                if self.oLeft.isBoolAndFalse() or self.oRight.isBoolAndFalse():
+                if (   self.oLeft.isBoolAndFalse()
+                    or self.oLeft.isMatchingIntegerOrValue(0)
+                    or self.oRight.isBoolAndFalse()
+                    or self.oRight.isMatchingIntegerOrValue(0)):
                     if not fEliminationAllowed:
                         return fnCallback(ArmAstBool(False), fEliminationAllowed, oCallbackArg, aoStack);
                     return None;
-                if self.oLeft.isBoolAndTrue():
-                    return fnCallback(self.oRight, fEliminationAllowed, oCallbackArg, aoStack);
-                if self.oRight.isBoolAndTrue():
-                    return fnCallback(self.oLeft, fEliminationAllowed, oCallbackArg, aoStack);
+                if self.oLeft.isBoolAndTrue() or self.oLeft.getIntegerOrValue() not in (None, 0):
+                    return fnCallback(self._transformEnsureBool(self.oRight), fEliminationAllowed, oCallbackArg, aoStack);
+                if self.oRight.isBoolAndTrue() or self.oRight.getIntegerOrValue() not in (None, 0):
+                    return fnCallback(self._transformEnsureBool(self.oLeft), fEliminationAllowed, oCallbackArg, aoStack);
+
+            else:
+                iLeft = self.oLeft.getIntegerOrValue();
+                if iLeft is None and isinstance(self.oLeft, ArmAstBool):
+                    iLeft = 1 if self.oLeft.fValue else 0;
+                if iLeft is not None:
+
+                    iRight = self.oRight.getIntegerOrValue();
+                    if iRight is None and isinstance(self.oRight, ArmAstBool):
+                        iRight = 1 if self.oRight.fValue else 0;
+                    if iRight is not None:
+                        if self.sOp == '==':
+                            return fnCallback(ArmAstBool(iLeft == iRight), fEliminationAllowed, oCallbackArg, aoStack);
+                        if self.sOp == '!=':
+                            return fnCallback(ArmAstBool(iLeft != iRight), fEliminationAllowed, oCallbackArg, aoStack);
+                        if self.sOp == '>':
+                            return fnCallback(ArmAstBool(iLeft >  iRight), fEliminationAllowed, oCallbackArg, aoStack);
+                        if self.sOp == '>=':
+                            return fnCallback(ArmAstBool(iLeft >= iRight), fEliminationAllowed, oCallbackArg, aoStack);
+                        if self.sOp == '<':
+                            return fnCallback(ArmAstBool(iLeft <  iRight), fEliminationAllowed, oCallbackArg, aoStack);
+                        if self.sOp == '<=':
+                            return fnCallback(ArmAstBool(iLeft <= iRight), fEliminationAllowed, oCallbackArg, aoStack);
+                        ## @todo we could do +, -, div, mod, mult here, but need to consider the width of the result...
+
             return fnCallback(self, fEliminationAllowed, oCallbackArg, aoStack);
 
         if self.sOp == '||':
-            if self.oLeft:
-                return self.oLeft;
-            if self.oRight:
-                return self.oRight;
+            if self.oLeft and not self.oLeft.isMatchingIntegerOrValue(0):
+                return fnCallback(self._transformEnsureBool(self.oLeft), fEliminationAllowed, oCallbackArg, aoStack);
+            if self.oRight and not self.oRight.isMatchingIntegerOrValue(0):
+                return fnCallback(self._transformEnsureBool(self.oRight), fEliminationAllowed, oCallbackArg, aoStack);
         else:
             assert self.sOp == '&&';
         return fnCallback(ArmAstBool(False), fEliminationAllowed, oCallbackArg, aoStack) if not fEliminationAllowed else None;
@@ -1247,6 +1324,12 @@ class ArmAstInteger(ArmAstLeafBase):
     def getIntegerValue(self):
         return self.iValue;
 
+    def isMatchingIntegerOrValue(self, iValue):
+        return self.iValue == iValue;
+
+    def getIntegerOrValue(self):
+        return self.iValue;
+
     def getValueDetails(self):
         """
         For compatibility with ArmAstValue.
@@ -1311,6 +1394,14 @@ class ArmAstValue(ArmAstLeafBase):
         _ = oHelper;
         (_, _, _, cBitsWidth) = ArmAstValue.parseValue(self.sValue, 0);
         return cBitsWidth;
+
+    def isMatchingIntegerOrValue(self, iValue):
+        (fValue, _, fWildcard, _) = ArmAstValue.parseValue(self.sValue, 0);
+        return fValue == iValue and fWildcard == 0;
+
+    def getIntegerOrValue(self):
+        (fValue, _, fWildcard, _) = ArmAstValue.parseValue(self.sValue, 0);
+        return fValue if fWildcard == 0 else None;
 
     def getValueDetails(self):
         """
