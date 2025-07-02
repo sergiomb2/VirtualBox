@@ -2578,6 +2578,9 @@ static int dxbcCreateIOSGNBlob(DXShaderInfo const *pInfo, DXBCHeader *pHdr, uint
         dst->enmComponentType = srcEntry->componentType;
         dst->idxRegister      = srcEntry->registerIndex;
         dst->u.mask           = srcEntry->mask;
+        /* Set 'Used' mask equal to 'Mask'. Dxvk needs this. */
+        if (dst->u.m.mask2 == 0)
+            dst->u.m.mask2 = dst->u.m.mask;
 
         Log6(("  [%u]: %s[%u] sv %u type %u reg %u mask %X\n",
               iSignatureEntry, srcSemantic->pcszSemanticName, dst->idxSemantic,
