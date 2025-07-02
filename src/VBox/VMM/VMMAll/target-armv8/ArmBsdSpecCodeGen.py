@@ -1275,6 +1275,7 @@ class SysRegAccessorInfo(object):
         self.cCallsToIsFeatureImplemented = 0;
         self.cInstructionReferences       = 0;
         self.cInstrEssenceRefs            = 0;  # References to uInstrEssence (idSysReg + idGprReg + direction)
+        self.cAssignmentsWithUnresolvedRegs = 0;  # Number of unresolved system register assignment reference.
         ## This is updated by morphCodeToC() and will be zero the code is ready for compilation.
         self.cIncompleteNodes             = -1;
 
@@ -1284,11 +1285,13 @@ class SysRegGeneratorBase(object):
 
     kdELxToNum = { 'EL0': 0, 'EL1': 1, 'EL2': 2, 'EL3': 3, }
 
-    def __init__(self, sInstr):
+    def __init__(self, sInstr, sFuncPrefix):
         self.sInstr         = sInstr;
+        self.sFuncPrefix    = sFuncPrefix;
         self.aoInfo         = []        # type: List[SysRegAccessorInfo]
         self.cComplete      = 0;
         self.cIncomplete    = 0;
+        self.cUnresolvedRegs = 0;       # Number of info items with unresolved registers.
 
     def generateOneHandler(self, oInfo):
         return [ '', '/// @todo %s / %s' % (self.sInstr, oInfo.sEnc,) ];
@@ -2021,19 +2024,60 @@ class SysRegGeneratorBase(object):
                     return (off, cBits);
         raise Exception('Bogus NVMem access: %s' % (oNode,));
 
-    def transformCodePass2_NVMemRead(self, oNode):
+    #def transformCodePass2_NVMemRead(self, oNode):
+    #    """ Pass 2: Translate NVMem[off[,bits]] to function call. """
+    #    (off, cBits) = self.transformCodePass2_ParseNVMem(oNode);
+    #    return ArmAstCppExpr('iemNVMemReadU%u(%#x)' % (cBits, off,), cBitsWidth = cBits);
+
+    def transformCodePass2_AssignFromNVMem(self, oNode):
         """ Pass 2: Translate NVMem[off[,bits]] to function call. """
-        (off, cBits) = self.transformCodePass2_ParseNVMem(oNode);
-        return ArmAstCppExpr('iemNVMemReadU%u(%#x)' % (cBits, off,), cBitsWidth = cBits);
+        (off, cBits) = self.transformCodePass2_ParseNVMem(oNode.oValue);
+
+        # Assume the variable receiving the assignment is *puDst or similar:
+        sValuePtr = oNode.oVar.toString();
+        if sValuePtr[0] != '*':
+            return oNode;
+        sValuePtr = sValuePtr[1:];
+
+        return ArmAstReturn(ArmAstCppExpr('iemNVMemReadU%u(pVCpu, %#x, %s)' % (cBits, off, sValuePtr,), cBitsWidth = 32));
 
     def transformCodePass2_AssignToNVMem(self, oNode):
         """ Pass 2: Translate NVMem[off[,bits]] to function call. """
         (off, cBits) = self.transformCodePass2_ParseNVMem(oNode.oVar);
-        sCall  = 'iemNVMemWriteU%u(%#x, ' % (cBits, off,);
+        sCall  = 'iemNVMemWriteU%u(pVCpu, %#x, ' % (cBits, off,);
         sValue = oNode.oValue.toStringEx(sLang = 'C');
         if '\n' in sValue:
-            sValue = sValue.replace('\n', '\n' + ' ' * len(sCall));
-        return ArmAstCppStmt(sValue + sCall);
+            sValue = sValue.replace('\n', '\n' + ' ' * (len(sCall) + len('return ')));
+        return ArmAstReturn(ArmAstCppExpr(sCall + sValue + ')', cBitsWidth = 32));
+
+    def transformCodePass2_AssignFromUnresolvedReg(self, oNode, oInfo): # pylint: disable=invalid-name
+        """ Pass 2: Assignment with a unresolved register on the right side. """
+        # Assume the variable receiving the assignment is *puDst or similar:
+        sValuePtr = oNode.oVar.toString();
+        if sValuePtr[0] != '*':
+            return oNode;
+        sValuePtr = sValuePtr[1:];
+
+        # The register should match the info one because we need it's ID.
+        if not oNode.oValue.isMatchingIdentifier(oInfo.oAccessor.oEncoding.sAsmValue):
+            return oNode;
+
+        oInfo.cAssignmentsWithUnresolvedRegs += 1;
+        return ArmAstReturn(ArmAstCppExpr('%s_novar(pVCpu, %s, "%s", %s)'
+                                          % (self.sFuncPrefix, oInfo.sEnc, oInfo.oAccessor.oEncoding.sAsmValue, sValuePtr,),
+                                          cBitsWidth = 32));
+
+    def transformCodePass2_AssignToUnresolvedReg(self, oNode, oInfo): # pylint: disable=invalid-name
+        """ Pass 2: Assignment to an unresolved register on the left side. """
+        # The register should match the info one because we need it's ID.
+        if not oNode.oVar.isMatchingIdentifier(oInfo.oAccessor.oEncoding.sAsmValue):
+            return oNode;
+
+        oInfo.cAssignmentsWithUnresolvedRegs += 1;
+        return ArmAstReturn(ArmAstCppExpr('%s_novar(pVCpu, %s, "%s", %s)'
+                                          % (self.sFuncPrefix, oInfo.sEnc, oInfo.oAccessor.oEncoding.sAsmValue,
+                                             oNode.oValue.toStringEx(sLang = 'C').replace('\n', '\n        '),), # ugly.
+                                          cBitsWidth = 32));
 
 
     def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo, aoStack):
@@ -2105,15 +2149,22 @@ class SysRegGeneratorBase(object):
                     oNode.aoIfConditions[idxIfCond] = oIfCond.dropExtraParenthesis();
 
         elif isinstance(oNode, ArmAstSquareOp):
-            # Translate NVMem[xxx[,128]] to function calls depending on context.
-            if (    oNode.oVar.isMatchingIdentifier('NVMem')
-                and (not aoStack or not isinstance(aoStack[-1], ArmAstAssignment) or aoStack[-1].oVar is not oNode)):
-                return self.transformCodePass2_NVMemRead(oNode);
+            ## Translate NVMem[xxx[,128]] to function calls depending on context.
+            #if (    oNode.oVar.isMatchingIdentifier('NVMem')
+            #    and (not aoStack or not isinstance(aoStack[-1], ArmAstAssignment) or aoStack[-1].oVar is not oNode)):
+            #    return self.transformCodePass2_NVMemRead(oNode);
+            pass;
 
         elif isinstance(oNode, ArmAstAssignment):
             if isinstance(oNode.oVar, ArmAstSquareOp):
                 if oNode.oVar.oVar.isMatchingIdentifier('NVMem'):
                     return self.transformCodePass2_AssignToNVMem(oNode);
+            elif isinstance(oNode.oValue, ArmAstSquareOp) and oNode.oValue.oVar.isMatchingIdentifier('NVMem'):
+                return self.transformCodePass2_AssignFromNVMem(oNode);
+            elif isinstance(oNode.oValue, ArmAstIdentifier):
+                return self.transformCodePass2_AssignFromUnresolvedReg(oNode, oInfo);
+            elif isinstance(oNode.oVar, ArmAstIdentifier):
+                return self.transformCodePass2_AssignToUnresolvedReg(oNode, oInfo);
 
         _ = fEliminationAllowed;
         return oNode;
@@ -2126,7 +2177,7 @@ class SysRegGeneratorBase(object):
 class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
 
     def __init__(self):
-        SysRegGeneratorBase.__init__(self, 'A64.MRS');
+        SysRegGeneratorBase.__init__(self, 'A64.MRS', 'iemCImplA64_mrs');
 
     def generateOneHandler(self, oInfo):
         """ Generates one register access for A64.MRS. """
@@ -2791,10 +2842,10 @@ class IEMArmGenerator(object):
         #
         dAccessors = {
             'A64.MRS':          SysRegGeneratorA64Mrs(),
-            'A64.MSRregister':  SysRegGeneratorBase('A64.MSRregister'),
-            'A64.MSRimmediate': SysRegGeneratorBase('A64.MSRimmediate'),
-            'A64.MRRS':         SysRegGeneratorBase('A64.MRRS'),
-            'A64.MSRRregister': SysRegGeneratorBase('A64.MSRRregister'),
+            'A64.MSRregister':  SysRegGeneratorBase('A64.MSRregister',  'iemCImplA64_msr'),
+            'A64.MSRimmediate': SysRegGeneratorBase('A64.MSRimmediate', 'iemCImplA64_msr_imm'),
+            'A64.MRRS':         SysRegGeneratorBase('A64.MRRS',         'iemCImplA64_mrrs'),
+            'A64.MSRRregister': SysRegGeneratorBase('A64.MSRRregister', 'iemCImplA64_msrr'),
         } # type: Dict[str,SysRegGeneratorBase]
 
         for oReg in spec.g_daoAllArmRegistersByState[sState]: # type: ArmRegister
@@ -2824,6 +2875,8 @@ class IEMArmGenerator(object):
                         oGenerator.cIncomplete += 1;
                     else:
                         oGenerator.cComplete   += 1;
+                    if oInfo.cAssignmentsWithUnresolvedRegs > 0:
+                        oGenerator.cUnresolvedRegs += 1;
 
         #
         # File header.
@@ -2856,7 +2909,7 @@ class IEMArmGenerator(object):
                 ' * %s' % (oGenerator.sInstr,),
                 ' *',
                 ' * %4u registers' % (len(oGenerator.aoInfo),),
-                ' * %4u completly'  % (oGenerator.cComplete,),
+                ' * %4u complete - %u with unresolved registers'  % (oGenerator.cComplete, oGenerator.cUnresolvedRegs,),
                 ' * %4u incomplete' % (oGenerator.cIncomplete,),
                 ' */',
             ];
