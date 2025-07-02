@@ -1627,6 +1627,20 @@ class SysRegGeneratorBase(object):
                 oField.sName = sField; # HACK ALERT!!
             return (oReg, oField, tCpumCtxInfo[0],);
 
+        # Try deal with multiple register views depending on context by check
+        # if the field being accessed has the same place in all contexts.
+        # CPTR_EL2.TCPAC is an example of this.
+        if (    len(aoFields) > 1
+            and not isinstance(oField.oParent, spec.ArmFieldsConditionalField)
+            and len(aoFields[0].aoRanges) == 1):
+            fSame = True;
+            for idxField in range(1, len(aoFields)):
+                fSame = (    fSame
+                         and len(aoFields[idxField].aoRanges) == 1
+                         and aoFields[idxField].aoRanges[0].isEqualTo(aoFields[0].aoRanges[0]));
+            if fSame:
+                aoFields = aoFields[:1];
+
         if len(aoFields) != 1 or isinstance(oField.oParent, spec.ArmFieldsConditionalField):
             oXcpt = Exception('%s: Ambigious register field in %s: %s (%s)'
                               % (sWhatFor, sRegisterName, sField,
