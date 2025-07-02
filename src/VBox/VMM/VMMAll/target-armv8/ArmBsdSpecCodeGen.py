@@ -60,6 +60,7 @@ from ArmAst import ArmAstReturn;
 from ArmAst import ArmAstSet;
 from ArmAst import ArmAstSquareOp;
 from ArmAst import ArmAstString;
+from ArmAst import ArmAstTypeAnnotation;
 from ArmAst import ArmAstUnaryOp;
 from ArmAst import ArmAstValue;
 import ArmBsdSpec as spec;
@@ -454,7 +455,7 @@ g_dSpecFeatToCpumFeat = {
 g_dRegToCpumCtx = {
     'AArch64.PMUSERENR_EL0':    ( 0, ), # Concat uses EN; we don't support it, so report zero.
     'AArch64.AMUSERENR_EL0':    ( 0, ), # We don't support this, so report zero.
-    'AArch64.CNTP_CTL_EL0':     ( 0, ), # We don't support this, so report zero.
+    'AArch64.CNTP_CTL_EL0':     ( 0, ), # We don't seem to support this, so report zero.
     'AArch64.GCSCRE0_EL1':      ( 0, ), # FEAT_GCS / ARMv9.4; we don't support this, returning zero for now.
     'AArch64.HCRX_EL2':         ( 0, ), # FEAT_HCX / ARMv8.7; we don't support this, returning zero for now.
     'AArch64.HDFGRTR_EL2':      ( 0, ), # FEAT_FGT / ARMv8.6; we don't support this, returning zero for now.
@@ -1302,6 +1303,9 @@ class SysRegGeneratorBase(object):
     def isA64Instruction(self):
         return self.sInstr.startswith('A64');
 
+    def getRegStateName(self):
+        return 'AArch64' if self.isA64Instruction() else 'AArch32';
+
     def checkCConversionCallback(self, oNode, oInfo):
         """ Walker callback used by morphCodeToC() to look for nodes that aren't suitable for C. """
         if isinstance(oNode, ArmAstBinaryOp):
@@ -1410,18 +1414,51 @@ class SysRegGeneratorBase(object):
                 return ArmAstBool(True);
         raise Exception('Unexpected: %s' % (oNode.toString(),));
 
-    kaoImpDefBoolRetTrue = (
-        re.compile('^ID_AA64.+ trapped by HCR_EL2\\..*$'),  # e.g. ID_AA64ISAR2_EL1 trapped by HCR_EL2.TID3
+    kasImpDefBoolRetTrue = (
     );
+    kaoReImpDefBoolRetTrue = (
+        re.compile('^ID_.+ trapped by HCR_EL2\\..*$'),  # e.g. ID_AA64ISAR2_EL1 trapped by HCR_EL2.TID3
+    );
+    kasImpDefBoolRetFalse = (
+        'Trapped by MDCR_EL2.TDOSA',                    # Play it safe and don't trap.
+        'IMPLEMENTED_ACTLR_ELx accessor behavior',      # We don't have ACTLR_EL2 or ACTLRMASK_EL2, so False suits us best here.
+    );
+    kaoReImpDefBoolRetFalse= (
+    );
+
     def transformCodePass1_ImpDefBool(self, oNode):
         """ Pass 1: ImpDefBool("blah blah"). """
         if len(oNode.aoArgs) == 1 and isinstance(oNode.aoArgs[0], ArmAstString):
             sValue = oNode.aoArgs[0].sValue;
-            for oRe in self.kaoImpDefBoolRetTrue:
+            # Exact matches.
+            for sCandidate in self.kasImpDefBoolRetTrue:
+                if sValue == sCandidate:
+                    return ArmAstBool(True);
+            for sCandidate in self.kasImpDefBoolRetFalse:
+                if sValue == sCandidate:
+                    return ArmAstBool(False);
+            # Regular expression matches.
+            for oRe in self.kaoReImpDefBoolRetTrue:
                 if oRe.match(sValue):
                     return ArmAstBool(True);
+            for oRe in self.kaoReImpDefBoolRetFalse:
+                if oRe.match(sValue):
+                    return ArmAstBool(False);
             return oNode;
         raise Exception('Unexpected: %s' % (oNode.toString(),));
+
+    def transformCodePass1_TypeAnnotation(self, oNode, oInfo):
+        """ Pass 1: REG_NAME = (bits(0x40)) UNKNOWN; Implementation specific behavior. """
+        cBitsWidth = -1;
+        if oNode.oType.isMatchingFunctionCall('bits', int):
+            cBitsWidth = oNode.oType.aoArgs[0].getIntegerOrValue();
+            if cBitsWidth not in (32, 64):
+                raise Exception('Unexpected type width: %s' % (oNode.toString(),));
+
+        # For now, just return zero for all of these. If we need anything
+        # else, we can determin the context from oInfo.
+        _ = oInfo;
+        return ArmAstInteger(0, cBitsWidth);
 
     def transformCodePass1_AArch64_SystemAccessTrap(self, oNode, oInfo): # pylint: disable=invalid-name
         """ Pass 1: AArch64_SystemAccessTrap(EL2,0x18) and such. """
@@ -1579,8 +1616,12 @@ class SysRegGeneratorBase(object):
             if fWildcard == 0:
                 return ArmAstInteger(fValue, cBitsWidth);
 
+        elif isinstance(oNode, ArmAstTypeAnnotation):
+            if aoStack and isinstance(aoStack[-1], ArmAstAssignment):
+                # Typically these are 'REG_NAME = (bits(0x40)) UNKNOWN';
+                return self.transformCodePass1_TypeAnnotation(oNode, oInfo);
+
         _ = fEliminationAllowed;
-        _ = aoStack;
         return oNode;
 
     def transformCodePass1(self, oInfo, oCode):
@@ -2062,12 +2103,29 @@ class SysRegGeneratorBase(object):
         sValuePtr = sValuePtr[1:];
 
         # The register should match the info one because we need it's ID.
-        if not oNode.oValue.isMatchingIdentifier(oInfo.oAccessor.oEncoding.sAsmValue):
-            return oNode;
+        # Otherwise, we need to look it up and such...
+        sRegName = oNode.oValue.getIdentifierName();
+        if sRegName and oInfo.oAccessor.oEncoding.sAsmValue == sRegName:
+            sRegConst = oInfo.sEnc
+        else:
+            sRegConst = None;
+            if sRegName:
+                oReg = spec.g_ddoAllArmRegistersByStateByName[self.getRegStateName()].get(sRegName); # ArmRegister
+                if oReg:
+                    for oAccessor in oReg.aoAccessors: # ArmAccessorBase
+                        if isinstance(oAccessor, spec.ArmAccessorSystem):
+                            if oAccessor.oEncoding.sAsmValue == oNode.oValue.sName:
+                                try:
+                                    sRegConst = oAccessor.oEncoding.getSysRegIdCreate();
+                                except Exception:
+                                    pass;
+                                else:
+                                    break;
+            if not sRegConst:
+                return oNode;
 
         oInfo.cAssignmentsWithUnresolvedRegs += 1;
-        return ArmAstReturn(ArmAstCppExpr('%s_novar(pVCpu, %s, "%s", %s)'
-                                          % (self.sFuncPrefix, oInfo.sEnc, oInfo.oAccessor.oEncoding.sAsmValue, sValuePtr,),
+        return ArmAstReturn(ArmAstCppExpr('%s_novar(pVCpu, %s, "%s", %s)' % (self.sFuncPrefix, sRegConst, sRegName, sValuePtr,),
                                           cBitsWidth = 32));
 
     def transformCodePass2_AssignToUnresolvedReg(self, oNode, oInfo): # pylint: disable=invalid-name
