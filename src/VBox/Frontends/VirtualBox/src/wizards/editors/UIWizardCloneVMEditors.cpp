@@ -335,7 +335,7 @@ void UICloneVMAdditionalOptionsEditor::prepare()
 void UICloneVMAdditionalOptionsEditor::sltRetranslateUI()
 {
     m_pMACComboBoxLabel->setText(UIWizardCloneVM::tr("MAC Address P&olicy:"));
-    m_pMACComboBox->setToolTip(UIWizardCloneVM::tr("Determines MAC address policy for clonning:"));
+    m_pMACComboBox->setToolTip(UIWizardCloneVM::tr("Determines MAC address policy for clonning."));
     for (int i = 0; i < m_pMACComboBox->count(); ++i)
     {
         const MACAddressClonePolicy enmPolicy = m_pMACComboBox->itemData(i).value<MACAddressClonePolicy>();
