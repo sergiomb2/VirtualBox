@@ -191,7 +191,9 @@ VBox-DxVkNativeUtil_SOURCES        = \
 	src/dxso/dxso_tables.cpp \
 	src/dxso/dxso_util.cpp \
 	src/wsi/wsi_edid.cpp \
+	src/wsi/wsi_platform.cpp \
 	src/wsi/headless/wsi_monitor_headless.cpp \
+	src/wsi/headless/wsi_platform_headless.cpp \
 	src/wsi/headless/wsi_window_headless.cpp
 
 #
@@ -225,14 +227,16 @@ ifneq ($(KBUILD_TARGET),win)
  	$(VBOX_PATH_DXVK)/include/native/directx
 endif
 VBox-DxVkNativeDxVk_SOURCES        = \
+	src/dxvk/dxvk_access.cpp \
 	src/dxvk/dxvk_adapter.cpp \
+	src/dxvk/dxvk_allocator.cpp \
 	src/dxvk/dxvk_barrier.cpp \
 	src/dxvk/dxvk_buffer.cpp \
 	src/dxvk/dxvk_cmdlist.cpp \
 	src/dxvk/dxvk_compute.cpp \
+	src/dxvk/dxvk_constant_state.cpp \
 	src/dxvk/dxvk_context.cpp \
 	src/dxvk/dxvk_cs.cpp \
-	src/dxvk/dxvk_data.cpp \
 	src/dxvk/dxvk_descriptor.cpp \
 	src/dxvk/dxvk_device.cpp \
 	src/dxvk/dxvk_device_filter.cpp \
@@ -244,21 +248,22 @@ VBox-DxVkNativeDxVk_SOURCES        = \
 	src/dxvk/dxvk_gpu_query.cpp \
 	src/dxvk/dxvk_graphics.cpp \
 	src/dxvk/dxvk_image.cpp \
+	src/dxvk/dxvk_implicit_resolve.cpp \
 	src/dxvk/dxvk_instance.cpp \
-	src/dxvk/dxvk_lifetime.cpp \
+	src/dxvk/dxvk_latency_builtin.cpp \
+	src/dxvk/dxvk_latency_reflex.cpp \
 	src/dxvk/dxvk_memory.cpp \
 	src/dxvk/dxvk_meta_blit.cpp \
 	src/dxvk/dxvk_meta_clear.cpp \
 	src/dxvk/dxvk_meta_copy.cpp \
 	src/dxvk/dxvk_meta_mipgen.cpp \
-	src/dxvk/dxvk_meta_pack.cpp \
 	src/dxvk/dxvk_meta_resolve.cpp \
 	src/dxvk/dxvk_options.cpp \
 	src/dxvk/dxvk_pipelayout.cpp \
 	src/dxvk/dxvk_pipemanager.cpp \
+	src/dxvk/dxvk_platform_exts.cpp \
 	src/dxvk/dxvk_presenter.cpp \
 	src/dxvk/dxvk_queue.cpp \
-	src/dxvk/dxvk_resource.cpp \
 	src/dxvk/dxvk_sampler.cpp \
 	src/dxvk/dxvk_shader.cpp \
 	src/dxvk/dxvk_shader_key.cpp \
@@ -273,8 +278,7 @@ VBox-DxVkNativeDxVk_SOURCES        = \
 	src/dxvk/hud/dxvk_hud.cpp \
 	src/dxvk/hud/dxvk_hud_font.cpp \
 	src/dxvk/hud/dxvk_hud_item.cpp \
-	src/dxvk/hud/dxvk_hud_renderer.cpp \
-	src/dxvk/platform/dxvk_headless_exts.cpp
+	src/dxvk/hud/dxvk_hud_renderer.cpp
 ifdef VBOX_WITH_DXVK_VIDEO
  VBox-DxVkNativeDxVk_SOURCES       += \
  	src/dxvk/dxvk_video_decoder.cpp
@@ -282,7 +286,6 @@ endif
 VBox-DxVkNativeDxVk_VBOX_SHADERS := \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_clear_buffer_u.comp \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_clear_image2d_u.comp \
-	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_unpack_d32s8.comp \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_copy_buffer_image.comp \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_clear_image3d_u.comp \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_clear_image2d_f.comp \
@@ -290,24 +293,26 @@ VBox-DxVkNativeDxVk_VBOX_SHADERS := \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_clear_image2darr_u.comp \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_clear_image1darr_u.comp \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_clear_image1darr_f.comp \
-	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_unpack_d24s8.comp \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_clear_buffer_f.comp \
-	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_unpack_d24s8_as_d32s8.comp \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_clear_image1d_f.comp \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_clear_image1d_u.comp \
-	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_pack_d32s8.comp \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_clear_image3d_f.comp \
-	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_pack_d24s8.comp \
+	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_image_to_buffer_ds.comp \
+	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_image_to_buffer_f.comp \
 	\
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_fullscreen_geom.geom \
 	\
+	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_cursor_vert.vert \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_present_vert.vert \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_fullscreen_vert.vert \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_fullscreen_layer_vert.vert \
 	\
+	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_buffer_to_image_d.frag \
+	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_buffer_to_image_ds_export.frag \
+	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_buffer_to_image_s_discard.frag \
+	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_cursor_frag.frag \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_present_frag_blit.frag \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_copy_depth_stencil_ms.frag \
-	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_resolve_frag_f_amd.frag \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_copy_color_2d.frag \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_blit_frag_1d.frag \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_dummy_frag.frag \
@@ -316,6 +321,7 @@ VBox-DxVkNativeDxVk_VBOX_SHADERS := \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_resolve_frag_i.frag \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_resolve_frag_d.frag \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_present_frag_ms_amd.frag \
+	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_present_frag_ms_blit.frag \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_copy_depth_stencil_2d.frag \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_resolve_frag_f.frag \
 	$(PATH_SUB_CURRENT)/src/dxvk/shaders/dxvk_blit_frag_2d.frag \
@@ -329,6 +335,11 @@ VBox-DxVkNativeDxVk_VBOX_SHADERS := \
 	$(PATH_SUB_CURRENT)/src/d3d11/shaders/d3d11_video_blit_vert.vert \
 	$(PATH_SUB_CURRENT)/src/d3d11/shaders/d3d11_video_blit_frag.frag \
 	\
+	$(PATH_SUB_CURRENT)/src/dxvk/hud/shaders/hud_chunk_frag_background.frag \
+	$(PATH_SUB_CURRENT)/src/dxvk/hud/shaders/hud_chunk_frag_visualize.frag \
+	$(PATH_SUB_CURRENT)/src/dxvk/hud/shaders/hud_chunk_vert_background.vert \
+	$(PATH_SUB_CURRENT)/src/dxvk/hud/shaders/hud_chunk_vert_visualize.vert \
+	$(PATH_SUB_CURRENT)/src/dxvk/hud/shaders/hud_frame_time_eval.comp \
 	$(PATH_SUB_CURRENT)/src/dxvk/hud/shaders/hud_graph_frag.frag \
 	$(PATH_SUB_CURRENT)/src/dxvk/hud/shaders/hud_graph_vert.vert \
 	$(PATH_SUB_CURRENT)/src/dxvk/hud/shaders/hud_text_frag.frag \

@@ -1,39 +1,31 @@
+#if defined(DXVK_WSI_HEADLESS)
+
 #include "../wsi_monitor.h"
 
-#include <windows.h>
-
-#if defined(VBOX) && defined(_WIN32)
-#include "native/wsi/native_wsi.h"
-#else
-#include "wsi/native_wsi.h"
-#endif
+#include "wsi/native_headless.h"
 #include "wsi_platform_headless.h"
 
+#include "../../util/util_string.h"
 #include "../../util/log/log.h"
-
-#include <string>
-#include <sstream>
 
 namespace dxvk::wsi {
 
-  HMONITOR getDefaultMonitor() {
+  HMONITOR HeadlessWsiDriver::getDefaultMonitor() {
     return enumMonitors(0);
   }
 
 
-  HMONITOR enumMonitors(uint32_t index) {
+  HMONITOR HeadlessWsiDriver::enumMonitors(uint32_t index) {
     return isDisplayValid(int32_t(index))
       ? toHmonitor(index)
       : nullptr;
   }
 
-
-  HMONITOR enumMonitors(const LUID *adapterLUID[], uint32_t numLUIDs, uint32_t index) {
+  HMONITOR HeadlessWsiDriver::enumMonitors(const LUID *adapterLUID[], uint32_t numLUIDs, uint32_t index) {
     return enumMonitors(index);
   }
 
-
-  bool getDisplayName(
+  bool HeadlessWsiDriver::getDisplayName(
           HMONITOR         hMonitor,
           WCHAR            (&Name)[32]) {
     const int32_t displayId    = fromHmonitor(hMonitor);
@@ -53,7 +45,7 @@ namespace dxvk::wsi {
   }
 
 
-  bool getDesktopCoordinates(
+  bool HeadlessWsiDriver::getDesktopCoordinates(
           HMONITOR         hMonitor,
           RECT*            pRect) {
     const int32_t displayId    = fromHmonitor(hMonitor);
@@ -70,27 +62,11 @@ namespace dxvk::wsi {
   }
 
 
-  bool getDisplayMode(
-      HMONITOR hMonitor,
-      uint32_t ModeNumber,
-      WsiMode* pMode) {
-    const int32_t displayId = fromHmonitor(hMonitor);
-    if (!isDisplayValid(displayId))
-      return false;
-
-    pMode->width        = 1024;
-    pMode->height       = 1024;
-    pMode->refreshRate  = WsiRational{60 * 1000, 1000};
-    pMode->bitsPerPixel = 32;
-    pMode->interlaced   = false;
-    return true;
-  }
-
-
-  bool getCurrentDisplayMode(
-      HMONITOR hMonitor,
-      WsiMode* pMode) {
-    const int32_t displayId = fromHmonitor(hMonitor);
+  bool HeadlessWsiDriver::getDisplayMode(
+          HMONITOR         hMonitor,
+          uint32_t         ModeNumber,
+          WsiMode*         pMode) {
+    const int32_t displayId    = fromHmonitor(hMonitor);
 
     if (!isDisplayValid(displayId))
       return false;
@@ -104,9 +80,44 @@ namespace dxvk::wsi {
   }
 
 
-  std::vector<uint8_t> getMonitorEdid(HMONITOR hMonitor) {
+  bool HeadlessWsiDriver::getCurrentDisplayMode(
+          HMONITOR         hMonitor,
+          WsiMode*         pMode) {
+    const int32_t displayId    = fromHmonitor(hMonitor);
+
+    if (!isDisplayValid(displayId))
+      return false;
+
+    pMode->width        = 1024;
+    pMode->height       = 1024;
+    pMode->refreshRate  = WsiRational{60 * 1000, 1000};
+    pMode->bitsPerPixel = 32;
+    pMode->interlaced   = false;
+    return true;
+  }
+
+
+  bool HeadlessWsiDriver::getDesktopDisplayMode(
+          HMONITOR         hMonitor,
+          WsiMode*         pMode) {
+    const int32_t displayId    = fromHmonitor(hMonitor);
+
+    if (!isDisplayValid(displayId))
+      return false;
+
+    pMode->width        = 1024;
+    pMode->height       = 1024;
+    pMode->refreshRate  = WsiRational{60 * 1000, 1000};
+    pMode->bitsPerPixel = 32;
+    pMode->interlaced   = false;
+    return true;
+  }
+
+  std::vector<uint8_t> HeadlessWsiDriver::getMonitorEdid(HMONITOR hMonitor) {
     Logger::err("getMonitorEdid not implemented on this platform.");
     return {};
   }
 
 }
+
+#endif

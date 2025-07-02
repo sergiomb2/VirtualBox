@@ -1,5 +1,7 @@
 #pragma once
 
+#include <queue>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "spirv_code_buffer.h"
@@ -59,7 +61,7 @@ namespace dxvk {
 
     ~SpirvModule();
     
-    SpirvCodeBuffer compile() const;
+    SpirvCodeBuffer compile();
 
     size_t getInsertionPtr() {
       return m_code.getInsertionPtr();
@@ -880,7 +882,7 @@ namespace dxvk {
             uint32_t                vector1,
             uint32_t                vector2);
     
-    uint32_t opFOrdNotEqual(
+    uint32_t opFUnordNotEqual(
             uint32_t                resultType,
             uint32_t                vector1,
             uint32_t                vector2);
@@ -1275,6 +1277,10 @@ namespace dxvk {
 
     void opEndInvocationInterlock();
 
+    uint32_t opSinCos(
+            uint32_t                x,
+            bool                    useBuiltIn);
+
   private:
     
     uint32_t m_version;
@@ -1325,6 +1331,19 @@ namespace dxvk {
 
     bool isInterfaceVar(
             spv::StorageClass       sclass) const;
+
+    void classifyBlocks(
+            std::unordered_set<uint32_t>& reachableBlocks,
+            std::unordered_set<uint32_t>& mergeBlocks);
+
+    static constexpr double sincosTaylorFactor(uint32_t power) {
+      double result = 1.0;
+
+      for (uint32_t i = 1; i <= power; i++)
+        result *= pi * 0.25f / double(i);
+
+      return result;
+    }
 
   };
   

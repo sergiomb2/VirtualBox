@@ -15,7 +15,7 @@ namespace dxvk {
   }
   
   
-  SpirvCodeBuffer SpirvModule::compile() const {
+  SpirvCodeBuffer SpirvModule::compile() {
     SpirvCodeBuffer result;
     result.putHeader(m_version, m_id);
     result.append(m_capabilities);
@@ -28,7 +28,35 @@ namespace dxvk {
     result.append(m_annotations);
     result.append(m_typeConstDefs);
     result.append(m_variables);
-    result.append(m_code);
+
+    // Perform some crude dead code elimination. In some cases, our compilers
+    // may emit invalid code, such as an unreachable block branching to a loop's
+    // continue block, but those cases cannot be reasonably detected up-front.
+    std::unordered_set<uint32_t> reachableBlocks;
+    std::unordered_set<uint32_t> mergeBlocks;
+
+    classifyBlocks(reachableBlocks, mergeBlocks);
+
+    bool reachable = true;
+
+    for (auto ins : m_code) {
+      if (ins.opCode() == spv::OpFunctionEnd) {
+        reachable = true;
+        result.append(ins);
+      } else if (ins.opCode() == spv::OpLabel) {
+        uint32_t labelId = ins.arg(1);
+
+        if ((reachable = reachableBlocks.find(labelId) != reachableBlocks.end())) {
+          result.append(ins);
+        } else if (mergeBlocks.find(labelId) != mergeBlocks.end()) {
+          result.append(ins);
+          result.putIns(spv::OpUnreachable, 1);
+        }
+      } else if (reachable) {
+        result.append(ins);
+      }
+    }
+
     return result;
   }
   
@@ -2466,13 +2494,13 @@ namespace dxvk {
   }
   
   
-  uint32_t SpirvModule::opFOrdNotEqual(
+  uint32_t SpirvModule::opFUnordNotEqual(
           uint32_t                resultType,
           uint32_t                vector1,
           uint32_t                vector2) {
     uint32_t resultId = this->allocateId();
     
-    m_code.putIns (spv::OpFOrdNotEqual, 5);
+    m_code.putIns (spv::OpFUnordNotEqual, 5);
     m_code.putWord(resultType);
     m_code.putWord(resultId);
     m_code.putWord(vector1);
@@ -3734,6 +3762,81 @@ namespace dxvk {
   }
 
 
+  uint32_t SpirvModule::opSinCos(
+          uint32_t                x,
+          bool                    useBuiltIn) {
+    // We only operate on 32-bit floats here
+    uint32_t floatType = defFloatType(32);
+    uint32_t resultType = defVectorType(floatType, 2u);
+
+    if (useBuiltIn) {
+      std::array<uint32_t, 2> members = { opSin(floatType, x), opCos(floatType, x) };
+      return opCompositeConstruct(resultType, members.size(), members.data());
+    } else {
+      uint32_t uintType = defIntType(32, false);
+      uint32_t sintType = defIntType(32, true);
+      uint32_t boolType = defBoolType();
+
+      // Normalize input to multiple of pi/4
+      uint32_t xNorm = opFMul(floatType, opFAbs(floatType, x), constf32(4.0 / pi));
+
+      uint32_t xTrunc = opTrunc(floatType, xNorm);
+      uint32_t xFract = opFSub(floatType, xNorm, xTrunc);
+
+      uint32_t xInt = opConvertFtoU(uintType, xTrunc);
+
+      // Mirror input along x axis as necessary
+      uint32_t mirror = opINotEqual(boolType, opBitwiseAnd(uintType, xInt, constu32(1u)), constu32(0u));
+      xFract = opSelect(floatType, mirror, opFSub(floatType, constf32(1.0f), xFract), xFract);
+
+      // Compute taylor series for fractional part
+      uint32_t xFract_2 = opFMul(floatType, xFract, xFract);
+      uint32_t xFract_4 = opFMul(floatType, xFract_2, xFract_2);
+      uint32_t xFract_6 = opFMul(floatType, xFract_4, xFract_2);
+
+      uint32_t taylor = opFMul(floatType, xFract_6, constf32(-sincosTaylorFactor(7)));
+      decorate(taylor, spv::DecorationNoContraction);
+
+      taylor = opFFma(floatType, xFract_4, constf32(sincosTaylorFactor(5)), taylor);
+      decorate(taylor, spv::DecorationNoContraction);
+
+      taylor = opFFma(floatType, xFract_2, constf32(-sincosTaylorFactor(3)), taylor);
+      decorate(taylor, spv::DecorationNoContraction);
+
+      taylor = opFAdd(floatType, constf32(sincosTaylorFactor(1)), taylor);
+      decorate(taylor, spv::DecorationNoContraction);
+
+      taylor = opFMul(floatType, taylor, xFract);
+      decorate(taylor, spv::DecorationNoContraction);
+
+      // Compute co-function based on sin^2 + cos^2 = 1
+      uint32_t coFunc = opSqrt(floatType, opFSub(floatType, constf32(1.0f), opFMul(floatType, taylor, taylor)));
+
+      // Determine whether the taylor series was used for sine or cosine and assign the correct result
+      uint32_t funcIsSin = opIEqual(boolType, opBitwiseAnd(uintType, opIAdd(uintType, xInt, constu32(1u)), constu32(2u)), constu32(0u));
+
+      uint32_t sin = opSelect(floatType, funcIsSin, taylor, coFunc);
+      uint32_t cos = opSelect(floatType, funcIsSin, coFunc, taylor);
+
+      // Determine whether sine is negative. Interpret the input as a
+      // signed integer in order to propagate signed zeroes properly.
+      uint32_t inputNeg = opSLessThan(boolType, opBitcast(sintType, x), consti32(0));
+
+      uint32_t sinNeg = opINotEqual(boolType, opBitwiseAnd(uintType, xInt, constu32(4u)), constu32(0u));
+               sinNeg = opLogicalNotEqual(boolType, sinNeg, inputNeg);
+
+      // Determine whether cosine is negative
+      uint32_t cosNeg = opINotEqual(boolType, opBitwiseAnd(uintType, opIAdd(uintType, xInt, constu32(2u)), constu32(4u)), constu32(0u));
+
+      sin = opSelect(floatType, sinNeg, opFNegate(floatType, sin), sin);
+      cos = opSelect(floatType, cosNeg, opFNegate(floatType, cos), cos);
+
+      std::array<uint32_t, 2> members = { sin, cos };
+      return opCompositeConstruct(resultType, members.size(), members.data());
+    }
+  }
+
+
   uint32_t SpirvModule::defType(
           spv::Op                 op, 
           uint32_t                argCount,
@@ -3864,15 +3967,15 @@ namespace dxvk {
       
       if (op.flags & spv::ImageOperandsLodMask)
         m_code.putWord(op.sLod);
-      
-      if (op.flags & spv::ImageOperandsConstOffsetMask)
-        m_code.putWord(op.sConstOffset);
-      
+
       if (op.flags & spv::ImageOperandsGradMask) {
         m_code.putWord(op.sGradX);
         m_code.putWord(op.sGradY);
       }
-      
+
+      if (op.flags & spv::ImageOperandsConstOffsetMask)
+        m_code.putWord(op.sConstOffset);
+
       if (op.flags & spv::ImageOperandsOffsetMask)
         m_code.putWord(op.gOffset);
       
@@ -3902,6 +4005,80 @@ namespace dxvk {
     } else {
       // All global variables need to be declared
       return sclass != spv::StorageClassFunction;
+    }
+  }
+
+
+  void SpirvModule::classifyBlocks(
+          std::unordered_set<uint32_t>& reachableBlocks,
+          std::unordered_set<uint32_t>& mergeBlocks) {
+    std::unordered_multimap<uint32_t, uint32_t> branches;
+    std::queue<uint32_t> blockQueue;
+
+    uint32_t blockId = 0;
+
+    for (auto ins : m_code) {
+      switch (ins.opCode()) {
+        case spv::OpLabel: {
+          uint32_t id = ins.arg(1);
+
+          if (!blockId)
+            branches.insert({ 0u, id });
+
+          blockId = id;
+        } break;
+
+        case spv::OpFunction: {
+          blockId = 0u;
+        } break;
+
+        case spv::OpBranch: {
+          branches.insert({ blockId, ins.arg(1) });
+        } break;
+
+        case spv::OpBranchConditional: {
+          branches.insert({ blockId, ins.arg(2) });
+          branches.insert({ blockId, ins.arg(3) });
+        } break;
+
+        case spv::OpSwitch: {
+          branches.insert({ blockId, ins.arg(2) });
+
+          for (uint32_t i = 4; i < ins.length(); i += 2)
+            branches.insert({ blockId, ins.arg(i) });
+        } break;
+
+        case spv::OpSelectionMerge: {
+          mergeBlocks.insert(ins.arg(1));
+        } break;
+
+        case spv::OpLoopMerge: {
+          mergeBlocks.insert(ins.arg(1));
+
+          // It is possible for the continue block to be unreachable in
+          // practice, but we still need to emit it if we are not going
+          // to eliminate this loop. Since the current block dominates
+          // the loop, use it to keep the continue block intact.
+          branches.insert({ blockId, ins.arg(2) });
+        } break;
+
+        default:;
+      }
+    }
+
+    blockQueue.push(0);
+
+    while (!blockQueue.empty()) {
+      uint32_t id = blockQueue.front();
+
+      auto range = branches.equal_range(id);
+
+      for (auto i = range.first; i != range.second; i++) {
+        if (reachableBlocks.insert(i->second).second)
+          blockQueue.push(i->second);
+      }
+
+      blockQueue.pop();
     }
   }
 

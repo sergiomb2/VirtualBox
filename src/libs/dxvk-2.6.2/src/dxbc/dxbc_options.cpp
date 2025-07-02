@@ -17,9 +17,6 @@ namespace dxvk {
 
     useDepthClipWorkaround
       = !devFeatures.extDepthClipEnable.depthClipEnable;
-    useSubgroupOpsForAtomicCounters
-      = (devInfo.vk11.subgroupSupportedStages     & VK_SHADER_STAGE_COMPUTE_BIT)
-     && (devInfo.vk11.subgroupSupportedOperations & VK_SUBGROUP_FEATURE_BALLOT_BIT);
 
     VkFormatFeatureFlags2 r32Features
       = device->getFormatFeatures(VK_FORMAT_R32_SFLOAT).optimal
@@ -38,9 +35,24 @@ namespace dxvk {
     invariantPosition        = options.invariantPosition;
     zeroInitWorkgroupMemory  = options.zeroInitWorkgroupMemory;
     forceVolatileTgsmAccess  = options.forceVolatileTgsmAccess;
+    forceComputeUavBarriers  = options.forceComputeUavBarriers;
     disableMsaa              = options.disableMsaa;
     forceSampleRateShading   = options.forceSampleRateShading;
     enableSampleShadingInterlock = device->features().extFragmentShaderInterlock.fragmentShaderSampleInterlock;
+    supportsTightIcbPacking  = device->features().vk12.uniformBufferStandardLayout;
+
+    // Qcom just breaks for no reason if we export point size,
+    // even in an environment where doing so is required.
+    needsPointSizeExport = !device->features().khrMaintenance5.maintenance5
+                        && !device->adapter()->matchesDriver(VK_DRIVER_ID_QUALCOMM_PROPRIETARY);
+
+    // ANV up to mesa 25.0.2 breaks when we *don't* explicitly write point size
+    needsPointSizeExport |= device->adapter()->matchesDriver(VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA, Version(), Version(25, 0, 3));
+
+    // Intel's hardware sin/cos is so inaccurate that it causes rendering issues in some games
+    sincosEmulation = device->adapter()->matchesDriver(VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA)
+                   || device->adapter()->matchesDriver(VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS);
+    applyTristate(sincosEmulation, options.sincosEmulation);
 
     // Figure out float control flags to match D3D11 rules
     if (options.floatControls) {

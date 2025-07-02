@@ -22,6 +22,19 @@ namespace dxvk {
     int32_t customDeviceId;
     std::string customDeviceDesc;
 
+    /// Reports Nvidia GPUs running on the proprietary driver as a different
+    /// vendor (usually AMD)
+    bool hideNvidiaGpu;
+
+    /// Reports Nvidia GPUs running on NVK as a different vendor (usually AMD)
+    bool hideNvkGpu;
+
+    /// Reports AMD GPUs as a different vendor (usually Nvidia)
+    bool hideAmdGpu;
+
+    /// Reports Intel GPUs as a different vendor (usually AMD)
+    bool hideIntelGpu;
+
     /// Present interval. Overrides the value
     /// in D3DPRESENT_PARAMS used in swapchain present.
     int32_t presentInterval;
@@ -34,7 +47,7 @@ namespace dxvk {
     int32_t maxFrameRate;
 
     /// Set the max shader model the device can support in the caps.
-    int32_t shaderModel;
+    uint32_t shaderModel;
 
     /// Whether or not to set the process as DPI aware in Windows when the API interface is created.
     bool dpiAware;
@@ -49,10 +62,6 @@ namespace dxvk {
 
     /// Whether or not to do a fast path clear if we're close enough to the whole render target.
     bool lenientClear;
-
-    /// Back buffer count for the Vulkan swap chain.
-    /// Overrides buffer count in present parameters.
-    int32_t numBackBuffers;
 
     /// Defer surface creation
     bool deferSurfaceCreation;
@@ -78,9 +87,6 @@ namespace dxvk {
     /// Support X4R4G4B4
     bool supportX4R4G4B4;
 
-    /// Support D32
-    bool supportD32;
-
     /// Use D32f for D24
     bool useD32forD24;
 
@@ -97,14 +103,8 @@ namespace dxvk {
     /// failing resource allocation.
     bool memoryTrackTest;
 
-    /// Support VCACHE query
-    bool supportVCache;
-
     /// Forced aspect ratio, disable other modes
     std::string forceAspectRatio;
-
-    /// Enable dialog mode (ie. no exclusive fullscreen)
-    bool enableDialogMode;
 
     /// Always use a spec constant to determine sampler type (instead of just in PS 1.x)
     /// Works around a game bug in Halo CE where it gives cube textures to 2d/volume samplers
@@ -118,11 +118,6 @@ namespace dxvk {
 
     /// Enumerate adapters by displays
     bool enumerateByDisplays;
-
-    /// Should we make our Mads a FFma or do it the long way with an FMul and an FAdd?
-    /// This solves some rendering bugs in games that have z-pass shaders which
-    /// don't match entirely to the regular vertex shader in this way.
-    bool longMad;
 
     /// Cached dynamic buffers: Maps all buffers in cached memory.
     bool cachedDynamicBuffers;
@@ -155,6 +150,20 @@ namespace dxvk {
 
     /// Disable counting losable resources and rejecting calls to Reset() if any are still alive
     bool countLosableResources;
+
+    /// Ensure that for the same D3D commands the output VK commands
+    /// don't change between runs. Useful for comparative benchmarking,
+    /// can negatively affect performance.
+    bool reproducibleCommandStream;
+
+    /// Enable depth texcoord Z (Dref) scaling (D3D8 quirk)
+    int32_t drefScaling;
+
+    /// Enable slow sincos emulation
+    bool sincosEmulation;
+
+    /// Add an extra front buffer to make GetFrontBufferData() work correctly when the swapchain only has a single buffer
+    bool extraFrontbuffer;
   };
 
 }

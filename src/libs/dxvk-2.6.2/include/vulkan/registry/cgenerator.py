@@ -1,6 +1,6 @@
-#!/usr/bin/python3 -i
+#!/usr/bin/env python3 -i
 #
-# Copyright 2013-2024 The Khronos Group Inc.
+# Copyright 2013-2025 The Khronos Group Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -243,7 +243,7 @@ class COutputGenerator(OutputGenerator):
                 if self.genOpts.conventions is None:
                     raise MissingGeneratorOptionsConventionsError()
                 is_core = self.featureName and self.featureName.startswith(self.conventions.api_prefix + 'VERSION_')
-                if self.genOpts.conventions.writeFeature(self.featureExtraProtect, self.genOpts.filename):
+                if self.genOpts.conventions.writeFeature(self.featureName, self.featureExtraProtect, self.genOpts.filename):
                     self.newline()
                     if self.genOpts.protectFeature:
                         write('#ifndef', self.featureName, file=self.outFile)
@@ -334,15 +334,18 @@ class COutputGenerator(OutputGenerator):
         else:
             if self.genOpts is None:
                 raise MissingGeneratorOptionsError()
+
+            body = self.deprecationComment(typeElem)
+
             # OpenXR: this section was not under 'else:' previously, just fell through
             if alias:
                 # If the type is an alias, just emit a typedef declaration
-                body = 'typedef ' + alias + ' ' + name + ';\n'
+                body += 'typedef ' + alias + ' ' + name + ';\n'
             else:
                 # Replace <apientry /> tags with an APIENTRY-style string
                 # (from self.genOpts). Copy other text through unchanged.
                 # If the resulting text is an empty string, do not emit it.
-                body = noneStr(typeElem.text)
+                body += noneStr(typeElem.text)
                 for elem in typeElem:
                     if elem.tag == 'apientry':
                         body += self.genOpts.apientry + noneStr(elem.tail)
@@ -417,11 +420,11 @@ class COutputGenerator(OutputGenerator):
             raise MissingGeneratorOptionsError()
 
         typeElem = typeinfo.elem
+        body = self.deprecationComment(typeElem)
 
         if alias:
-            body = 'typedef ' + alias + ' ' + typeName + ';\n'
+            body += 'typedef ' + alias + ' ' + typeName + ';\n'
         else:
-            body = ''
             (protect_begin, protect_end) = self.genProtectString(typeElem.get('protect'))
             if protect_begin:
                 body += protect_begin
@@ -442,6 +445,7 @@ class COutputGenerator(OutputGenerator):
 
             targetLen = self.getMaxCParamTypeLength(typeinfo)
             for member in typeElem.findall('.//member'):
+                body += self.deprecationComment(member, indent = 4)
                 body += self.makeCParamDecl(member, targetLen + 4)
                 body += ';\n'
             body += '} ' + typeName + ';\n'
@@ -486,7 +490,8 @@ class COutputGenerator(OutputGenerator):
 
         OutputGenerator.genEnum(self, enuminfo, name, alias)
 
-        body = self.buildConstantCDecl(enuminfo, name, alias)
+        body = self.deprecationComment(enuminfo.elem)
+        body += self.buildConstantCDecl(enuminfo, name, alias)
         self.appendSection('enum', body)
 
     def genCmd(self, cmdinfo, name, alias):
@@ -507,7 +512,7 @@ class COutputGenerator(OutputGenerator):
             self.appendSection('commandPointer', decls[1])
 
     def misracstyle(self):
-        return self.genOpts.misracstyle;
+        return self.genOpts.misracstyle
 
     def misracppstyle(self):
-        return self.genOpts.misracppstyle;
+        return self.genOpts.misracppstyle

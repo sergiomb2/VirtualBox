@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(__linux__) || (defined(VBOX) && !defined(_WIN32))
+#if defined(__unix__)
 
 #include <windows.h>
 #include <dlfcn.h>

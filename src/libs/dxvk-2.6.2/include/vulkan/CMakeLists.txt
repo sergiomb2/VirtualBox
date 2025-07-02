@@ -5,7 +5,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 # ~~~
-cmake_minimum_required(VERSION 3.15...3.25)
+cmake_minimum_required(VERSION 3.22.1)
 
 # NOTE: Parsing the version like this is suboptimal but neccessary due to our release process:
 # https://github.com/KhronosGroup/Vulkan-Headers/pull/346
@@ -36,24 +36,51 @@ function(vlk_get_header_version)
 endfunction()
 vlk_get_header_version()
 
-project(VULKAN_HEADERS LANGUAGES C VERSION ${VK_VERSION_STRING})
+project(VULKAN_HEADERS LANGUAGES C CXX VERSION ${VK_VERSION_STRING})
 
 add_library(Vulkan-Headers INTERFACE)
 add_library(Vulkan::Headers ALIAS Vulkan-Headers)
 target_include_directories(Vulkan-Headers INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 
-if (CMAKE_VERSION VERSION_LESS "3.21")
-    # https://cmake.org/cmake/help/latest/variable/PROJECT_IS_TOP_LEVEL.html
-    string(COMPARE EQUAL ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR} PROJECT_IS_TOP_LEVEL)
+if ((CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND (MSVC_VERSION GREATER_EQUAL "1941")) OR
+    # clang-cl doesn't currently support modules
+    (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+        AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16.0"
+        AND (NOT CMAKE_C_COMPILER_FRONTEND_VARIANT MATCHES "MSVC")
+        AND (NOT CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS STREQUAL CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND)) OR
+    (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0"))
+    set(COMPILER_SUPPORTS_CXX_MODULES TRUE)
 endif()
 
-if (PROJECT_IS_TOP_LEVEL)
-    option(BUILD_TESTS "Build the tests")
-    if (BUILD_TESTS)
-        enable_testing()
-        add_subdirectory(tests)
-    endif()
+option(VULKAN_HEADERS_ENABLE_MODULE "Enables building of the Vulkan C++ module" OFF)
 
+if (VULKAN_HEADERS_ENABLE_MODULE AND (NOT COMPILER_SUPPORTS_CXX_MODULES OR CMAKE_VERSION VERSION_LESS "3.28"))
+    message(WARNING "Vulkan C++ module support is requested but was disabled due to lacking support on this platform")
+endif()
+
+if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.28" AND VULKAN_HEADERS_ENABLE_MODULE AND COMPILER_SUPPORTS_CXX_MODULES)
+    add_library(Vulkan-Module)
+    add_library(Vulkan::VulkanHppModule ALIAS Vulkan-Module)
+    target_sources(Vulkan-Module
+        PUBLIC
+            FILE_SET module
+                TYPE CXX_MODULES
+                BASE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/include"
+                FILES "${CMAKE_CURRENT_SOURCE_DIR}/include/vulkan/vulkan.cppm"
+    )
+    target_compile_features(Vulkan-Module PUBLIC cxx_std_20)
+    target_link_libraries(Vulkan-Module PUBLIC Vulkan-Headers)
+endif ()
+
+option(VULKAN_HEADERS_ENABLE_TESTS "Test Vulkan-Headers" ${PROJECT_IS_TOP_LEVEL})
+option(VULKAN_HEADERS_ENABLE_INSTALL "Install Vulkan-Headers" ${PROJECT_IS_TOP_LEVEL})
+
+if (VULKAN_HEADERS_ENABLE_TESTS)
+    enable_testing() # This is only effective in the top level CMakeLists.txt file.
+    add_subdirectory(tests)
+endif()
+
+if (VULKAN_HEADERS_ENABLE_INSTALL)
     include(GNUInstallDirs)
     include(CMakePackageConfigHelpers)
 
@@ -63,8 +90,8 @@ if (PROJECT_IS_TOP_LEVEL)
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/registry" DESTINATION "${CMAKE_INSTALL_DATADIR}/vulkan" USE_SOURCE_PERMISSIONS)
 
     set_target_properties(Vulkan-Headers PROPERTIES EXPORT_NAME "Headers")
-
     install(TARGETS Vulkan-Headers EXPORT VulkanHeadersConfig INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
     install(EXPORT VulkanHeadersConfig NAMESPACE "Vulkan::" DESTINATION "share/cmake/VulkanHeaders")
 
     set(version_config "${CMAKE_CURRENT_BINARY_DIR}/generated/VulkanHeadersConfigVersion.cmake")

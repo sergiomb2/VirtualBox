@@ -1,19 +1,18 @@
+#if defined(DXVK_WSI_HEADLESS)
+
 #include "../wsi_window.h"
 
-#include <windows.h>
-#if defined(VBOX) && defined(_WIN32)
-#include "native/wsi/native_wsi.h"
-#else
-#include "wsi/native_wsi.h"
-#endif
+#include "native/wsi/native_headless.h"
 #include "wsi_platform_headless.h"
 
 #include "../../util/util_string.h"
 #include "../../util/log/log.h"
 
+#include <windows.h>
+
 namespace dxvk::wsi {
 
-  void getWindowSize(
+  void HeadlessWsiDriver::getWindowSize(
         HWND      hWindow,
         uint32_t* pWidth,
         uint32_t* pHeight) {
@@ -25,7 +24,7 @@ namespace dxvk::wsi {
   }
 
 
-  void resizeWindow(
+  void HeadlessWsiDriver::resizeWindow(
           HWND             hWindow,
           DxvkWindowState* pState,
           uint32_t         Width,
@@ -33,10 +32,11 @@ namespace dxvk::wsi {
   }
 
 
-  bool setWindowMode(
-      HMONITOR hMonitor,
-      HWND hWindow,
-      const WsiMode& pMode) {
+  bool HeadlessWsiDriver::setWindowMode(
+          HMONITOR         hMonitor,
+          HWND             hWindow,
+          DxvkWindowState* pState,
+    const WsiMode&         pMode) {
     const int32_t displayId    = fromHmonitor(hMonitor);
 
     if (!isDisplayValid(displayId))
@@ -47,7 +47,7 @@ namespace dxvk::wsi {
 
 
 
-  bool enterFullscreenMode(
+  bool HeadlessWsiDriver::enterFullscreenMode(
           HMONITOR         hMonitor,
           HWND             hWindow,
           DxvkWindowState* pState,
@@ -60,7 +60,7 @@ namespace dxvk::wsi {
   }
 
 
-  bool leaveFullscreenMode(
+  bool HeadlessWsiDriver::leaveFullscreenMode(
           HWND             hWindow,
           DxvkWindowState* pState,
           bool             restoreCoordinates) {
@@ -68,33 +68,48 @@ namespace dxvk::wsi {
   }
 
 
-  bool restoreDisplayMode() {
+  bool HeadlessWsiDriver::restoreDisplayMode() {
+    // Don't need to do anything with SDL2 here.
     return true;
   }
 
 
-  HMONITOR getWindowMonitor(HWND hWindow) {
+  HMONITOR HeadlessWsiDriver::getWindowMonitor(HWND hWindow) {
     return toHmonitor(0);
   }
 
 
-  bool isWindow(HWND hWindow) {
+  bool HeadlessWsiDriver::isWindow(HWND hWindow) {
     return true;
   }
 
-  void updateFullscreenWindow(
-      HMONITOR hMonitor,
-      HWND     hWindow,
-      bool     forceTopmost) {
-    // Don't need to do anything here.
+
+  bool HeadlessWsiDriver::isMinimized(HWND hWindow) {
+    return false;
   }
 
-  VkResult createSurface(
+
+  bool HeadlessWsiDriver::isOccluded(HWND hWindow) {
+    return false;
+  }
+
+
+  void HeadlessWsiDriver::updateFullscreenWindow(
+          HMONITOR hMonitor,
+          HWND     hWindow,
+          bool     forceTopmost) {
+    // Don't need to do anything with SDL2 here.
+  }
+
+
+  VkResult HeadlessWsiDriver::createSurface(
           HWND                      hWindow,
           PFN_vkGetInstanceProcAddr pfnVkGetInstanceProcAddr,
           VkInstance                instance,
           VkSurfaceKHR*             pSurface) {
-    return VK_ERROR_OUT_OF_HOST_MEMORY; /* Not supported for offscreen rendering */
+    return VK_ERROR_OUT_OF_HOST_MEMORY;
   }
 
 }
+
+#endif

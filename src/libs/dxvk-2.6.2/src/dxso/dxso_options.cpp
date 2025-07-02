@@ -20,8 +20,6 @@ namespace dxvk {
     strictPow            = options.strictPow;
     d3d9FloatEmulation   = options.d3d9FloatEmulation;
 
-    shaderModel          = options.shaderModel;
-
     invariantPosition    = options.invariantPosition;
 
     forceSamplerTypeSpecConstants = options.forceSamplerTypeSpecConstants;
@@ -29,8 +27,10 @@ namespace dxvk {
 
     vertexFloatConstantBufferAsSSBO = pDevice->GetVertexConstantLayout().floatSize() > devInfo.core.properties.limits.maxUniformBufferRange;
 
-    longMad = options.longMad;
     robustness2Supported = devFeatures.extRobustness2.robustBufferAccess2;
+
+    sincosEmulation     = options.sincosEmulation;
+    drefScaling         = options.drefScaling;
   }
 
 }

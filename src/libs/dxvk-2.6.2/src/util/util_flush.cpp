@@ -2,6 +2,11 @@
 
 namespace dxvk {
 
+  GpuFlushTracker::GpuFlushTracker(GpuFlushType maxType)
+  : m_maxType(maxType) {
+
+  }
+
   bool GpuFlushTracker::considerFlush(
           GpuFlushType          flushType,
           uint64_t              chunkId,
@@ -15,6 +20,9 @@ namespace dxvk {
     uint32_t chunkCount = uint32_t(chunkId - m_lastFlushChunkId);
 
     if (!chunkCount)
+      return false;
+
+    if (flushType > m_maxType)
       return false;
 
     // Take any earlier missed flush with a stronger hint into account, so
@@ -37,6 +45,7 @@ namespace dxvk {
         return chunkCount >= minChunkCount;
       }
 
+      case GpuFlushType::ImplicitMediumHint:
       case GpuFlushType::ImplicitWeakHint: {
         // Aim for a higher number of chunks per submission with
         // a weak hint in order to avoid submitting too often.

@@ -48,6 +48,9 @@ namespace dxvk {
     bool                IsBackBuffer;
     bool                IsAttachmentOnly;
     bool                IsLockable;
+
+    // Additional parameters for ID3D9VkInteropDevice
+    VkImageUsageFlags   ImageUsage = 0;
   };
 
   struct D3D9ColorView {
@@ -71,6 +74,8 @@ namespace dxvk {
   class D3D9CommonTexture {
 
   public:
+
+    static constexpr UINT AllLayers = std::numeric_limits<uint32_t>::max();
 
     D3D9CommonTexture(
             D3D9DeviceEx*             pDevice,
@@ -179,11 +184,14 @@ namespace dxvk {
      * Fills in undefined values and validates the texture
      * parameters. Any error returned by this method should
      * be forwarded to the application.
+     * \param [in] pDevice D3D9 device
+     * \param [in] ResourceType Resource type
      * \param [in,out] pDesc Texture description
      * \returns \c S_OK if the parameters are valid
      */
     static HRESULT NormalizeTextureProperties(
             D3D9DeviceEx*              pDevice,
+            D3DRESOURCETYPE            ResourceType,
             D3D9_COMMON_TEXTURE_DESC*  pDesc);
 
     /**
@@ -311,11 +319,13 @@ namespace dxvk {
       return std::exchange(m_transitionedToHazardLayout, true);
     }
 
-    D3DRESOURCETYPE GetType() {
+    D3DRESOURCETYPE GetType() const {
       return m_type;
     }
 
     uint32_t GetPlaneCount() const;
+
+    D3DPOOL GetPool() const { return m_desc.Pool; }
 
     const D3D9_VK_FORMAT_MAPPING& GetMapping() { return m_mapping; }
 
@@ -330,10 +340,6 @@ namespace dxvk {
     bool NeedsReadback(UINT Subresource) const { return m_needsReadback.get(Subresource); }
 
     void MarkAllNeedReadback() { m_needsReadback.setAll(); }
-
-    void SetReadOnlyLocked(UINT Subresource, bool readOnly) { return m_readOnly.set(Subresource, readOnly); }
-
-    bool GetReadOnlyLocked(UINT Subresource) const { return m_readOnly.get(Subresource); }
 
     const Rc<DxvkImageView>& GetSampleView(bool srgb) const {
       return m_sampleView.Pick(srgb && IsSrgbCompatible());
@@ -437,6 +443,10 @@ namespace dxvk {
     static VkImageType GetImageTypeFromResourceType(
             D3DRESOURCETYPE  Dimension);
 
+    static VkImageViewType GetImageViewTypeFromResourceType(
+            D3DRESOURCETYPE  Dimension,
+            UINT             Layer);
+
      /**
      * \brief Tracks sequence number for a given subresource
      *
@@ -516,8 +526,6 @@ namespace dxvk {
 
     D3D9SubresourceBitset         m_locked = { };
 
-    D3D9SubresourceBitset         m_readOnly = { };
-
     D3D9SubresourceBitset         m_needsReadback = { };
 
     D3D9SubresourceBitset         m_needsUpload = { };
@@ -544,22 +552,12 @@ namespace dxvk {
       const DxvkImageCreateInfo*  pImageInfo,
             VkImageTiling         Tiling) const;
 
-    VkImageUsageFlags EnableMetaCopyUsage(
-            VkFormat              Format,
-            VkImageTiling         Tiling) const;
-
     D3D9_COMMON_TEXTURE_MAP_MODE DetermineMapMode() const;
 
     VkImageLayout OptimizeLayout(
             VkImageUsageFlags         Usage) const;
 
     void ExportImageInfo();
-
-    static VkImageViewType GetImageViewTypeFromResourceType(
-            D3DRESOURCETYPE  Dimension,
-            UINT             Layer);
-
-    static constexpr UINT AllLayers = UINT32_MAX;
 
   };
 

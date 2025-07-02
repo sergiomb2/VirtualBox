@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dxvk_adapter.h"
+#include "dxvk_options.h"
 
 namespace dxvk {
   
@@ -14,6 +15,7 @@ namespace dxvk {
   enum class DxvkDeviceFilterFlag {
     MatchDeviceName   = 0,
     SkipCpuDevices    = 1,
+    MatchDeviceUUID   = 3
   };
   
   using DxvkDeviceFilterFlags = Flags<DxvkDeviceFilterFlag>;
@@ -31,7 +33,10 @@ namespace dxvk {
     
   public:
     
-    DxvkDeviceFilter(DxvkDeviceFilterFlags flags);
+    DxvkDeviceFilter(
+            DxvkDeviceFilterFlags flags,
+      const DxvkOptions&          options);
+
     ~DxvkDeviceFilter();
     
     /**
@@ -42,12 +47,23 @@ namespace dxvk {
      */
     bool testAdapter(
       const VkPhysicalDeviceProperties& properties) const;
+      /**
+     * \brief Tests a created adapter
+     *
+     * Applies UUID filtering after device is initialized.
+     *
+     * \param [in] deviceInfo Information about created device
+     * \returns \c true if the device passes the UUID filter
+     */
+    bool testCreatedAdapter(
+        const DxvkDeviceInfo& deviceInfo) const;
     
   private:
     
     DxvkDeviceFilterFlags m_flags;
     
     std::string m_matchDeviceName;
+    std::string m_matchDeviceUUID;
     
   };
   

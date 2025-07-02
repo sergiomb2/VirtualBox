@@ -30,9 +30,6 @@ namespace dxvk {
     VkDeviceSize maxDeviceMemory;
     VkDeviceSize maxSharedMemory;
 
-    /// Emulate UMA
-    bool emulateUMA;
-
     /// Reports Nvidia GPUs running on the proprietary driver as a different
     /// vendor (usually AMD). Proton will generally disable this option.
     bool hideNvidiaGpu;
@@ -49,8 +46,11 @@ namespace dxvk {
     /// Enable HDR
     bool enableHDR;
 
-    /// Use monitor fallback to enumerating all monitors per output
-    bool useMonitorFallback;
+    /// Enable support for dummy composition swapchains
+    bool enableDummyCompositionSwapchain;
+
+    /// Limit frame rate
+    int32_t maxFrameRate;
 
     /// Sync interval. Overrides the value
     /// passed to IDXGISwapChain::Present.

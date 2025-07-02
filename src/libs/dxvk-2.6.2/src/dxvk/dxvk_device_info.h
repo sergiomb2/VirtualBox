@@ -2,6 +2,8 @@
 
 #include "dxvk_include.h"
 
+#include "../util/util_version.h"
+
 namespace dxvk {
 
   /**
@@ -13,6 +15,7 @@ namespace dxvk {
    * so before using them, check whether they are supported.
    */
   struct DxvkDeviceInfo {
+    Version                                                   driverVersion;
     VkPhysicalDeviceProperties2                               core;
     VkPhysicalDeviceVulkan11Properties                        vk11;
     VkPhysicalDeviceVulkan12Properties                        vk12;
@@ -22,10 +25,12 @@ namespace dxvk {
     VkPhysicalDeviceExtendedDynamicState3PropertiesEXT        extExtendedDynamicState3;
     VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT      extGraphicsPipelineLibrary;
     VkPhysicalDeviceLineRasterizationPropertiesEXT            extLineRasterization;
+    VkPhysicalDeviceMultiDrawPropertiesEXT                    extMultiDraw;
     VkPhysicalDeviceRobustness2PropertiesEXT                  extRobustness2;
     VkPhysicalDeviceTransformFeedbackPropertiesEXT            extTransformFeedback;
     VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT       extVertexAttributeDivisor;
     VkPhysicalDeviceMaintenance5PropertiesKHR                 khrMaintenance5;
+    VkPhysicalDeviceMaintenance7PropertiesKHR                 khrMaintenance7;
   };
 
 
@@ -55,7 +60,9 @@ namespace dxvk {
     VkPhysicalDeviceLineRasterizationFeaturesEXT              extLineRasterization;
     VkBool32                                                  extMemoryBudget;
     VkPhysicalDeviceMemoryPriorityFeaturesEXT                 extMemoryPriority;
+    VkPhysicalDeviceMultiDrawFeaturesEXT                      extMultiDraw;
     VkPhysicalDeviceNonSeamlessCubeMapFeaturesEXT             extNonSeamlessCubeMap;
+    VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT      extPageableDeviceLocalMemory;
     VkPhysicalDeviceRobustness2FeaturesEXT                    extRobustness2;
     VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT         extShaderModuleIdentifier;
     VkBool32                                                  extShaderStencilExport;
@@ -65,9 +72,14 @@ namespace dxvk {
     VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT         extVertexAttributeDivisor;
     VkBool32                                                  khrExternalMemoryWin32;
     VkBool32                                                  khrExternalSemaphoreWin32;
+    VkBool32                                                  khrLoadStoreOpNone;
     VkPhysicalDeviceMaintenance5FeaturesKHR                   khrMaintenance5;
+    VkPhysicalDeviceMaintenance7FeaturesKHR                   khrMaintenance7;
     VkPhysicalDevicePresentIdFeaturesKHR                      khrPresentId;
     VkPhysicalDevicePresentWaitFeaturesKHR                    khrPresentWait;
+    VkBool32                                                  khrSwapchainMutableFormat;
+    VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV    nvDescriptorPoolOverallocation;
+    VkBool32                                                  nvLowLatency2;
     VkPhysicalDeviceRawAccessChainsFeaturesNV                 nvRawAccessChains;
     VkBool32                                                  nvxBinaryImport;
     VkBool32                                                  nvxImageViewHandle;

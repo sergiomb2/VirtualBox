@@ -1,6 +1,8 @@
 #pragma once
 
-#include "../dxvk/dxvk_video_decoder.h"
+#ifdef VBOX_WITH_DXVK_VIDEO
+# include "../dxvk/dxvk_video_decoder.h"
+#endif
 
 #include "d3d11_device.h"
 
@@ -234,20 +236,12 @@ namespace dxvk {
       return m_isYCbCr;
     }
 
-    bool NeedsCopy() const {
-      return m_copy != nullptr;
-    }
-
     Rc<DxvkImage> GetImage() const {
       return GetCommonTexture(m_resource.ptr())->GetImage();
     }
 
     VkImageSubresourceLayers GetImageSubresources() const {
       return m_subresources;
-    }
-
-    Rc<DxvkImage> GetShadowCopy() const {
-      return m_copy;
     }
 
     std::array<Rc<DxvkImageView>, 2> GetViews() const {
@@ -259,7 +253,6 @@ namespace dxvk {
     Com<ID3D11Resource>                   m_resource;
     D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC m_desc;
     VkImageSubresourceLayers              m_subresources;
-    Rc<DxvkImage>                         m_copy;
     std::array<Rc<DxvkImageView>, 2>      m_views;
     bool                                  m_isYCbCr = false;
 
@@ -680,6 +673,7 @@ namespace dxvk {
     struct alignas(16) UboData {
       float colorMatrix[3][4];
       float coordMatrix[3][2];
+      VkRect2D srcRect;
       float yMin, yMax;
       VkBool32 isPlanar;
     };
@@ -689,7 +683,6 @@ namespace dxvk {
     Rc<DxvkDevice>          m_device;
     Rc<DxvkShader>          m_vs;
     Rc<DxvkShader>          m_fs;
-    Rc<DxvkSampler>         m_sampler;
     Rc<DxvkBuffer>          m_ubo;
 
     VkExtent2D m_dstExtent = { 0u, 0u };
@@ -708,8 +701,6 @@ namespace dxvk {
       const D3D11_VIDEO_PROCESSOR_STREAM*   pStream);
 
     void CreateUniformBuffer();
-
-    void CreateSampler();
 
     void CreateShaders();
 

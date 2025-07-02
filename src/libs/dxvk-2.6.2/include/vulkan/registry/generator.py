@@ -1,6 +1,6 @@
-#!/usr/bin/python3 -i
+#!/usr/bin/env python3 -i
 #
-# Copyright 2013-2024 The Khronos Group Inc.
+# Copyright 2013-2025 The Khronos Group Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 """Base class for source/header/doc generators, as well as some utility functions."""
@@ -65,7 +65,7 @@ def regSortCategoryKey(feature):
         else:
             return 0
 
-    if feature.category.upper() in ['ARB', 'KHR', 'OES']:
+    if feature.category.upper() in ('ARB', 'KHR', 'OES'):
         return 1
 
     return 2
@@ -562,6 +562,41 @@ class OutputGenerator:
     def misracppstyle(self):
         return False;
 
+    def deprecationComment(self, elem, indent = 0):
+        """If an API element is marked deprecated, return a brief comment
+           describing why.
+           Otherwise, return an empty string.
+
+          - elem - Element of the API.
+            API name is determined depending on the element tag.
+          - indent - number of spaces to indent the comment"""
+
+        reason = elem.get('deprecated')
+
+        # This is almost always the path taken.
+        if reason == None:
+            return ''
+
+        # There is actually a deprecated attribute.
+        padding = indent * ' '
+
+        # Determine the API name.
+        if elem.tag == 'member' or elem.tag == 'param':
+            name = elem.find('.//name').text
+        else:
+            name = elem.get('name')
+
+        if reason == 'aliased':
+            return f'{padding}// {name} is a deprecated alias\n'
+        elif reason == 'ignored':
+            return f'{padding}// {name} is deprecated and should not be used\n'
+        elif reason == 'true':
+            return f'{padding}// {name} is deprecated, but no reason was given in the API XML\n'
+        else:
+            # This can be caught by schema validation
+            self.logMsg('error', f"{name} has an unknown deprecation attribute value '{reason}'")
+            exit(1)
+
     def buildEnumCDecl(self, expand, groupinfo, groupName):
         """Generate the C declaration for an enum"""
         if self.genOpts is None:
@@ -664,6 +699,8 @@ class OutputGenerator:
                 if protect is not None:
                     body += '#ifdef {}\n'.format(protect)
 
+                body += self.deprecationComment(elem, indent = 0)
+
                 if usedefine:
                     decl += "#define {} {}\n".format(name, strVal)
                 elif self.misracppstyle():
@@ -757,11 +794,9 @@ class OutputGenerator:
                 if protect is not None:
                     decl += '#ifdef {}\n'.format(protect)
 
-                # Indent requirements comment, if there is one
-                requirements = self.genRequirements(name, mustBeFound = False)
-                if requirements != '':
-                    requirements = '  ' + requirements
-                decl += requirements
+
+                decl += self.genRequirements(name, mustBeFound = False, indent = 2)
+                decl += self.deprecationComment(elem, indent = 2)
                 decl += '    {} = {},'.format(name, strVal)
 
                 if protect is not None:
@@ -860,7 +895,7 @@ class OutputGenerator:
         """Create a directory, if not already done.
 
         Generally called from derived generators creating hierarchies."""
-        self.logMsg('diag', 'OutputGenerator::makeDir(' + path + ')')
+        self.logMsg('diag', 'OutputGenerator::makeDir(', path, ')')
         if path not in self.madeDirs:
             # This can get race conditions with multiple writers, see
             # https://stackoverflow.com/questions/273192/
@@ -919,11 +954,11 @@ class OutputGenerator:
             # On successfully generating output, move the temporary file to the
             # target file.
             if self.genOpts.filename is not None:
+                directory = Path(self.genOpts.directory)
                 if sys.platform == 'win32':
-                    directory = Path(self.genOpts.directory)
                     if not Path.exists(directory):
                         os.makedirs(directory)
-                shutil.copy(self.outFile.name, self.genOpts.directory + '/' + self.genOpts.filename)
+                shutil.copy(self.outFile.name, directory / self.genOpts.filename)
                 os.remove(self.outFile.name)
         self.genOpts = None
 
@@ -944,7 +979,7 @@ class OutputGenerator:
         self.featureName = None
         self.featureExtraProtect = None
 
-    def genRequirements(self, name, mustBeFound = True):
+    def genRequirements(self, name, mustBeFound = True, indent = 0):
         """Generate text showing what core versions and extensions introduce
         an API. This exists in the base Generator class because it is used by
         the shared enumerant-generating interfaces (buildEnumCDecl, etc.).

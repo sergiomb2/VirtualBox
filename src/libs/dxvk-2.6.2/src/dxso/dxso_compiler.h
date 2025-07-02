@@ -248,6 +248,7 @@ namespace dxvk {
     uint32_t usedSamplers() const { return m_usedSamplers; }
     uint32_t usedRTs() const { return m_usedRTs; }
     uint32_t maxDefinedConstant() const { return m_maxDefinedConstant; }
+    uint32_t textureTypes() const { return m_textureTypes; }
 
   private:
 
@@ -258,7 +259,7 @@ namespace dxvk {
 
     DxsoShaderMetaInfo         m_meta;
     DxsoDefinedConstants       m_constants;
-    uint32_t                   m_maxDefinedConstant;
+    uint32_t                   m_maxDefinedConstant = 0u;
 
     SpirvModule                m_module;
 
@@ -278,7 +279,7 @@ namespace dxvk {
     // Predicate registers
     std::array<
       DxsoRegisterPointer,
-      1> m_pRegs;
+      1> m_pRegs = { };
 
     //////////////////////////////////////////////////////////////////
     // Array of input values. Since v# and o# registers are indexable
@@ -312,7 +313,7 @@ namespace dxvk {
     // Working tex/coord registers (PS)
     std::array<
       DxsoRegisterPointer,
-      DxsoMaxTextureRegs> m_tRegs;
+      DxsoMaxTextureRegs> m_tRegs = { };
 
     ///////////////////////////////////////////////
     // Control flow information. Stores labels for
@@ -326,7 +327,7 @@ namespace dxvk {
 
     ////////////
     // Samplers
-    std::array<DxsoSampler, 17> m_samplers;
+    std::array<DxsoSampler, 17> m_samplers = { };
 
     ////////////////////////////////////////////
     // What io regswe need to
@@ -344,8 +345,6 @@ namespace dxvk {
     // covers vertex input and fragment output.
     uint32_t m_inputMask = 0u;
     uint32_t m_outputMask = 0u;
-    uint32_t m_pushConstOffset = 0u;
-    uint32_t m_pushConstSize = 0u;
 
     ///////////////////////////////////
     // Shader-specific data structures
@@ -359,6 +358,8 @@ namespace dxvk {
     // and render targets for hazard tracking
     uint32_t m_usedSamplers;
     uint32_t m_usedRTs;
+
+    uint32_t m_textureTypes;
 
     uint32_t m_specUbo = 0;
 
@@ -545,7 +546,7 @@ namespace dxvk {
             DxsoRegisterValue       a,
             DxsoRegisterValue       b);
 
-    DxsoRegisterValue emitFma(
+    DxsoRegisterValue emitMad(
             DxsoRegisterValue       a,
             DxsoRegisterValue       b,
             DxsoRegisterValue       c);
