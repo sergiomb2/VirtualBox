@@ -58,6 +58,7 @@ from ArmAst import ArmAstIfList;
 from ArmAst import ArmAstInteger;
 from ArmAst import ArmAstReturn;
 from ArmAst import ArmAstSet;
+from ArmAst import ArmAstSquareOp;
 from ArmAst import ArmAstString;
 from ArmAst import ArmAstUnaryOp;
 from ArmAst import ArmAstValue;
@@ -1979,7 +1980,7 @@ class SysRegGeneratorBase(object):
         return self.VBoxAstCppField('((%s) >> %u)' % (sExpr, iFirstBit,), cBitsWidth, sExpr, cBitsWidth + iFirstBit);
 
     def transformCodePass2_Identifier(self, oNode, oInfo): # type: (ArmAstIdentifier, SysRegAccessorInfo) -> ArmAstBase
-        """ Pass2: Deal with register identifiers during assignments. """
+        """ Pass 2: Deal with register identifiers during assignments. """
         _ = oInfo;
         sState = 'AArch64' if self.isA64Instruction() else 'AArch32';
         oReg   = spec.g_ddoAllArmRegistersByStateByName[sState].get(oNode.sName); # ArmRegister
@@ -1996,6 +1997,29 @@ class SysRegGeneratorBase(object):
         if isinstance(tCpumCtxInfo[0], int):
             return ArmAstInteger(tCpumCtxInfo[0], 64);
         return ArmAstCppExpr('pVCpu->cpum.GstCtx.%s' % (tCpumCtxInfo[0],), cBitsWidth = 64);
+
+    def transformCodePass2_ParseNVMem(self, oNode):
+        if len(oNode.aoValues) in (1, 2):
+            off = oNode.aoValues[0].getIntegerOrValue();
+            if off is not None and 0 <= off < 4096:
+                cBits = 64 if len(oNode.aoValues) == 1 else oNode.aoValues[1].getIntegerOrValue();
+                if cBits is not None and cBits in (64, 128):
+                    return (off, cBits);
+        raise Exception('Bogus NVMem access: %s' % (oNode,));
+
+    def transformCodePass2_NVMemRead(self, oNode):
+        """ Pass 2: Translate NVMem[off[,bits]] to function call. """
+        (off, cBits) = self.transformCodePass2_ParseNVMem(oNode);
+        return ArmAstCppExpr('iemNVMemReadU%u(%#x)' % (cBits, off,), cBitsWidth = cBits);
+
+    def transformCodePass2_AssignToNVMem(self, oNode):
+        """ Pass 2: Translate NVMem[off[,bits]] to function call. """
+        (off, cBits) = self.transformCodePass2_ParseNVMem(oNode.oVar);
+        sCall  = 'iemNVMemWriteU%u(%#x, ' % (cBits, off,);
+        sValue = oNode.oValue.toStringEx(sLang = 'C');
+        if '\n' in sValue:
+            sValue = sValue.replace('\n', '\n' + ' ' * len(sCall));
+        return ArmAstCppStmt(sValue + sCall);
 
 
     def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo, aoStack):
@@ -2041,7 +2065,7 @@ class SysRegGeneratorBase(object):
                 if (   (oNode.sOp == '==' and oNode.oRight.isMatchingIntegerOrValue(1) and oNode.oLeft.cBitsWidth == 1)
                     or (oNode.sOp == '!=' and oNode.oRight.isMatchingIntegerOrValue(0)) ):
                     return oNode.oLeft.dropShift();
-                elif ArmAstBinaryOp.kdOps[oNode.sOp] == ArmAstBinaryOp.ksOpTypeLogical:
+                if ArmAstBinaryOp.kdOps[oNode.sOp] == ArmAstBinaryOp.ksOpTypeLogical:
                     oNode.oLeft = ArmAstCppExpr(oNode.oLeft.sNoShiftExpr, oNode.oLeft.cBitsWidthNoShift);
             elif isinstance(oNode.oRight, self.VBoxAstCppField):
                 if ArmAstBinaryOp.kdOps[oNode.sOp] == ArmAstBinaryOp.ksOpTypeLogical:
@@ -2065,6 +2089,17 @@ class SysRegGeneratorBase(object):
             for idxIfCond, oIfCond in enumerate(oNode.aoIfConditions):
                 if isinstance(oIfCond, self.VBoxAstCppField):
                     oNode.aoIfConditions[idxIfCond] = oIfCond.dropExtraParenthesis();
+
+        elif isinstance(oNode, ArmAstSquareOp):
+            # Translate NVMem[xxx[,128]] to function calls depending on context.
+            if (    oNode.oVar.isMatchingIdentifier('NVMem')
+                and (not aoStack or not isinstance(aoStack[-1], ArmAstAssignment) or aoStack[-1].oVar is not oNode)):
+                return self.transformCodePass2_NVMemRead(oNode);
+
+        elif isinstance(oNode, ArmAstAssignment):
+            if isinstance(oNode.oVar, ArmAstSquareOp):
+                if oNode.oVar.oVar.isMatchingIdentifier('NVMem'):
+                    return self.transformCodePass2_AssignToNVMem(oNode);
 
         _ = fEliminationAllowed;
         return oNode;
