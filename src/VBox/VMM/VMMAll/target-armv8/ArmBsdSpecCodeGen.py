@@ -1532,13 +1532,16 @@ class SysRegGeneratorBase(object):
 
         elif isinstance(oNode, ArmAstFunction):
             # Since we don't implement any external debug state (no EDSCR.STATUS),
-            # the Halted() function always returns False.  Eliminate it.
-            if oNode.isMatchingFunctionCall('Halted'):
+            # the Halted() and HaltingAllowed() functions always returns False.
+            # Eliminate them.
+            if (   oNode.isMatchingFunctionCall('Halted')
+                or oNode.isMatchingFunctionCall('HaltingAllowed')):
                 return ArmAstBool(False);
 
             # The EL3SDDUndefPriority() and EL3SDDUndef() can likewise be eliminated,
             # as they requires Halted() to be true and EDSCR.SDD to be set.
-            if oNode.isMatchingFunctionCall('EL3SDDUndefPriority') or oNode.isMatchingFunctionCall('EL3SDDUndef'):
+            if (   oNode.isMatchingFunctionCall('EL3SDDUndefPriority')
+                or oNode.isMatchingFunctionCall('EL3SDDUndef')):
                 return ArmAstBool(False);
 
             if oNode.sName == 'HaveAArch64':
