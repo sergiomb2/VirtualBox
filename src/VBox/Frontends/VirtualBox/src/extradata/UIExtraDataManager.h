@@ -784,11 +784,13 @@ public:
         void setFileManagerOptions(bool fListDirectoriesFirst,
                                    bool fShowDeleteConfirmation,
                                    bool fshowHumanReadableSizes,
-                                   bool fShowHiddenObjects);
+                                   bool fShowHiddenObjects,
+                                   bool fAllowInteractiveColumnWidths);
         bool fileManagerListDirectoriesFirst();
         bool fileManagerShowDeleteConfirmation();
         bool fileManagerShowHumanReadableSizes();
         bool fileManagerShowHiddenObjects();
+        bool fileManagerAllowInteractiveColumnWidths();
     /** @} */
 
     /** @name Virtual Machine: Close dialog

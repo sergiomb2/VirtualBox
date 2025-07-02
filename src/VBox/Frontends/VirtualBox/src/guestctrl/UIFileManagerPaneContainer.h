@@ -86,10 +86,11 @@ private slots:
 
     /** @name Preferences tab slots
      * @{ */
-        void sltListDirectoryCheckBoxToogled(bool bChecked);
-        void sltDeleteConfirmationCheckBoxToogled(bool bChecked);
-        void sltHumanReabableSizesCheckBoxToogled(bool bChecked);
+        void sltListDirectoryCheckBoxToggled(bool bChecked);
+        void sltDeleteConfirmationCheckBoxToggled(bool bChecked);
+        void sltHumanReabableSizesCheckBoxToggled(bool bChecked);
         void sltShowHiddenObjectsCheckBoxToggled(bool bChecked);
+        void sltInteractiveColumnWidthsCheckBoxToggled(bool bChecked);
     /** @} */
 
     /** @name Operations tab slots
@@ -116,6 +117,7 @@ private:
         QCheckBox  *m_pDeleteConfirmationCheckBox;
         QCheckBox  *m_pHumanReabableSizesCheckBox;
         QCheckBox  *m_pShowHiddenObjectsCheckBox;
+        QCheckBox  *m_pInteractiveColumnWidths;
         UIFileManagerOptions *m_pFileManagerOptions;
     /** @} */
 

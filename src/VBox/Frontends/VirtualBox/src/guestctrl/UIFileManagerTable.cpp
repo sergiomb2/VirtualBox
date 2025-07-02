@@ -244,7 +244,6 @@ void UIGuestControlFileView::mouseDoubleClickEvent(QMouseEvent *event)
 {
     if (qApp->queryKeyboardModifiers() & Qt::AltModifier)
     {
-        printf("dou\n");
         emit sigAltDoubleClick();
         return;
     }
@@ -420,6 +419,7 @@ UIFileManagerTable::UIFileManagerTable(UIActionPool *pActionPool, QWidget *pPare
     , m_pProxyModel(0)
     , m_pathSeparator('/')
     , m_pToolBarLayout(0)
+    , m_fColumnWidthInitialized(0)
 {
     prepareObjects();
 }
@@ -1119,6 +1119,37 @@ bool UIFileManagerTable::eventFilter(QObject *pObject, QEvent *pEvent) /* overri
     return QWidget::eventFilter(pObject, pEvent);
 }
 
+void UIFileManagerTable::showEvent(QShowEvent *pEvent)
+{
+    /* In case of interactive column width distribute widget width among the visible columns evenly at the startup: */
+    if (!m_fColumnWidthInitialized && m_pView && m_pProxyModel)
+    {
+        m_fColumnWidthInitialized = true;
+        QHeaderView *pHorizontalHeader = m_pView->horizontalHeader();
+        if (pHorizontalHeader && pHorizontalHeader->sectionResizeMode(0) == QHeaderView::Interactive)
+        {
+            int iVisibleColumnCount = 0;
+            for (int i = 0; i < m_pProxyModel->columnCount(); ++i)
+            {
+                if (!m_pView->isColumnHidden(i))
+                    ++iVisibleColumnCount;
+            }
+            if (iVisibleColumnCount != 0)
+            {
+                int iColumnWidth = m_pView->width() / iVisibleColumnCount;
+                for (int i = 0; i < m_pProxyModel->columnCount(); ++i)
+                {
+                    if (!m_pView->isColumnHidden(i))
+                        m_pView->setColumnWidth(i, iColumnWidth);
+                }
+            }
+
+        }
+    }
+
+    QWidget::showEvent(pEvent);
+}
+
 UIFileSystemItem *UIFileManagerTable::getStartDirectoryItem()
 {
     UIFileSystemItem* pRootItem = rootItem();
@@ -1248,6 +1279,17 @@ void UIFileManagerTable::optionsUpdated()
         }
         if (m_pModel)
             m_pModel->setShowHumanReadableSizes(pOptions->fShowHumanReadableSizes);
+        if (m_pView)
+        {
+            QHeaderView *pHorizontalHeader = m_pView->horizontalHeader();
+            if (pHorizontalHeader)
+            {
+                if (pOptions->fAllowInteractiveColumnWidths)
+                    pHorizontalHeader->setSectionResizeMode(QHeaderView::Interactive);
+                else
+                    pHorizontalHeader->setSectionResizeMode(QHeaderView::ResizeToContents);
+            }
+        }
     }
     relist();
 }

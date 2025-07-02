@@ -4438,7 +4438,8 @@ QUuid UIExtraDataManager::softKeyboardSelectedLayout()
 void UIExtraDataManager::setFileManagerOptions(bool fListDirectoriesFirst,
                                                bool fShowDeleteConfirmation,
                                                bool fShowHumanReadableSizes,
-                                               bool fShowHiddenObjects)
+                                               bool fShowHiddenObjects,
+                                               bool fAllowInteractiveColumnWidths)
 {
     /* Serialize passed values: */
     QStringList data;
@@ -4451,9 +4452,22 @@ void UIExtraDataManager::setFileManagerOptions(bool fListDirectoriesFirst,
         data << GUI_GuestControl_FileManagerShowHumanReadableSizes;
     if (fShowHiddenObjects)
         data << GUI_GuestControl_FileManagerShowHiddenObjects;
+    if (fAllowInteractiveColumnWidths)
+        data << GUI_GuestControl_FileManagerAllowInteractiveColumnWidths;
 
     /* Re-cache corresponding extra-data: */
     setExtraDataStringList(GUI_GuestControl_FileManagerOptions, data);
+}
+
+bool UIExtraDataManager::fileManagerAllowInteractiveColumnWidths()
+{
+    const QStringList data = extraDataStringList(GUI_GuestControl_FileManagerOptions);
+    for (int i = 0; i < data.size(); ++i)
+    {
+        if (data[i] == GUI_GuestControl_FileManagerAllowInteractiveColumnWidths)
+            return true;
+    }
+    return false;
 }
 
 bool UIExtraDataManager::fileManagerListDirectoriesFirst()
