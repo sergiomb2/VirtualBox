@@ -275,12 +275,12 @@ DECLCALLBACK(int) vbtrIPCInit(const PVBOXTRAYSVCENV pEnv, void **ppvInstance)
 /**
  * @interface_method_impl{VBOXTRAYSVCDESC,pfnStop}
  */
-DECLCALLBACK(void) VBoxIPCStop(void *pvInstance)
+DECLCALLBACK(int) vbtrIPCStop(void *pvInstance)
 {
     /* Can be NULL if VBoxIPCInit failed. */
     if (!pvInstance)
-        return;
-    AssertPtrReturnVoid(pvInstance);
+        return VINF_SUCCESS;
+    AssertPtrReturn(pvInstance, VERR_INVALID_POINTER);
 
      VBoxTrayInfo("IPC: Stopping worker thread ...\n");
 
@@ -310,7 +310,11 @@ DECLCALLBACK(void) VBoxIPCStop(void *pvInstance)
                 /* Keep going. */
             }
         }
+
+        RTCritSectLeave(&pCtx->CritSect);
     }
+
+    return VINF_SUCCESS;
 }
 
 /**
@@ -641,7 +645,7 @@ VBOXTRAYSVCDESC g_SvcDescIPC =
     vbtrIPCOption,
     vbtrIPCInit,
     vbtrIPCWorker,
-    NULL /* pfnStop */,
+    vbtrIPCStop,
     vbtrIPCDestroy
 };
 
