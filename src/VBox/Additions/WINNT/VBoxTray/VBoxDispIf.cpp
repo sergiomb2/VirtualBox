@@ -129,20 +129,20 @@ static DWORD vboxDispIfResizeStartedOpWDDM(VBOXDISPIF_OP *pOp);
 
 static void vboxDispIfWddmDcLogRel(VBOXDISPIF_WDDM_DISPCFG const *pCfg, UINT fFlags)
 {
-    LogRel(("Display config: Flags = 0x%08X\n", fFlags));
+    LogRel2(("Display config: Flags = 0x%08X\n", fFlags));
 
-    LogRel(("PATH_INFO[%d]:\n", pCfg->cPathInfoArray));
+    LogRel2(("PATH_INFO[%d]:\n", pCfg->cPathInfoArray));
     for (uint32_t i = 0; i < pCfg->cPathInfoArray; ++i)
     {
         DISPLAYCONFIG_PATH_INFO *p = &pCfg->pPathInfoArray[i];
 
-        LogRel(("%d: flags 0x%08x\n", i, p->flags));
+        LogRel2(("%d: flags 0x%08x\n", i, p->flags));
 
-        LogRel(("  sourceInfo: adapterId 0x%08x:%08x, id %u, modeIdx %d, statusFlags 0x%08x\n",
+        LogRel2(("  sourceInfo: adapterId 0x%08x:%08x, id %u, modeIdx %d, statusFlags 0x%08x\n",
                 p->sourceInfo.adapterId.HighPart, p->sourceInfo.adapterId.LowPart,
                 p->sourceInfo.id, p->sourceInfo.modeInfoIdx, p->sourceInfo.statusFlags));
 
-        LogRel(("  targetInfo: adapterId 0x%08x:%08x, id %u, modeIdx %d,\n"
+        LogRel2(("  targetInfo: adapterId 0x%08x:%08x, id %u, modeIdx %d,\n"
                 "              ot %d, r %d, s %d, rr %d/%d, so %d, ta %d, statusFlags 0x%08x\n",
                 p->targetInfo.adapterId.HighPart, p->targetInfo.adapterId.LowPart,
                 p->targetInfo.id, p->targetInfo.modeInfoIdx,
@@ -156,23 +156,23 @@ static void vboxDispIfWddmDcLogRel(VBOXDISPIF_WDDM_DISPCFG const *pCfg, UINT fFl
               ));
     }
 
-    LogRel(("MODE_INFO[%d]:\n", pCfg->cModeInfoArray));
+    LogRel2(("MODE_INFO[%d]:\n", pCfg->cModeInfoArray));
     for (uint32_t i = 0; i < pCfg->cModeInfoArray; ++i)
     {
         DISPLAYCONFIG_MODE_INFO *p = &pCfg->pModeInfoArray[i];
 
-        LogRel(("%d: adapterId 0x%08x:%08x, id %u\n",
+        LogRel2(("%d: adapterId 0x%08x:%08x, id %u\n",
                 i, p->adapterId.HighPart, p->adapterId.LowPart, p->id));
 
         if (p->infoType == DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE)
         {
-            LogRel(("  src %ux%u, fmt %d, @%dx%d\n",
+            LogRel2(("  src %ux%u, fmt %d, @%dx%d\n",
                     p->sourceMode.width, p->sourceMode.height, p->sourceMode.pixelFormat,
                     p->sourceMode.position.x, p->sourceMode.position.y));
         }
         else if (p->infoType == DISPLAYCONFIG_MODE_INFO_TYPE_TARGET)
         {
-            LogRel(("  tgt pr 0x%RX64, hSyncFreq %d/%d, vSyncFreq %d/%d, active %ux%u, total %ux%u, std %d, so %d\n",
+            LogRel2(("  tgt pr 0x%RX64, hSyncFreq %d/%d, vSyncFreq %d/%d, active %ux%u, total %ux%u, std %d, so %d\n",
                     p->targetMode.targetVideoSignalInfo.pixelRate,
                     p->targetMode.targetVideoSignalInfo.hSyncFreq.Numerator, p->targetMode.targetVideoSignalInfo.hSyncFreq.Denominator,
                     p->targetMode.targetVideoSignalInfo.vSyncFreq.Numerator, p->targetMode.targetVideoSignalInfo.vSyncFreq.Denominator,
@@ -183,7 +183,7 @@ static void vboxDispIfWddmDcLogRel(VBOXDISPIF_WDDM_DISPCFG const *pCfg, UINT fFl
         }
         else
         {
-            LogRel(("  Invalid infoType %u(0x%08x)\n", p->infoType, p->infoType));
+            LogRel2(("  Invalid infoType %u(0x%08x)\n", p->infoType, p->infoType));
         }
     }
 }

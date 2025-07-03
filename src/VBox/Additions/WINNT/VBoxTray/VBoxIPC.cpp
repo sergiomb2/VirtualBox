@@ -472,7 +472,7 @@ static DECLCALLBACK(int) vboxIPCSessionThread(RTTHREAD hThreadSelf, void *pvSess
             break;
         }
         else
-            VBoxTrayError("IPC: Session %#x: Waiting for session data failed with rc=%Rrc\n", hSession, rc);
+            VBoxTrayVerbose(1, "*** Error: IPC: Session %#x: Waiting for session data failed with rc=%Rrc\n", hSession, rc);
     }
 
     VBoxTrayVerbose(1, "IPC: Session thread %#x ended with rc=%Rrc\n", hSession, rc);
