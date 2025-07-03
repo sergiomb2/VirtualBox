@@ -586,7 +586,8 @@ ifdef VBOX_WITH_VIRT_ARMV8
   	VMMAll/target-armv8/IEMAllMem-armv8.cpp \
   	VMMAll/target-armv8/IEMAllXcpt-armv8.cpp \
   	VMMAll/target-armv8/IEMAllIntprA64Tables-armv8.cpp \
-  	VMMAll/target-armv8/IEMAllOpcodeFetch-armv8.cpp
+  	VMMAll/target-armv8/IEMAllOpcodeFetch-armv8.cpp \
+  	VMMAll/target-armv8/IEMAllCImplSysRegs-armv8.cpp
   VMMAll/target-armv8/IEMAllIntprA64Tables-armv8.cpp_CXXFLAGS.win := -bigobj
  else
   VBoxVMMArm_SOURCES += VMMAll/IEMAllStub.cpp

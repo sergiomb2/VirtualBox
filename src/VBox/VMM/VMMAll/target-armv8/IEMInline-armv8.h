@@ -3172,15 +3172,15 @@ DECLINLINE(uint16_t) iemFpuCompressFtw(uint16_t u16FullFtw) RT_NOEXCEPT
  */
 DECLINLINE(uint32_t) iemGetEffHcrEl2NVx(PVMCPU pVCpu, const CPUMFEATURESARMV8 * const pGstFeats)
 {
-    if (   pGstFeats->GuestFeatures.fNv
-        && pGstFeats->GuestFeatures.fEl2) /** @todo EL3 */
+    if (   pGstFeats->fNv
+        && pGstFeats->fEl2) /** @todo EL3 */
     {
         uint64_t fHcrEl2 = pVCpu->cpum.GstCtx.HcrEl2.u32;
-        if (!pGstFeats->GuestFeatures.fE2H0)
+        if (!pGstFeats->fE2H0)
             fHcrEl2 &= ~ARMV8_HCR_EL2_NV1;
         if (fHcrEl2 & ARMV8_HCR_EL2_NV)
         {
-            if (!pGstFeats->GuestFeatures.fNv2)
+            if (!pGstFeats->fNv2)
                 fHcrEl2 &= ~ARMV8_HCR_EL2_NV2;
             AssertCompile(ARMV8_HCR_EL2_NV_BIT + 1 == ARMV8_HCR_EL2_NV1_BIT);
             AssertCompile(ARMV8_HCR_EL2_NV_BIT + 3 == ARMV8_HCR_EL2_NV2_BIT);

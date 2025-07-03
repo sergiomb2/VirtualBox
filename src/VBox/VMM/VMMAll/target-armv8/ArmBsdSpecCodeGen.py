@@ -1276,7 +1276,7 @@ class SysRegAccessorInfo(object):
         # Stats for the code generator.
         self.cCallsToIsFeatureImplemented = 0;
         self.cInstructionReferences       = 0;
-        self.cInstrEssenceRefs            = 0;  # References to uInstrEssence (idSysReg + idGprReg + direction)
+        self.cInstrEssenceRefs            = 0;  # References to uInstrEssence (idSysReg + idxGprReg + direction)
         self.cAssignmentsWithUnresolvedRegs = 0;  # Number of unresolved system register assignment reference.
         ## This is updated by morphCodeToC() and will be zero the code is ready for compilation.
         self.cIncompleteNodes             = -1;
@@ -2073,10 +2073,11 @@ class SysRegGeneratorBase(object):
 
         if cBitsWidth == 1:
             sExpr = '(%s & RT_BIT_%u(%d)/*%s*/)' \
-                  % (oAccessExprOrInt, 64 if cBitsWidth >= 32 else 32, iFirstBit, oField.sName);
+                  % (oAccessExprOrInt, 64 if iFirstBit >= 32 else 32, iFirstBit, oField.sName,);
         else:
             sExpr = '(%s & UINT%u_C(%#x)/*%s*/)' \
-                  % (oAccessExprOrInt, 64 if cBitsWidth >= 32 else 32, ((1 << cBitsWidth) - 1) << iFirstBit, oField.sName);
+                  % (oAccessExprOrInt, 64 if iFirstBit + cBitsWidth >= 32 else 32,
+                     ((1 << cBitsWidth) - 1) << iFirstBit, oField.sName,);
         if iFirstBit == 0:
             return self.VBoxAstCppField(sExpr, cBitsWidth);
         return self.VBoxAstCppField('((%s) >> %u)' % (sExpr, iFirstBit,), cBitsWidth, sExpr, cBitsWidth + iFirstBit);
@@ -2091,6 +2092,14 @@ class SysRegGeneratorBase(object):
 
         tCpumCtxInfo = g_dRegToCpumCtx.get('%s.%s' % (sState, oNode.sName));
         if not tCpumCtxInfo:
+            # If this is an ID register, we must use CPUMCpuIdLookupSysReg() to access it.
+            for oAccessor in oReg.aoAccessors:
+                if isinstance(oAccessor, spec.ArmAccessorSystem):
+                    if oAccessor.oEncoding.sAsmValue == oNode.sName:
+                        if self.isIdRegisterEncoding(oAccessor.oEncoding):
+                            return ArmAstCppExpr('CPUMCpuIdLookupSysReg(pVCpu, %s)' % (oAccessor.oEncoding.getSysRegIdCreate(),),
+                                                 cBitsWidth = 64);
+
             oXcpt = Exception('Assignment/Identifier: No CPUMCTX mapping for register %s.%s' % (sState, oNode.sName,));
             print('warning: %s' % (oXcpt));
             return oNode;
@@ -2196,8 +2205,10 @@ class SysRegGeneratorBase(object):
         if not sRegConst:
             return oNode;
 
+        oInfo.cInstrEssenceRefs              += 1;
         oInfo.cAssignmentsWithUnresolvedRegs += 1;
-        return ArmAstReturn(ArmAstCppExpr('%s_novar(pVCpu, %s, "%s", %s)' % (self.sFuncPrefix, sRegConst, sRegName, sValuePtr,),
+        return ArmAstReturn(ArmAstCppExpr('%s_novar(pVCpu, %s, "%s", %s, (uInstrEssence >> 24) & 31)'
+                                          % (self.sFuncPrefix, sRegConst, sRegName, sValuePtr,),
                                           cBitsWidth = 32));
 
     def transformCodePass2_AssignToUnresolvedReg(self, oNode, oInfo): # pylint: disable=invalid-name
@@ -2207,8 +2218,9 @@ class SysRegGeneratorBase(object):
         if not sRegConst:
             return oNode;
 
+        oInfo.cInstrEssenceRefs              += 1;
         oInfo.cAssignmentsWithUnresolvedRegs += 1;
-        return ArmAstReturn(ArmAstCppExpr('%s_novar(pVCpu, %s, "%s", %s)'
+        return ArmAstReturn(ArmAstCppExpr('%s_novar(pVCpu, %s, "%s", %s, (uInstrEssence >> 24) & 31))'
                                           % (self.sFuncPrefix, oInfo.sEnc, sRegName,
                                              oNode.oValue.toStringEx(sLang = 'C').replace('\n', '\n        '),), # ugly.
                                           cBitsWidth = 32));
@@ -2337,7 +2349,7 @@ class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
             ' * Transformation status: %u - %s'
             % (oInfo.cIncompleteNodes, 'complete' if oInfo.cIncompleteNodes == 0 else 'incomplete'),
             ' */',
-            'static VBOXSTRICTRC iemCImplA64_mrs_%s(PVMCPU pVCpu, uint64_t *puDst%s)'
+            'static VBOXSTRICTRC iemCImplA64_mrs_%s(PVMCPU pVCpu, uint64_t *puDst%s) RT_NOEXCEPT'
             % (oInfo.oAccessor.oEncoding.sAsmValue, ', uint32_t uInstrEssence' if oInfo.cInstrEssenceRefs > 0 else ''),
             '{',
         ];
@@ -2381,13 +2393,13 @@ class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
             ' * @param   pVCpu       The cross context virtual CPU structure of the',
             ' *                      calling thread.',
             ' * @param   idSysReg    The system register to read from (IPRT format).',
-            ' * @param   idGprDst    The destination GPR register number (for exceptions).',
+            ' * @param   idxGprDst   The destination GPR register number (for exceptions).',
             ' * @param   puDst       Where to return the value.',
             ' */',
-            'DECLHIDDEN(VBOXSTRICT) iemCImplA64_mrs_generic(PVMCPU pVCpu, uint32_t idSysReg, uint32_t idGprDst,',
-            '                                               uint64_t *puDst)',
+            'DECLHIDDEN(VBOXSTRICTRC) iemCImplA64_mrs_generic(PVMCPU pVCpu, uint32_t idSysReg, uint32_t idxGprDst,',
+            '                                                 uint64_t *puDst)',
             '{',
-            '    uint32_t const uInstrEssence = idSysReg | (idGprDst << 24);',
+            '    uint32_t const uInstrEssence = idSysReg | (idxGprDst << 24);',
             '    switch (idSysReg)',
             '    {',
         ];
@@ -2399,31 +2411,25 @@ class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
         asLines += [
             '    }',
             '    /* Fall back on handcoded handler. */',
-            '    return iemCImplA64_mrs_fallback(pVCpu, idGprDst, idSysReg);',
+            '    return iemCImplA64_mrs_fallback(pVCpu, idxGprDst, idSysReg);',
             '}',
             '',
             '/**',
             ' * Implements the MRS instruction.',
             ' *',
             ' * @param   idSysReg    The system register to read from (IPRT format).',
-            ' * @param   idGprDst    The destination GPR register number.',
+            ' * @param   idxGprDst   The destination GPR register number.',
             ' */',
-            'IEM_CIMPL_DEF_2(iemCImplA64_mrs, uint32_t, idSysReg, uint32_t, idGprDst)',
+            'IEM_CIMPL_DEF_2(iemCImplA64_mrs, uint32_t, idSysReg, uint32_t, idxGprDst)',
             '{',
             '    uint64_t         uZeroDummy;',
-            '    uint64_t * const puDst = idGprDst < ARMV8_A64_REG_XZR',
-            '                           ? &pVCpu->cpum.GstCtx.aGRegs[idGprDst].x : &uZeroDummy;',
-            '    return iemCImplA64_mrs_generic(pVCpu, idSysReg, idGprDst, puDst);',
+            '    uint64_t * const puDst = idxGprDst < ARMV8_A64_REG_XZR',
+            '                           ? &pVCpu->cpum.GstCtx.aGRegs[idxGprDst].x : &uZeroDummy;',
+            '    return iemCImplA64_mrs_generic(pVCpu, idSysReg, idxGprDst, puDst);',
             '}',
         ];
         return asLines;
 
-
-    def transformCodePass2_Identifier(self, oNode, oInfo): # type: (ArmAstIdentifier, SysRegAccessorInfo) -> ArmAstBase
-        # Iff this is anything in the ID block, replace it with a lookup call.
-        if self.isIdRegisterEncoding(oInfo.oAccessor.oEncoding):
-            return ArmAstCppExpr('CPUMCpuIdLookupSysReg(pVCpu, %s)' % (oInfo.sEnc), cBitsWidth = 64);
-        return super().transformCodePass2_Identifier(oNode, oInfo);
 
     def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo, aoStack):
         """ Callback used by the second pass."""
@@ -2450,7 +2456,7 @@ class SysRegGeneratorA64MsrReg(SysRegGeneratorBase):
             ' * Transformation status: %u - %s'
             % (oInfo.cIncompleteNodes, 'complete' if oInfo.cIncompleteNodes == 0 else 'incomplete'),
             ' */',
-            'static VBOXSTRICTRC iemCImplA64_msr_%s(PVMCPU pVCpu, uint64_t uValue%s)'
+            'static VBOXSTRICTRC iemCImplA64_msr_%s(PVMCPU pVCpu, uint64_t uValue%s) RT_NOEXCEPT'
             % (oInfo.oAccessor.oEncoding.sAsmValue, ', uint32_t uInstrEssence' if oInfo.cInstrEssenceRefs > 0 else ''),
             '{',
         ];
@@ -2494,13 +2500,13 @@ class SysRegGeneratorA64MsrReg(SysRegGeneratorBase):
             ' * @param   pVCpu       The cross context virtual CPU structure of the',
             ' *                      calling thread.',
             ' * @param   idSysReg    The system register to write to (IPRT format).',
-            ' * @param   idGprSrc    The source GPR register number (for exceptions).',
+            ' * @param   idxGprSrc   The source GPR register number (for exceptions).',
             ' * @param   uValue      The value to write.',
             ' */',
-            'DECLHIDDEN(VBOXSTRICTRC) iemCImplA64_msr_generic(PVMCPU pVCpu, uint32_t idSysReg, uint32_t idGprSrc,',
+            'DECLHIDDEN(VBOXSTRICTRC) iemCImplA64_msr_generic(PVMCPU pVCpu, uint32_t idSysReg, uint32_t idxGprSrc,',
             '                                                 uint64_t uValue)'
             '{',
-            '    uint32_t const uInstrEssence = idSysReg | (idGprDst << 24) | RT_BIT_32(31);',
+            '    uint32_t const uInstrEssence = idSysReg | (idxGprSrc << 24) | RT_BIT_32(31);',
             '    switch (idSysReg)',
             '    {',
         ];
@@ -2512,19 +2518,19 @@ class SysRegGeneratorA64MsrReg(SysRegGeneratorBase):
         asLines += [
             '    }',
             '    /* Fall back on handcoded handler. */',
-            '    return iemCImplA64_msr_fallback(pVCpu, idSysReg, uValue, idGprDst);',
+            '    return iemCImplA64_msr_fallback(pVCpu, idSysReg, uValue, idxGprSrc);',
             '}',
             '',
             '/**',
             ' * Implements the MSR (register) instruction.',
             ' *',
             ' * @param   idSysReg    The system register to write to (IPRT format).',
-            ' * @param   idGprDst    The source GPR register number.',
+            ' * @param   idxGprSrc   The source GPR register number.',
             ' */',
-            'IEM_CIMPL_DEF_2(iemCImplA64_msr, uint32_t, idSysReg, uint32_t, idGprDst)',
+            'IEM_CIMPL_DEF_2(iemCImplA64_msr, uint32_t, idSysReg, uint32_t, idxGprSrc)',
             '{',
-            '    uint64_t const uValue = idGprSrc < ARMV8_A64_REG_XZR ? pVCpu->cpum.GstCtx.aGRegs[idGprSrc].x : 0;',
-            '    return iemCImplA64_msr_generic(pVCpu, idSysReg, idGprDst, uValue);',
+            '    uint64_t const uValue = idxGprSrc < ARMV8_A64_REG_XZR ? pVCpu->cpum.GstCtx.aGRegs[idxGprSrc].x : 0;',
+            '    return iemCImplA64_msr_generic(pVCpu, idSysReg, idxGprSrc, uValue);',
             '}',
         ];
         return asLines;

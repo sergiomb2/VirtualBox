@@ -140,7 +140,7 @@ RT_C_DECLS_BEGIN
 //                                             uint32_t fFlags, uint16_t uErr, uint64_t uCr2) IEM_NOEXCEPT_MAY_LONGJMP;
 
 #define IEM_RAISE_PROTOS(a_Name, ...) \
-    VBOXSTRICTRC a_Name(__VA_ARGS__) RT_NOEXCEPT; \
+    DECLHIDDEN(VBOXSTRICTRC) a_Name(__VA_ARGS__) RT_NOEXCEPT; \
     DECL_NO_RETURN(void) RT_CONCAT(a_Name,Jmp)(__VA_ARGS__) IEM_NOEXCEPT_MAY_LONGJMP
 
 IEM_RAISE_PROTOS(iemRaiseUndefined, PVMCPUCC pVCpu);
@@ -159,6 +159,7 @@ IEM_RAISE_PROTOS(iemRaiseInstructionAbortTlbPermision,
                  PVMCPUCC pVCpu, RTGCPTR GCPtrMem, uint8_t cbMem, PCIEMTLBENTRY pTlbe);
 
 
+VBOXSTRICTRC iemRaiseSystemAccessTrap(PVMCPU pVCpu, uint32_t uAccessCode, uint32_t uInstrEssence) RT_NOEXCEPT;
 
 IEM_CIMPL_PROTO_0(iemCImplRaiseInvalidOpcode);
 
@@ -339,6 +340,24 @@ uint64_t        iemMemFetchStackU64SafeJmp(PVMCPUCC pVCpu, RTGCPTR GCPtrMem) IEM
 /** @name IEMAllCImpl.cpp
  * @note sed -e '/IEM_CIMPL_DEF_/!d' -e 's/IEM_CIMPL_DEF_/IEM_CIMPL_PROTO_/' -e 's/$/;/'
  * @{ */
+
+/*
+ * System register related stuff.
+ */
+DECLHIDDEN(VBOXSTRICTRC) iemCImplA64_mrs_novar(PVMCPU pVCpu, uint32_t idSysReg, const char *pszRegName,
+                                               uint64_t *puDst, uint32_t idxGprDst) RT_NOEXCEPT;
+DECLHIDDEN(VBOXSTRICTRC) iemCImplA64_msr_novar(PVMCPU pVCpu, uint32_t idSysReg, const char *pszRegName,
+                                               uint64_t uValue, uint32_t idxGprSrc) RT_NOEXCEPT;
+DECLHIDDEN(VBOXSTRICTRC) iemCImplA64_mrs_fallback(PVMCPU pVCpu, uint32_t idxGprDst, uint32_t idSysReg) RT_NOEXCEPT;
+DECLHIDDEN(VBOXSTRICTRC) iemCImplA64_msr_fallback(PVMCPU pVCpu, uint32_t idSysReg, uint64_t uValue, uint32_t idxGprSrc) RT_NOEXCEPT;
+DECLHIDDEN(VBOXSTRICTRC) iemNVMemReadU64(PVMCPU pVCpu, uint32_t off, uint64_t *puDst) RT_NOEXCEPT;
+DECLHIDDEN(VBOXSTRICTRC) iemNVMemWriteU64(PVMCPU pVCpu, uint32_t off, uint64_t uValue) RT_NOEXCEPT;
+DECLHIDDEN(uint64_t)     CPUMCpuIdLookupSysReg(PVMCPU pVCpu, uint32_t idSysReg) RT_NOEXCEPT;
+DECLHIDDEN(VBOXSTRICTRC) iemReadDbgDtrEl0U64(PVMCPU pVCpu, uint64_t *puDst) RT_NOEXCEPT;
+DECLHIDDEN(VBOXSTRICTRC) iemReadDbgDtrEl0U32(PVMCPU pVCpu, uint64_t *puDst) RT_NOEXCEPT;
+
+
+
 
 /** @} */
 
