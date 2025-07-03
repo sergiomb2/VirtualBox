@@ -2129,11 +2129,6 @@ class SysRegGeneratorBase(object):
                     return (off, cBits);
         raise Exception('Bogus NVMem access: %s' % (oNode,));
 
-    #def transformCodePass2_NVMemRead(self, oNode):
-    #    """ Pass 2: Translate NVMem[off[,bits]] to function call. """
-    #    (off, cBits) = self.transformCodePass2_ParseNVMem(oNode);
-    #    return ArmAstCppExpr('iemNVMemReadU%u(%#x)' % (cBits, off,), cBitsWidth = cBits);
-
     def transformCodePass2_AssignFromNVMem(self, oNode):
         """ Pass 2: Translate NVMem[off[,bits]] to function call. """
         (off, cBits) = self.transformCodePass2_ParseNVMem(oNode.oValue);
@@ -2155,6 +2150,39 @@ class SysRegGeneratorBase(object):
             sValue = sValue.replace('\n', '\n' + ' ' * (len(sCall) + len('return ')));
         return ArmAstReturn(ArmAstCppExpr(sCall + sValue + ')', cBitsWidth = 32));
 
+    def transformCodePass2_Assign_Read_DBGDTR_EL0(self, oNode): # pylint: disable=invalid-name
+        """ Pass 2: Translates Read_DBGDTR_EL0() to a helper call. """
+        if len(oNode.oValue.aoArgs) == 1:
+            cBits = oNode.oValue.aoArgs[0].getIntegerOrValue();
+            if cBits in (32, 64):
+                # Assume the variable receiving the assignment is *puDst or similar:
+                sValuePtr = oNode.oVar.toString();
+                if sValuePtr[0] == '*':
+                    sValuePtr = sValuePtr[1:];
+                    return ArmAstReturn(ArmAstCppExpr('iemReadDbgDtrEl0U%u(pVCpu, %s)' % (cBits, sValuePtr,),
+                                                      cBitsWidth = 32));
+        raise Exception('Unexpected: %s' % (oNode.toString(),));
+
+    def getUnresolvedRegisterInfo(self, sRegName, oInfo):
+        """ Pass 2 helper that resolves a register name to a C constant. """
+        if sRegName:
+            # The register should match the info one because we need it's ID.
+            if oInfo.oAccessor.oEncoding.sAsmValue == sRegName:
+                return oInfo.sEnc;
+
+            # Otherwise, we need to look it up and such...
+            oReg = spec.g_ddoAllArmRegistersByStateByName[self.getRegStateName()].get(sRegName); # ArmRegister
+            if oReg:
+                for oAccessor in oReg.aoAccessors:
+                    if isinstance(oAccessor, spec.ArmAccessorSystem):
+                        if oAccessor.oEncoding.sAsmValue == sRegName:
+                            try:
+                                return oAccessor.oEncoding.getSysRegIdCreate();
+                            except Exception:
+                                pass;
+
+        return None;
+
     def transformCodePass2_AssignFromUnresolvedReg(self, oNode, oInfo): # pylint: disable=invalid-name
         """ Pass 2: Assignment with a unresolved register on the right side. """
         # Assume the variable receiving the assignment is *puDst or similar:
@@ -2163,27 +2191,10 @@ class SysRegGeneratorBase(object):
             return oNode;
         sValuePtr = sValuePtr[1:];
 
-        # The register should match the info one because we need it's ID.
-        # Otherwise, we need to look it up and such...
-        sRegName = oNode.oValue.getIdentifierName();
-        if sRegName and oInfo.oAccessor.oEncoding.sAsmValue == sRegName:
-            sRegConst = oInfo.sEnc
-        else:
-            sRegConst = None;
-            if sRegName:
-                oReg = spec.g_ddoAllArmRegistersByStateByName[self.getRegStateName()].get(sRegName); # ArmRegister
-                if oReg:
-                    for oAccessor in oReg.aoAccessors: # ArmAccessorBase
-                        if isinstance(oAccessor, spec.ArmAccessorSystem):
-                            if oAccessor.oEncoding.sAsmValue == oNode.oValue.sName:
-                                try:
-                                    sRegConst = oAccessor.oEncoding.getSysRegIdCreate();
-                                except Exception:
-                                    pass;
-                                else:
-                                    break;
-            if not sRegConst:
-                return oNode;
+        sRegName  = oNode.oValue.getIdentifierName();
+        sRegConst = self.getUnresolvedRegisterInfo(sRegName, oInfo);
+        if not sRegConst:
+            return oNode;
 
         oInfo.cAssignmentsWithUnresolvedRegs += 1;
         return ArmAstReturn(ArmAstCppExpr('%s_novar(pVCpu, %s, "%s", %s)' % (self.sFuncPrefix, sRegConst, sRegName, sValuePtr,),
@@ -2191,13 +2202,14 @@ class SysRegGeneratorBase(object):
 
     def transformCodePass2_AssignToUnresolvedReg(self, oNode, oInfo): # pylint: disable=invalid-name
         """ Pass 2: Assignment to an unresolved register on the left side. """
-        # The register should match the info one because we need it's ID.
-        if not oNode.oVar.isMatchingIdentifier(oInfo.oAccessor.oEncoding.sAsmValue):
+        sRegName = oNode.oVar.getIdentifierName();
+        sRegConst = self.getUnresolvedRegisterInfo(sRegName, oInfo);
+        if not sRegConst:
             return oNode;
 
         oInfo.cAssignmentsWithUnresolvedRegs += 1;
         return ArmAstReturn(ArmAstCppExpr('%s_novar(pVCpu, %s, "%s", %s)'
-                                          % (self.sFuncPrefix, oInfo.sEnc, oInfo.oAccessor.oEncoding.sAsmValue,
+                                          % (self.sFuncPrefix, oInfo.sEnc, sRegName,
                                              oNode.oValue.toStringEx(sLang = 'C').replace('\n', '\n        '),), # ugly.
                                           cBitsWidth = 32));
 
@@ -2292,6 +2304,9 @@ class SysRegGeneratorBase(object):
                     return self.transformCodePass2_AssignToNVMem(oNode);
             elif isinstance(oNode.oValue, ArmAstSquareOp) and oNode.oValue.oVar.isMatchingIdentifier('NVMem'):
                 return self.transformCodePass2_AssignFromNVMem(oNode);
+            elif isinstance(oNode.oValue, ArmAstFunction):
+                if oNode.oValue.sName == 'Read_DBGDTR_EL0':
+                    return self.transformCodePass2_Assign_Read_DBGDTR_EL0(oNode);
             elif isinstance(oNode.oValue, ArmAstIdentifier):
                 return self.transformCodePass2_AssignFromUnresolvedReg(oNode, oInfo);
             elif isinstance(oNode.oVar, ArmAstIdentifier):
@@ -2306,6 +2321,9 @@ class SysRegGeneratorBase(object):
 
 
 class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
+    """
+    Code generator specialization for the MRS (read system register) instruction.
+    """
 
     def __init__(self):
         SysRegGeneratorBase.__init__(self, 'A64.MRS', 'iemCImplA64_mrs');
@@ -2328,11 +2346,11 @@ class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
                 '    RT_NOREF(pVCpu, puDst%s);' % (', uInstrEssence' if oInfo.cInstrEssenceRefs > 0 else ''),
                 '#ifdef IEM_SYSREG_TODO',
             ];
-        elif isinstance(oInfo.oCode, ArmAstReturn):
-
+        elif isinstance(oInfo.oCode, ArmAstReturn) and oInfo.oCode.toString().find('Raise') >= 0:
             asLines.append('    RT_NOREF(puDst);');
         if oInfo.cCallsToIsFeatureImplemented > 0:
             asLines.append('    const CPUMFEATURESARMV8 * const pGstFeats = IEM_GET_GUEST_CPU_FEATURES(pVCpu);');
+
         if oInfo.oCode:
             asLines.extend(oInfo.oCode.toStringList('    ', 'C'));
 
@@ -2369,10 +2387,7 @@ class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
             'DECLHIDDEN(VBOXSTRICT) iemCImplA64_mrs_generic(PVMCPU pVCpu, uint32_t idSysReg, uint32_t idGprDst,',
             '                                               uint64_t *puDst)',
             '{',
-            '    uint32_t const   uInstrEssence = idSysReg | (idGprDst << 24);',
-            '    uint64_t         uZeroDummy;',
-            '    uint64_t * const puDst = idGprDst < ARMV8_A64_REG_XZR',
-            '                           ? &pVCpu->cpum.GstCtx.aGRegs[idGprDst].x : &uZeroDummy;',
+            '    uint32_t const uInstrEssence = idSysReg | (idGprDst << 24);',
             '    switch (idSysReg)',
             '    {',
         ];
@@ -2414,6 +2429,117 @@ class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
         """ Callback used by the second pass."""
         if oNode.isMatchingSquareOp('X', 't', 64) or oNode.isMatchingSquareOp('X', 't', 32):
             return ArmAstCppExpr('*puDst', cBitsWidth = 64);
+
+        return super().transformCodePass2Callback(oNode, fEliminationAllowed, oInfo, aoStack);
+
+
+class SysRegGeneratorA64MsrReg(SysRegGeneratorBase):
+    """
+    Code generator specialization for the MSR (set system register) instruction.
+    """
+
+    def __init__(self):
+        SysRegGeneratorBase.__init__(self, 'A64.MSRregister', 'iemCImplA64_msr');
+
+    def generateOneHandler(self, oInfo):
+        """ Generates one register access for A64.MSR. """
+        asLines = [
+            '',
+            '/**',
+            ' * %s - %s' % (oInfo.oAccessor.oEncoding.sAsmValue, oInfo.oAccessor.oEncoding.dNamedValues,),
+            ' * Transformation status: %u - %s'
+            % (oInfo.cIncompleteNodes, 'complete' if oInfo.cIncompleteNodes == 0 else 'incomplete'),
+            ' */',
+            'static VBOXSTRICTRC iemCImplA64_msr_%s(PVMCPU pVCpu, uint64_t uValue%s)'
+            % (oInfo.oAccessor.oEncoding.sAsmValue, ', uint32_t uInstrEssence' if oInfo.cInstrEssenceRefs > 0 else ''),
+            '{',
+        ];
+        if oInfo.cIncompleteNodes > 0 or not oInfo.oCode:
+            asLines += [
+                '    RT_NOREF(pVCpu, uValue%s);' % (', uInstrEssence' if oInfo.cInstrEssenceRefs > 0 else ''),
+                '#ifdef IEM_SYSREG_TODO',
+            ];
+        elif isinstance(oInfo.oCode, ArmAstReturn) and oInfo.oCode.toString().find('Raise') >= 0:
+            asLines.append('    RT_NOREF(uValue);');
+        if oInfo.cCallsToIsFeatureImplemented > 0:
+            asLines.append('    const CPUMFEATURESARMV8 * const pGstFeats = IEM_GET_GUEST_CPU_FEATURES(pVCpu);');
+
+        if oInfo.oCode:
+            asLines.extend(oInfo.oCode.toStringList('    ', 'C'));
+
+        if oInfo.cIncompleteNodes > 0 or not oInfo.oCode:
+            asLines += [
+                '#endif',
+                '    return VERR_IEM_ASPECT_NOT_IMPLEMENTED;'
+            ];
+        elif not isinstance(oInfo.oCode, ArmAstReturn):
+            asLines.append('    return VINF_SUCCESS;');
+
+        asLines.append('    /* -------- Original code specification: -------- */');
+        asLines.extend([ '    // ' + sLine for sLine in oInfo.oAccessor.oAccess.toStringList()]);
+
+        asLines += [
+            '}',
+        ];
+        return asLines;
+
+    def generateMainFunction(self):
+        """ Generates the CIMPL function for A64.MSRRegister. """
+        asLines = [
+            '',
+            '/**',
+            ' * Implements the MSR (register) instruction.',
+            ' *',
+            ' * @returns Strict VBox status code.',
+            ' * @param   pVCpu       The cross context virtual CPU structure of the',
+            ' *                      calling thread.',
+            ' * @param   idSysReg    The system register to write to (IPRT format).',
+            ' * @param   idGprSrc    The source GPR register number (for exceptions).',
+            ' * @param   uValue      The value to write.',
+            ' */',
+            'DECLHIDDEN(VBOXSTRICTRC) iemCImplA64_msr_generic(PVMCPU pVCpu, uint32_t idSysReg, uint32_t idGprSrc,',
+            '                                                 uint64_t uValue)'
+            '{',
+            '    uint32_t const uInstrEssence = idSysReg | (idGprDst << 24) | RT_BIT_32(31);',
+            '    switch (idSysReg)',
+            '    {',
+        ];
+        for oInfo in self.aoInfo:
+            if oInfo.sEnc[0] == 'A':
+                asLines.append('        case %s: %sreturn iemCImplA64_mrs_%s(pVCpu, puDst%s);'
+                               % (oInfo.sEnc, ' ' * (45 - len(oInfo.sEnc)), oInfo.oAccessor.oEncoding.sAsmValue,
+                                  ', uInstrEssence' if oInfo.cInstrEssenceRefs else '',));
+        asLines += [
+            '    }',
+            '    /* Fall back on handcoded handler. */',
+            '    return iemCImplA64_msr_fallback(pVCpu, idSysReg, uValue, idGprDst);',
+            '}',
+            '',
+            '/**',
+            ' * Implements the MSR (register) instruction.',
+            ' *',
+            ' * @param   idSysReg    The system register to write to (IPRT format).',
+            ' * @param   idGprDst    The source GPR register number.',
+            ' */',
+            'IEM_CIMPL_DEF_2(iemCImplA64_msr, uint32_t, idSysReg, uint32_t, idGprDst)',
+            '{',
+            '    uint64_t const uValue = idGprSrc < ARMV8_A64_REG_XZR ? pVCpu->cpum.GstCtx.aGRegs[idGprSrc].x : 0;',
+            '    return iemCImplA64_msr_generic(pVCpu, idSysReg, idGprDst, uValue);',
+            '}',
+        ];
+        return asLines;
+
+
+    def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo, aoStack):
+        """ Callback used by the second pass."""
+        # Replace X[t,64] references with uValue.
+        if oNode.isMatchingSquareOp('X', 't', 64):# or oNode.oVar.isMatchingSquareOp('X', 't', 32):
+            if aoStack and isinstance(aoStack[-1], ArmAstAssignment):
+                return ArmAstCppExpr('uValue', cBitsWidth = 64);
+        # Return statements w/o a value are NOP branches, make them return VINF_SUCCESS.
+        elif isinstance(oNode, ArmAstReturn):
+            if not oNode.oValue:
+                return ArmAstReturn(ArmAstCppExpr('VINF_SUCCESS', 32));
 
         return super().transformCodePass2Callback(oNode, fEliminationAllowed, oInfo, aoStack);
 
@@ -2973,7 +3099,7 @@ class IEMArmGenerator(object):
         #
         dAccessors = {
             'A64.MRS':          SysRegGeneratorA64Mrs(),
-            'A64.MSRregister':  SysRegGeneratorBase('A64.MSRregister',  'iemCImplA64_msr'),
+            'A64.MSRregister':  SysRegGeneratorA64MsrReg(),
             'A64.MSRimmediate': SysRegGeneratorBase('A64.MSRimmediate', 'iemCImplA64_msr_imm'),
             'A64.MRRS':         SysRegGeneratorBase('A64.MRRS',         'iemCImplA64_mrrs'),
             'A64.MSRRregister': SysRegGeneratorBase('A64.MSRRregister', 'iemCImplA64_msrr'),
