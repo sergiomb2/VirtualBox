@@ -922,7 +922,7 @@ class ArmRegEncoding(object):
                     if fWildcard == 0:
                         if isinstance(oOther, range):
                             if iMyValue not in oOther:
-                                iOtherFirst = next(oOther);
+                                iOtherFirst = next(iter(oOther));
                                 assert iOtherFirst != iMyValue;
                                 return iOtherFirst - iMyValue;
                         elif oOther != iMyValue:
@@ -932,13 +932,13 @@ class ArmRegEncoding(object):
                         (iMyLastValue,  _, _, _) = ArmAstValue.parseValue(oMyValue.sValue.replace('x', '1'), 0);
                         if isinstance(oOther, range):
                             if not set(oOther) & set(range(iMyFirstValue, iMyLastValue + 1)):
-                                return next(oOther) - iMyFirstValue;
+                                return next(iter(oOther)) - iMyFirstValue;
                         elif oOther < iMyFirstValue:
                             return oOther - iMyFirstValue;
                         elif oOther > iMyLastValue:
                             return oOther - iMyLastValue;
                 elif isinstance(oOther, range):
-                    iOtherFirst = next(oOther);
+                    iOtherFirst = next(iter(oOther));
                     return -1 if iOtherFirst < 0 else 1;
                 else:
                     return -1 if oOther < 0 else 1;

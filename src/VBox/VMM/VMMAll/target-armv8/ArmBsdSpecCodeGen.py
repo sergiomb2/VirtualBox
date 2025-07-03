@@ -1632,6 +1632,29 @@ class SysRegGeneratorBase(object):
     # Pass 2 - C++ translation.
     #
 
+    @staticmethod
+    def isIdRegisterEncoding(oEncoding):
+        """
+        Checks if oEncoding (ArmRegEncoding) is for a known ID register and
+        CPUM handleds by lookup.
+        """
+        # Note! This must match SUPDrv.cpp and CPUMAllCpuId.cpp...
+        if (   oEncoding.compareCStyle(3, 0,  0,     range(8), None) == 0 # ID block
+            or oEncoding.compareCStyle(3, 0,  5,            3,    0) == 0 # ERRIDR_EL1
+            or oEncoding.compareCStyle(3, 0,  9,            9,    7) == 0 # PMSIDR_EL1
+            or oEncoding.compareCStyle(3, 0,  9,           10,    7) == 0 # PMBIDR_EL1
+            or oEncoding.compareCStyle(3, 0,  9,           11,    7) == 0 # TRBIDR_EL1
+            or oEncoding.compareCStyle(3, 0,  9,           14,    6) == 0 # PMMIR_EL1
+            or oEncoding.compareCStyle(3, 0, 10,            4,    5) == 0 # MPAMBWIDR_EL1
+            or oEncoding.compareCStyle(3, 1,  0,            0,    4) == 0 # GMID_EL1
+            or oEncoding.compareCStyle(3, 1,  0,            0,    6) == 0 # SMIDR_EL1
+            or oEncoding.compareCStyle(2, 1,  0, range(8, 16),    7) == 0 # TRCIDR[0-7]
+            or oEncoding.compareCStyle(2, 1,  0,     range(6),    6) == 0 # TRCIDR[8-13]
+            or oEncoding.compareCStyle(2, 1,  7,           15,    6) == 0 # TRCDEVARCH
+            ):
+            return True;
+        return False;
+
     def lookupRegisterField(self, sState, sRegisterName, sField, sWhatFor, fWarnOnly = False):
         """
         Helper to lookup a register field, returning (oReg, oField, sAccessExpr|fReservedValue).
@@ -1660,21 +1683,7 @@ class SysRegGeneratorBase(object):
             for oAccessor in oReg.aoAccessors:
                 if isinstance(oAccessor, spec.ArmAccessorSystem):
                     if oAccessor.oEncoding.sAsmValue == sRegisterName:
-                        # Note! This must match SUPDrv.cpp and CPUMAllCpuId.cpp...
-                        if (   oAccessor.oEncoding.compareCStyle(3, 0, 0, range(8), None) == 0 # ID block
-                            or oAccessor.oEncoding.compareCStyle(3, 0, 5,  3, 0) == 0 # ERRIDR_EL1
-                            or oAccessor.oEncoding.compareCStyle(3, 0, 5,  3, 0) == 0
-                            or oAccessor.oEncoding.compareCStyle(3, 0, 9,  9, 7) == 0 # PMSIDR_EL1
-                            or oAccessor.oEncoding.compareCStyle(3, 0, 9, 10, 7) == 0 # PMBIDR_EL1
-                            or oAccessor.oEncoding.compareCStyle(3, 0, 9, 11, 7) == 0 # TRBIDR_EL1
-                            or oAccessor.oEncoding.compareCStyle(3, 0, 9, 14, 6) == 0 # PMMIR_EL1
-                            or oAccessor.oEncoding.compareCStyle(3, 0, 10, 4, 5) == 0 # MPAMBWIDR_EL1
-                            or oAccessor.oEncoding.compareCStyle(3, 1,  0, 0, 4) == 0 # GMID_EL1
-                            or oAccessor.oEncoding.compareCStyle(3, 1,  0, 0, 6) == 0 # SMIDR_EL1
-                            or oAccessor.oEncoding.compareCStyle(2, 1, 0, range(8, 16), 7) == 0 # TRCIDR[0-7]
-                            or oAccessor.oEncoding.compareCStyle(2, 1, 0, range(6),     6) == 0 # TRCIDR[8-13]
-                            or oAccessor.oEncoding.compareCStyle(2, 1, 7, 15, 6) == 0 # TRCDEVARCH
-                            ):
+                        if self.isIdRegisterEncoding(oAccessor.oEncoding):
                             oAccessExprOrInt = oAccessor.oEncoding.getSysRegIdCreate();
                             break;
             if not oAccessExprOrInt:
@@ -2369,7 +2378,7 @@ class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
 
     def transformCodePass2_Identifier(self, oNode, oInfo): # type: (ArmAstIdentifier, SysRegAccessorInfo) -> ArmAstBase
         # Iff this is anything in the ID block, replace it with a lookup call.
-        if oInfo.oAccessor.oEncoding.compareCStyle(3, 0, 0, range(8), None) == 0:
+        if self.isIdRegisterEncoding(oInfo.oAccessor.oEncoding):
             return ArmAstCppExpr('CPUMCpuIdLookupSysReg(pVCpu, %s)' % (oInfo.sEnc), cBitsWidth = 64);
         return super().transformCodePass2_Identifier(oNode, oInfo);
 
