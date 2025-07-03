@@ -879,7 +879,7 @@ DECL_HIDDEN_CALLBACK(int) gitsR3CmdQueueProcess(PPDMDEVINS pDevIns, PGITSDEV pGi
                         {
                             /* Map device ID to an interrupt translation table. */
                             uint32_t const uDevId     = RT_BF_GET(pCmd->au64[0].u, GITS_BF_CMD_MAPD_DW0_DEV_ID);
-                            uint8_t const  cDevIdBits = RT_BF_GET(pCmd->au64[1].u, GITS_BF_CMD_MAPD_DW1_SIZE);
+                            uint8_t const  cDevIdBits = RT_BF_GET(pCmd->au64[1].u, GITS_BF_CMD_MAPD_DW1_SIZE) + 1;
                             bool const     fValid     = RT_BF_GET(pCmd->au64[2].u, GITS_BF_CMD_MAPD_DW2_VALID);
                             RTGCPHYS const GCPhysItt  = pCmd->au64[2].u & GITS_BF_CMD_MAPD_DW2_ITT_ADDR_MASK;
                             if (fValid)
@@ -1028,7 +1028,7 @@ DECL_HIDDEN_CALLBACK(int) gitsSetLpi(PPDMDEVINS pDevIns, PGITSDEV pGitsDev, uint
             if (fValid)
             {
                 /* Check that the event ID (which is the index) is within range. */
-                uint32_t const cEntries = RT_BIT_32(RT_BF_GET(uDte, GITS_BF_DTE_ITT_ADDR) + 1);
+                uint32_t const cEntries = RT_BIT_32(RT_BF_GET(uDte, GITS_BF_DTE_ITT_RANGE) + 1);
                 if (uEventId < cEntries)
                 {
                     /* Read the interrupt-translation entry. */
@@ -1056,12 +1056,26 @@ DECL_HIDDEN_CALLBACK(int) gitsSetLpi(PPDMDEVINS pDevIns, PGITSDEV pGitsDev, uint
                                     PVMCPUCC pVCpu = pVM->CTX_SUFF(apCpus)[idCpu];
                                     gicReDistSetLpi(pDevIns, pVCpu, uIntId, fAsserted);
                                 }
+                                else
+                                    AssertMsgFailed(("CPU index out-of-bounds %RU32\n", idCpu));
                             }
+                            else
+                                AssertMsgFailed(("ICID out-of-bounds %#RU16 (uIte=%#RX64)\n", uIcId, uIte));
                         }
+                        else
+                            AssertMsgFailed(("LPI invalid (uIte=%#RX64)\n", uIte));
                     }
+                    else
+                        AssertMsgFailed(("Failed to read the ITE, rc=%Rrc\n", rc));
                 }
+                else
+                    AssertMsgFailed(("Event Id out-of-bounds %#RU32 (uDte=%#RX64)\n", cEntries, uDte));
             }
+            else
+                AssertMsgFailed(("fValid\n"));
         }
+        else
+            AssertMsgFailed(("Failed to read the DTE, rc=%Rrc\n", rc));
     }
     GIC_CRIT_SECT_LEAVE(pDevIns);
     return VINF_SUCCESS;
