@@ -160,6 +160,9 @@ IEM_RAISE_PROTOS(iemRaiseInstructionAbortTlbPermision,
 
 
 VBOXSTRICTRC iemRaiseSystemAccessTrap(PVMCPU pVCpu, uint32_t uAccessCode, uint32_t uInstrEssence) RT_NOEXCEPT;
+VBOXSTRICTRC iemRaiseSystemAccessTrapSme(PVMCPU pVCpu, uint32_t uEl) RT_NOEXCEPT;
+VBOXSTRICTRC iemRaiseSystemAccessTrapAdvSimdFpAccessA64(PVMCPU pVCpu, uint32_t uEl) RT_NOEXCEPT;
+VBOXSTRICTRC iemRaiseSystemAccessTrapUnknown(PVMCPU pVCpu, uint32_t uEl) RT_NOEXCEPT;
 
 IEM_CIMPL_PROTO_0(iemCImplRaiseInvalidOpcode);
 

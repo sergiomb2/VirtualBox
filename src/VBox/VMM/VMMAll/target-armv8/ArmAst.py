@@ -1839,8 +1839,11 @@ class ArmAstReturn(ArmAstStatementBase):
 
     def isSame(self, oOther):
         if isinstance(oOther, ArmAstReturn):
-            if self.oValue.isSame(oOther.oValue):
-                return True;
+            if self.oValue and oOther.oValue:
+                if self.oValue.isSame(oOther.oValue):
+                    return True;
+            elif not self.oValue and not oOther.oValue:
+                    return True;
         return False;
 
     def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):

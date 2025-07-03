@@ -1273,6 +1273,8 @@ class SysRegAccessorInfo(object):
         self.oReg       = oReg;
         self.sEnc       = sEnc;
         self.oCode      = None;
+        self.sAsmValue  = oAccessor.oEncoding.sAsmValue;
+        self.sRegName   = oReg.sName;
         # Stats for the code generator.
         self.cCallsToIsFeatureImplemented = 0;
         self.cInstructionReferences       = 0;
@@ -3125,7 +3127,56 @@ class IEMArmGenerator(object):
 
         for sKey, oGenerator in dAccessors.items():
             assert sKey == oGenerator.sInstr;
-            oGenerator.aoInfo.sort(key = operator.attrgetter('sEnc'));
+            oGenerator.aoInfo.sort(key = operator.attrgetter('sEnc', 'sRegName'));
+
+            # Eliminate duplicate entries. See for instance SPMACCESSR_EL1 & SPMACCESSR_EL2.
+            sEncPrev = '';
+            idx      = 0;
+            while idx < len(oGenerator.aoInfo):
+                if oGenerator.aoInfo[idx].sEnc != sEncPrev:
+                    sEncPrev = oGenerator.aoInfo[idx].sEnc;
+                    idx += 1;
+                else:
+                    oThisAcc = oGenerator.aoInfo[idx].oAccessor;
+                    oPrevAcc = oGenerator.aoInfo[idx - 1].oAccessor;
+                    assert oThisAcc.oEncoding.toString() == oPrevAcc.oEncoding.toString();
+                    if oThisAcc.oAccess and oPrevAcc.oAccess:
+                        if not oThisAcc.oAccess.isSame(oPrevAcc.oAccess):
+                            # A number of ICV_xxx variants of ICC_xxx registers have an extra !HaveEL(EL2) condition
+                            # in the 2024-12 specs that seems to have been removed since. Pick the variant w/o it.
+                            # The sorting on sRegName should make sure that ICC_xxx is prev and ICV_xxx is current.
+                            if (    oThisAcc.oEncoding.sAsmValue.startswith('ICC_')
+                                and oGenerator.aoInfo[idx].oReg.sName.startswith('ICV_')):
+                                pass;
+                            else:
+                                asCodeThis = oThisAcc.oAccess.toStringList();
+                                for i, sLine in enumerate(asCodeThis):
+                                    asCodeThis[i] = '%2u: %s' % (i, sLine);
+
+                                asCodePrev = oPrevAcc.oAccess.toStringList();
+                                for i, sLine in enumerate(asCodePrev):
+                                    asCodePrev[i] = '%2u: %s' % (i, sLine);
+
+                                asDiff = [];
+                                for i, sLine in enumerate(asCodeThis):
+                                    if i < len(asCodePrev):
+                                        if sLine != asCodePrev[i]:
+                                            asDiff.extend(['cur:  %s' % (sLine,), 'prev: %s' % asCodePrev[i],]);
+                                    else:
+                                        asDiff.extend(['cur:  %s' % (sLine,), 'prev: <missing>',]);
+                                for i in range(len(asCodeThis), len(asCodePrev)):
+                                    asDiff.extend(['cur:  <missing>', 'prev: %s' % (asCodePrev[i]),]);
+                                if asDiff:
+                                    sCode = '%s\n------vs------\n%s\n-----diff-----\n%s' \
+                                          % ('\n'.join(asCodeThis), '\n'.join(asCodePrev), '\n'.join(asDiff),);
+                                    raise Exception('Duplicate entry %s (%s/%s, %s/%s) not matching!:\n%s'
+                                                    % (sEncPrev,
+                                                       oThisAcc.oEncoding.sAsmValue, oGenerator.aoInfo[idx].oReg.sName,
+                                                       oPrevAcc.oEncoding.sAsmValue, oGenerator.aoInfo[idx - 1].oReg.sName,
+                                                       sCode,));
+                    elif oThisAcc.oAccess or oPrevAcc.oAccess:
+                        raise Exception('Duplicate entry %s not matching! (#2)' % (sEncPrev,));
+                    del oGenerator.aoInfo[idx];
 
         #
         # Morph the code into IEM suitable C code.
