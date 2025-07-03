@@ -113,7 +113,6 @@ private slots:
 
 private:
 
-    void manageEscapeShortCut();
     UIActionPool *m_pActionPool;
     QUuid    m_uMachineId;
     QString  m_strMachineName;

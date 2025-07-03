@@ -313,15 +313,6 @@ void UIPropertiesDialog::addDirectoryStatistics(UIDirectoryStatistics directoryS
 {
     if (!m_pInfoEdit)
         return;
-    // QString propertyString = m_pInfoEdit->toHtml();
-    // propertyString += "<b>Total Size:</b> " + QString::number(directoryStatistics.m_totalSize) + QString(" bytes");
-    // if (directoryStatistics.m_totalSize >= UIFileManagerTable::m_iKiloByte)
-    //     propertyString += " (" + UIFileManagerTable::humanReadableSize(directoryStatistics.m_totalSize) + ")";
-    // propertyString += "<br/>";
-    // propertyString += "<b>File Count:</b> " + QString::number(directoryStatistics.m_uFileCount);
-
-    // m_pInfoEdit->setHtml(propertyString);
-
     QString detailsString(m_strProperty);
     detailsString += "<br/>";
     detailsString += "<b>" + UIFileManager::tr("Total Size") + "</b> " +

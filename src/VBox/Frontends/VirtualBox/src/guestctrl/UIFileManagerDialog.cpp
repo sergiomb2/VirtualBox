@@ -154,7 +154,6 @@ void UIFileManagerDialog::finalize()
     sltRetranslateUI();
     connect(&translationEventListener(), &UITranslationEventListener::sigRetranslateUI,
         this, &UIFileManagerDialog::sltRetranslateUI);
-    manageEscapeShortCut();
 }
 
 void UIFileManagerDialog::loadSettings()
@@ -184,12 +183,4 @@ void UIFileManagerDialog::sltSetCloseButtonShortCut(QKeySequence shortcut)
 {
     if (!closeEmitted() &&  button(ButtonType_Close))
         button(ButtonType_Close)->setShortcut(shortcut);
-}
-
-void UIFileManagerDialog::manageEscapeShortCut()
-{
-    UIFileManager *pWidget = qobject_cast<UIFileManager*>(widget());
-    if (!pWidget)
-        return;
-    pWidget->manageEscapeShortCut();
 }
