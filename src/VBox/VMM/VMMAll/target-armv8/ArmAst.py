@@ -1140,27 +1140,20 @@ class ArmAstConcat(ArmAstValuesBase):
         return cBitsWidth;
 
 
-class ArmAstFunction(ArmAstBase):
-    """ This is used both as an expression and as a statment... """
-    koReValidName = re.compile('^[_A-Za-z][_A-Za-z0-9]+$');
-
-    def __init__(self, sName, aoArgs):
-        ArmAstBase.__init__(self, ArmAstBase.ksTypeFunction);
-        assert self.koReValidName.match(sName), 'sName=%s' % (sName);
+class ArmAstFunctionCallBase(ArmAstBase):
+    """ Common base class for ArmAstFunction and ArmAstCppCall. """
+    def __init__(self, sType, sName, aoArgs):
+        ArmAstBase.__init__(self, sType);
         self.sName  = sName;
         self.aoArgs = aoArgs;
 
-    def clone(self):
-        return ArmAstFunction(self.sName, [oArg.clone() for oArg in self.aoArgs]);
-
     def isSame(self, oOther):
-        if isinstance(oOther, ArmAstFunction):
-            if self.sName == oOther.sName:
-                if len(self.aoArgs) == len(oOther.aoArgs):
-                    for idx, oMyArg in enumerate(self.aoArgs):
-                        if not oMyArg.isSame(oOther.aoArgs[idx]):
-                            return False;
-                    return True;
+        if self.sName == oOther.sName:
+            if len(self.aoArgs) == len(oOther.aoArgs):
+                for idx, oMyArg in enumerate(self.aoArgs):
+                    if not oMyArg.isSame(oOther.aoArgs[idx]):
+                        return False;
+                return True;
         return False;
 
     def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
@@ -1175,9 +1168,14 @@ class ArmAstFunction(ArmAstBase):
         return fnCallback(self, fEliminationAllowed, oCallbackArg, aoStack);
 
     def toStringEx(self, sLang = None, cchMaxWidth = 120):
-        sArgList = ','.join([oArg.toStringEx(sLang, max(cchMaxWidth - len(self.sName) - 1, 60)) for oArg in self.aoArgs]);
+        asArgs   = [oArg.toStringEx(sLang, max(cchMaxWidth - len(self.sName) - 1, 60)) for oArg in self.aoArgs];
+        sArgList = ', '.join(asArgs);
         if '\n' in sArgList:
-            sArgList = sArgList.replace('\n', '\n' + ' ' * (len(self.sName) + 1));
+            sNlIndent = '\n' + ' ' * (len(self.sName) + 1);
+            sArgList  = '';
+            for i, sArg in enumerate(asArgs):
+                if i > 0: sArgList += ',' + sNlIndent;
+                sArgList += sArg.replace('\n', sNlIndent);
         return '%s(%s)' % (self.sName, sArgList,);
 
     def toCExpr(self, oHelper):
@@ -1186,6 +1184,23 @@ class ArmAstFunction(ArmAstBase):
     def getWidth(self, oHelper):
         _ = oHelper;
         return -1;
+
+
+class ArmAstFunction(ArmAstFunctionCallBase):
+    """ This is used both as an expression and as a statment... """
+    koReValidName = re.compile('^[_A-Za-z][_A-Za-z0-9]+$');
+
+    def __init__(self, sName, aoArgs):
+        assert self.koReValidName.match(sName), 'sName=%s' % (sName);
+        ArmAstFunctionCallBase.__init__(self, ArmAstBase.ksTypeFunction, sName, aoArgs);
+
+    def clone(self):
+        return ArmAstFunction(self.sName, [oArg.clone() for oArg in self.aoArgs]);
+
+    def isSame(self, oOther):
+        if isinstance(oOther, ArmAstFunction):
+            return ArmAstFunctionCallBase.isSame(self, oOther);
+        return False;
 
     def isMatchingFunctionCall(self, sFunctionName, *aoArgMatches):
         if self.sName == sFunctionName:
@@ -1843,7 +1858,7 @@ class ArmAstReturn(ArmAstStatementBase):
                 if self.oValue.isSame(oOther.oValue):
                     return True;
             elif not self.oValue and not oOther.oValue:
-                    return True;
+                return True;
         return False;
 
     def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
@@ -2092,10 +2107,17 @@ class ArmAstIfList(ArmAstStatementBase):
 # Some quick C++ AST nodes.
 #
 
-class ArmAstCppExpr(ArmAstLeafBase):
+class ArmAstCppExprBase(object):
+    """ C++ AST expression base class. Mainly for isinstance() purposes. """
+    def __init__(self):
+        self.fIsCpp = True;
+
+
+class ArmAstCppExpr(ArmAstLeafBase, ArmAstCppExprBase):
     """ C++ AST node. """
     def __init__(self, sExpr, cBitsWidth = -1):
-        ArmAstLeafBase.__init__(self, 'C++');
+        ArmAstLeafBase.__init__(self, 'C++ Expression');
+        ArmAstCppExprBase.__init__(self);
         self.sExpr      = sExpr;
         self.cBitsWidth = cBitsWidth;
 
@@ -2122,10 +2144,37 @@ class ArmAstCppExpr(ArmAstLeafBase):
         return self.cBitsWidth;
 
 
+class ArmAstCppCall(ArmAstFunctionCallBase, ArmAstCppExprBase):
+    """
+    C++ AST function call node.
+    """
+    def __init__(self, sName, aoArgs, cBitsWidth = 32):
+        ArmAstFunctionCallBase.__init__(self, 'C++ function call', sName, aoArgs);
+        ArmAstCppExprBase.__init__(self);
+        self.cBitsWidth = cBitsWidth; # the return value width. 0 for void.
+
+    def clone(self):
+        return ArmAstCppCall(self.sName, [oArg.clone() for oArg in self.aoArgs], self.cBitsWidth);
+
+    def isSame(self, oOther):
+        if isinstance(oOther, ArmAstCppCall):
+            if self.cBitsWidth == oOther.cBitsWidth:
+                return ArmAstFunctionCallBase.isSame(self, oOther);
+        return False;
+
+    def toCExpr(self, oHelper):
+        _ = oHelper;
+        return self.toStringEx(sLang = 'C');
+
+    def getWidth(self, oHelper):
+        _ = oHelper;
+        return self.cBitsWidth;
+
+
 class ArmAstCppStmt(ArmAstStatementBase):
     """ C++ AST statement node. """
     def __init__(self, *asStmts):
-        ArmAstStatementBase.__init__(self, 'C++');
+        ArmAstStatementBase.__init__(self, 'C++ Statement');
         self.asStmts = list(asStmts);
 
     def clone(self):

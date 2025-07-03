@@ -49,6 +49,8 @@ from ArmAst import ArmAstBinaryOp;
 from ArmAst import ArmAstBool;
 from ArmAst import ArmAstConcat;
 from ArmAst import ArmAstCppExpr;
+from ArmAst import ArmAstCppExprBase;
+from ArmAst import ArmAstCppCall;
 from ArmAst import ArmAstCppStmt;
 from ArmAst import ArmAstDotAtom;
 from ArmAst import ArmAstField;
@@ -1276,9 +1278,8 @@ class SysRegAccessorInfo(object):
         self.sAsmValue  = oAccessor.oEncoding.sAsmValue;
         self.sRegName   = oReg.sName;
         # Stats for the code generator.
-        self.cCallsToIsFeatureImplemented = 0;
-        self.cInstructionReferences       = 0;
-        self.cInstrEssenceRefs            = 0;  # References to uInstrEssence (idSysReg + idxGprReg + direction)
+        self.cGstFeatsRefs                  = 0;
+        self.cInstrEssenceRefs              = 0;  # References to uInstrEssence (idSysReg + idxGprReg + direction)
         self.cAssignmentsWithUnresolvedRegs = 0;  # Number of unresolved system register assignment reference.
         ## This is updated by morphCodeToC() and will be zero the code is ready for compilation.
         self.cIncompleteNodes             = -1;
@@ -1318,7 +1319,14 @@ class SysRegGeneratorBase(object):
         elif isinstance(oNode, ArmAstReturn):
             if oNode.oValue:
                 return True;
-        elif isinstance(oNode, (ArmAstBool, ArmAstCppExpr, ArmAstCppStmt, ArmAstIfList, ArmAstInteger, ArmAstUnaryOp,
+        elif isinstance(oNode, ArmAstCppExpr):
+            if oNode.sExpr == 'uInstrEssence':
+                oInfo.cInstrEssenceRefs += 1;
+            elif oNode.sExpr.startswith('pGstFeats'):
+                oInfo.cGstFeatsRefs     += 1;
+            return True;
+
+        elif isinstance(oNode, (ArmAstBool, ArmAstCppExprBase, ArmAstCppStmt, ArmAstIfList, ArmAstInteger, ArmAstUnaryOp,
                                 ArmAstAssignment, self.VBoxAstCppConcat)):
             return True;
 
@@ -1330,8 +1338,10 @@ class SysRegGeneratorBase(object):
         assert oInfo.oCode is None;
         oInfo.oCode = self.transformCodePass2(oInfo, self.transformCodePass1(oInfo, oInfo.oAccessor.oAccess.clone()));
 
-        # Update the completion status.
-        oInfo.cIncompleteNodes = 0;
+        # Update the completion status and other statistics.
+        oInfo.cIncompleteNodes  = 0;
+        oInfo.cGstFeatsRefs     = 0;
+        oInfo.cInstrEssenceRefs = 0;
         oInfo.oCode.walk(self.checkCConversionCallback, oInfo);
         return True;
 
@@ -1463,7 +1473,7 @@ class SysRegGeneratorBase(object):
         _ = oInfo;
         return ArmAstInteger(0, cBitsWidth);
 
-    def transformCodePass1_AArch64_SystemAccessTrap(self, oNode, oInfo): # pylint: disable=invalid-name
+    def transformCodePass1_AArch64_SystemAccessTrap(self, oNode): # pylint: disable=invalid-name
         """ Pass 1: AArch64_SystemAccessTrap(EL2,0x18) and such. """
         if len(oNode.aoArgs) == 2:
             idxEl  = self.kdELxToNum.get(oNode.aoArgs[0].getIdentifierName());
@@ -1471,26 +1481,34 @@ class SysRegGeneratorBase(object):
             if idxEl is not None and iClass is not None:
                 assert idxEl > 0;
                 if iClass == 0:
-                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapUnknown(pVCpu, %s)' % (idxEl,), cBitsWidth = 32));
+                    return ArmAstReturn(ArmAstCppCall('iemRaiseSystemAccessTrapUnknown',
+                                                      [ ArmAstCppExpr('pVCpu'), ArmAstInteger(idxEl), ]));
                 if iClass == 7 and self.isA64Instruction():
-                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapAdvSimdFpAccessA64(pVCpu, %s)'
-                                                       % (idxEl,), cBitsWidth = 32));
+                    return ArmAstReturn(ArmAstCppCall('iemRaiseSystemAccessTrapAdvSimdFpAccessA64',
+                                                      [ ArmAstCppExpr('pVCpu'), ArmAstInteger(idxEl), ]));
                 if iClass == 7 and not self.isA64Instruction():
-                    oInfo.cInstructionReferences += 1;
-                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapAdvSimdFpAccess(pVCpu, %u, u32Instr)'
-                                                      % (idxEl,), cBitsWidth = 32));
+                    return ArmAstReturn(ArmAstCppCall('iemRaiseSystemAccessTrapAdvSimdFpAccess',
+                                                      [ ArmAstCppExpr('pVCpu'),
+                                                        ArmAstInteger(idxEl),
+                                                        ArmAstCppExpr('uInstrEssence'), ]));
                 if iClass == 20:
-                    oInfo.cInstrEssenceRefs += 1;
-                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrap128Bit(pVCpu, %s, uInstrEssence)'
-                                                      % (idxEl,), cBitsWidth = 32));
+                    return ArmAstReturn(ArmAstCppCall('iemRaiseSystemAccessTrap128Bit',
+                                                      [ ArmAstCppExpr('pVCpu'),
+                                                        ArmAstInteger(idxEl),
+                                                        ArmAstCppExpr('uInstrEssence'), ]));
                 if iClass == 24:
-                    oInfo.cInstrEssenceRefs += 1;
-                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrap(pVCpu, %s, uInstrEssence)'
-                                                      % (idxEl,), cBitsWidth = 32));
+                    return ArmAstReturn(ArmAstCppCall('iemRaiseSystemAccessTrap',
+                                                      [ ArmAstCppExpr('pVCpu'),
+                                                        ArmAstInteger(idxEl),
+                                                        ArmAstCppExpr('uInstrEssence'), ]));
                 if iClass == 25:
-                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapSme(pVCpu, %s)' % (idxEl,), cBitsWidth = 32));
+                    return ArmAstReturn(ArmAstCppCall('iemRaiseSystemAccessTrapSve',
+                                                      [ ArmAstCppExpr('pVCpu'), ArmAstInteger(idxEl), ]));
+
                 if iClass == 29:
-                    return ArmAstReturn(ArmAstCppExpr('iemRaiseSystemAccessTrapSme(pVCpu, %s)' % (idxEl,), cBitsWidth = 32));
+                    return ArmAstReturn(ArmAstCppCall('iemRaiseSystemAccessTrapSme',
+                                                      [ ArmAstCppExpr('pVCpu'), ArmAstInteger(idxEl), ]));
+
         raise Exception('Unexpected: %s' % (oNode.toString(),));
 
 
@@ -1598,7 +1616,7 @@ class SysRegGeneratorBase(object):
                 return self.transformCodePass1_ImpDefBool(oNode);
 
             if oNode.sName == 'AArch64_SystemAccessTrap':
-                return self.transformCodePass1_AArch64_SystemAccessTrap(oNode, oInfo);
+                return self.transformCodePass1_AArch64_SystemAccessTrap(oNode);
 
             # Generic mapping of functions without any arguments:
             if len(oNode.aoArgs) == 0 and oNode.sName in self.kdAstForFunctionsWithoutArguments:
@@ -1681,7 +1699,7 @@ class SysRegGeneratorBase(object):
                 return (oReg, spec.ArmFieldsField(None, [spec.ArmRange(0, 1),], 'OSLK'),
                         'pVCpu->cpum.GstCtx.fOsLck'); # HACK ALERT: boolean field
 
-            # If this is an ID register, we must use CPUMCpuIdLookupSysReg() to access it.
+            # If this is an ID register, we must a helper function to access it (assuming RES0).
             oAccessExprOrInt = None;
             for oAccessor in oReg.aoAccessors:
                 if isinstance(oAccessor, spec.ArmAccessorSystem):
@@ -1694,7 +1712,7 @@ class SysRegGeneratorBase(object):
                                   % (sWhatFor, sState, sRegisterName, sField,));
                 if fWarnOnly: print('warning: %s' % (oXcpt)); return (None, None, None);
                 raise oXcpt;
-            oAccessExprOrInt = 'CPUMCpuIdLookupSysReg(pVCpu, %s)' % (oAccessExprOrInt,);
+            oAccessExprOrInt = 'iemCImplHlpGetIdSysReg(pVCpu, %s)' % (oAccessExprOrInt,); ## @todo return AST object
 
         #
         # Iff this is an conditional field, there may be more than one entry in
@@ -1746,7 +1764,7 @@ class SysRegGeneratorBase(object):
         return (oReg, oField, oAccessExprOrInt,);
 
 
-    def transformCodePass2_IsFeatureImplemented(self, oNode, oInfo):
+    def transformCodePass2_IsFeatureImplemented(self, oNode):
         """ Pass 2: IsFeatureImplemented(FEAT_xxxx) -> pGstFeats->fXxxx. """
         if len(oNode.aoArgs) == 1 and isinstance(oNode.aoArgs[0], ArmAstIdentifier):
             sFeatureNm   = oNode.aoArgs[0].sName;
@@ -1754,18 +1772,16 @@ class SysRegGeneratorBase(object):
             if sCpumFeature is None:
                 raise Exception('Unknown IsFeatureImplemented parameter: %s (see g_dSpecFeatToCpumFeat)' % (sFeatureNm));
             if isinstance(sCpumFeature, str):
-                oInfo.cCallsToIsFeatureImplemented += 1;
                 return ArmAstCppExpr('pGstFeats->%s' % (sCpumFeature,), cBitsWidth = 1);
             if sCpumFeature is True:  return 'true /*%s*/' % (sFeatureNm,);
             if sCpumFeature is False: return 'false /*%s*/' % (sFeatureNm,);
             return ArmAstCppExpr('false /** @todo pGstFeats->%s */' % (sFeatureNm,), cBitsWidth = 1);
         raise Exception('Unexpected IsFeatureImplemented arguments: %s' % (oNode.aoArgs,));
 
-    def transformCodePass2_EffectiveHCR_EL2_NVx(self, oNode, oInfo): # pylint: disable=invalid-name
+    def transformCodePass2_EffectiveHCR_EL2_NVx(self, oNode): # pylint: disable=invalid-name
         """ Pass 2: EffectiveHCR_EL2_NVx() -> helper call. """
         if len(oNode.aoArgs) == 0:
-            oInfo.cCallsToIsFeatureImplemented += 1;
-            return ArmAstCppExpr('iemGetEffHcrEl2NVx(pVCpu, pGstFeats)', cBitsWidth = 3);
+            return ArmAstCppCall('iemGetEffHcrEl2NVx', [ ArmAstCppExpr('pVCpu'), ArmAstCppExpr('pGstFeats'), ], cBitsWidth = 3);
         raise Exception('Unexpected IsFeatureImplemented arguments: %s' % (oNode.aoArgs,));
 
 
@@ -1940,12 +1956,10 @@ class SysRegGeneratorBase(object):
         # If all the entries have fixed values, we can convert this to a C++
         # constant of the appropriate size.
         if cNonValues == 0:
-            sExpr  = 'UINT%u_C(' % (iBit,);
             fValue = 0;
             for oInfoEntry in aoInfoEntries:
                 fValue |= oInfoEntry.fValue << oInfoEntry.iFirstBit;
-            sExpr += '%#x)' % (fValue, );
-            return ArmAstCppExpr(sExpr, cBitsWidth = iBit);
+            return ArmAstInteger(fValue, iBit);
 
         return self.VBoxAstCppConcat(aoInfoEntries, oNode);
 
@@ -2084,9 +2098,8 @@ class SysRegGeneratorBase(object):
             return self.VBoxAstCppField(sExpr, cBitsWidth);
         return self.VBoxAstCppField('((%s) >> %u)' % (sExpr, iFirstBit,), cBitsWidth, sExpr, cBitsWidth + iFirstBit);
 
-    def transformCodePass2_Identifier(self, oNode, oInfo): # type: (ArmAstIdentifier, SysRegAccessorInfo) -> ArmAstBase
+    def transformCodePass2_Identifier(self, oNode): # type: (ArmAstIdentifier, SysRegAccessorInfo)
         """ Pass 2: Deal with register identifiers during assignments. """
-        _ = oInfo;
         sState = 'AArch64' if self.isA64Instruction() else 'AArch32';
         oReg   = spec.g_ddoAllArmRegistersByStateByName[sState].get(oNode.sName); # ArmRegister
         if not oReg:
@@ -2094,12 +2107,14 @@ class SysRegGeneratorBase(object):
 
         tCpumCtxInfo = g_dRegToCpumCtx.get('%s.%s' % (sState, oNode.sName));
         if not tCpumCtxInfo:
-            # If this is an ID register, we must use CPUMCpuIdLookupSysReg() to access it.
+            # If this is an ID register, we use a helper getter function to access it (assuming RES0).
             for oAccessor in oReg.aoAccessors:
                 if isinstance(oAccessor, spec.ArmAccessorSystem):
                     if oAccessor.oEncoding.sAsmValue == oNode.sName:
                         if self.isIdRegisterEncoding(oAccessor.oEncoding):
-                            return ArmAstCppExpr('CPUMCpuIdLookupSysReg(pVCpu, %s)' % (oAccessor.oEncoding.getSysRegIdCreate(),),
+                            return ArmAstCppCall('iemCImplHlpGetIdSysReg',
+                                                 [ ArmAstCppExpr('pVCpu'),
+                                                   ArmAstCppExpr(oAccessor.oEncoding.getSysRegIdCreate()), ],
                                                  cBitsWidth = 64);
 
             oXcpt = Exception('Assignment/Identifier: No CPUMCTX mapping for register %s.%s' % (sState, oNode.sName,));
@@ -2119,15 +2134,16 @@ class SysRegGeneratorBase(object):
         iTo    = oSlice.oTo.getIntegerOrValue();
         if iFrom is not None and iTo is not None:
             if 0 <= iTo <= iFrom < 64:
-                oVar = self.transformCodePass2_Identifier(oNode.oVar, oInfo);
+                oVar = self.transformCodePass2_Identifier(oNode.oVar);
                 if oVar is not oNode.oVar:
                     # A typical use it to slice out the lower 64 bits of a 128 bit system register.
                     if iTo == 0 and iFrom == 63:
-                        return ArmAstCppExpr('(uint64_t)%s' % (oVar.toString(),), 64);
-
-                    sExpr = '(%s & UINT64_C(%#x))' % (oVar.toString(), ((1 << (iFrom - iTo + 1)) - 1) << iTo);
-                    if iTo != 0:
-                        sExpr = '(%s >> %u)' % (sExpr, iTo,);
+                        sExpr = oVar.toString();
+                        assert sExpr.endswith('u64');
+                    else:
+                        sExpr = '(%s & UINT64_C(%#x))' % (oVar.toString(), ((1 << (iFrom - iTo + 1)) - 1) << iTo);
+                        if iTo != 0:
+                            sExpr = '(%s >> %u)' % (sExpr, iTo,);
                     return ArmAstCppExpr(sExpr, 64);
         return oNode;
 
@@ -2150,16 +2166,14 @@ class SysRegGeneratorBase(object):
             return oNode;
         sValuePtr = sValuePtr[1:];
 
-        return ArmAstReturn(ArmAstCppExpr('iemNVMemReadU%u(pVCpu, %#x, %s)' % (cBits, off, sValuePtr,), cBitsWidth = 32));
+        return ArmAstReturn(ArmAstCppCall('iemCImplHlpNVMemReadU%u' % (cBits,),
+                                          [ ArmAstCppExpr('pVCpu'), ArmAstInteger(off, 32), ArmAstCppExpr(sValuePtr),]));
 
     def transformCodePass2_AssignToNVMem(self, oNode):
         """ Pass 2: Translate NVMem[off[,bits]] to function call. """
         (off, cBits) = self.transformCodePass2_ParseNVMem(oNode.oVar);
-        sCall  = 'iemNVMemWriteU%u(pVCpu, %#x, ' % (cBits, off,);
-        sValue = oNode.oValue.toStringEx(sLang = 'C');
-        if '\n' in sValue:
-            sValue = sValue.replace('\n', '\n' + ' ' * (len(sCall) + len('return ')));
-        return ArmAstReturn(ArmAstCppExpr(sCall + sValue + ')', cBitsWidth = 32));
+        return ArmAstReturn(ArmAstCppCall('iemCImplHlpNVMemWriteU%u' % (cBits,),
+                                          [ ArmAstCppExpr('pVCpu'), ArmAstInteger(off, 32), oNode.oValue,]));
 
     def transformCodePass2_Assign_Read_DBGDTR_EL0(self, oNode): # pylint: disable=invalid-name
         """ Pass 2: Translates Read_DBGDTR_EL0() to a helper call. """
@@ -2170,62 +2184,100 @@ class SysRegGeneratorBase(object):
                 sValuePtr = oNode.oVar.toString();
                 if sValuePtr[0] == '*':
                     sValuePtr = sValuePtr[1:];
-                    return ArmAstReturn(ArmAstCppExpr('iemReadDbgDtrEl0U%u(pVCpu, %s)' % (cBits, sValuePtr,),
-                                                      cBitsWidth = 32));
+                    return ArmAstReturn(ArmAstCppCall('iemCImplHlpReadDbgDtrEl0U%u' % (cBits,),
+                                                      [ ArmAstCppExpr('pVCpu'), ArmAstCppExpr(sValuePtr), ]));
         raise Exception('Unexpected: %s' % (oNode.toString(),));
 
-    def getUnresolvedRegisterInfo(self, sRegName, oInfo):
-        """ Pass 2 helper that resolves a register name to a C constant. """
-        if sRegName:
-            # The register should match the info one because we need it's ID.
-            if oInfo.oAccessor.oEncoding.sAsmValue == sRegName:
-                return oInfo.sEnc;
+    def getRegisterInfo(self, sRegName, fRead, oInfo):
+        """
+        Pass 2 helper that resolves a register name to a C constant, function call or _novar arg.
+        Returns (oAccessAst|None, sConstant|None).
+        """
+        #
+        # Lookup the register and check for a direct CPUMCTX mapping.
+        #
+        sState = self.getRegStateName();
+        oReg   = spec.g_ddoAllArmRegistersByStateByName[sState].get(sRegName); # ArmRegister
+        if not oReg:
+            raise Exception('Assignment/Identifier: Register "%s" not found' % (sRegName, ));
 
-            # Otherwise, we need to look it up and such...
-            oReg = spec.g_ddoAllArmRegistersByStateByName[self.getRegStateName()].get(sRegName); # ArmRegister
-            if oReg:
-                for oAccessor in oReg.aoAccessors:
-                    if isinstance(oAccessor, spec.ArmAccessorSystem):
-                        if oAccessor.oEncoding.sAsmValue == sRegName:
-                            try:
-                                return oAccessor.oEncoding.getSysRegIdCreate();
-                            except Exception:
-                                pass;
+        tCpumCtxInfo = g_dRegToCpumCtx.get('%s.%s' % (sState, sRegName));
+        if tCpumCtxInfo and (fRead or not isinstance(tCpumCtxInfo[0], int)):
+            if isinstance(tCpumCtxInfo[0], int):
+                return (ArmAstInteger(tCpumCtxInfo[0], 64), None);
+            return (ArmAstCppExpr('pVCpu->cpum.GstCtx.%s' % (tCpumCtxInfo[0],), cBitsWidth = 64), None);
 
-        return None;
+        #
+        # No direct mapping. Maybe this is an ID register, otherwise we return
+        # the encoding info for use in a call to _novar.
+        #
+        for oAccessor in oReg.aoAccessors:
+            if isinstance(oAccessor, spec.ArmAccessorSystem):
+                if oAccessor.oEncoding.sAsmValue == sRegName:
+                    if self.isIdRegisterEncoding(oAccessor.oEncoding):
+                        if not fRead:
+                            raise Exception('ID register used in assignment! %s' % (sRegName,));
+                        return (ArmAstCppCall('iemCImplHlpGetIdSysReg',
+                                              [ ArmAstCppExpr('pVCpu'),
+                                                ArmAstCppExpr(oAccessor.oEncoding.getSysRegIdCreate()), ],
+                                              cBitsWidth = 64), None);
+                    try:
+                        return (None, oAccessor.oEncoding.getSysRegIdCreate());
+                    except Exception:
+                        pass;
 
-    def transformCodePass2_AssignFromUnresolvedReg(self, oNode, oInfo): # pylint: disable=invalid-name
-        """ Pass 2: Assignment with a unresolved register on the right side. """
+        # As a last restort, see if it matches the oInfo.sEnc & sAsmValue.
+        if oInfo.sAsmValue == sRegName:
+            return (None, oInfo.sEnc);
+        print('warning! Assignment %s Identifier: Unable to map %s.%s to anything'
+              % ('from' if fRead else 'to', sState, sRegName,));
+        return (None, None)
+
+
+    def transformCodePass2_AssignFromIdentifier(self, oNode, oInfo): # pylint: disable=invalid-name
+        """ Pass 2: Assignment with an system register identifier on the right side (MRS). """
+        sRegName = oNode.oValue.getIdentifierName();
+        (oAccessAst, sRegConst) = self.getRegisterInfo(sRegName, True, oInfo);
+        if oAccessAst:
+            oNode.oValue = oAccessAst;
+            return oNode;
+        if not sRegConst:
+            return oNode;
+
         # Assume the variable receiving the assignment is *puDst or similar:
         sValuePtr = oNode.oVar.toString();
         if sValuePtr[0] != '*':
+            assert False;
             return oNode;
         sValuePtr = sValuePtr[1:];
 
-        sRegName  = oNode.oValue.getIdentifierName();
-        sRegConst = self.getUnresolvedRegisterInfo(sRegName, oInfo);
-        if not sRegConst:
-            return oNode;
-
-        oInfo.cInstrEssenceRefs              += 1;
         oInfo.cAssignmentsWithUnresolvedRegs += 1;
-        return ArmAstReturn(ArmAstCppExpr('%s_novar(pVCpu, %s, "%s", %s, (uInstrEssence >> 24) & 31)'
-                                          % (self.sFuncPrefix, sRegConst, sRegName, sValuePtr,),
-                                          cBitsWidth = 32));
+        return ArmAstReturn(ArmAstCppCall(self.sFuncPrefix + '_novar',
+                                          [ ArmAstCppExpr('pVCpu'),
+                                            ArmAstCppExpr(sRegConst),
+                                            ArmAstCppExpr('"%s"' % (sRegName,)),
+                                            ArmAstCppExpr(sValuePtr),
+                                            ArmAstCppExpr('uInstrEssence'), ]));
 
-    def transformCodePass2_AssignToUnresolvedReg(self, oNode, oInfo): # pylint: disable=invalid-name
-        """ Pass 2: Assignment to an unresolved register on the left side. """
+    def transformCodePass2_AssignToIdentifier(self, oNode, oInfo): # pylint: disable=invalid-name
+        """ Pass 2: Assignment with an system register identifier on the left side (MSR). """
         sRegName = oNode.oVar.getIdentifierName();
-        sRegConst = self.getUnresolvedRegisterInfo(sRegName, oInfo);
+        (oAccessAst, sRegConst) = self.getRegisterInfo(sRegName, False, oInfo);
+        if oAccessAst:
+            assert not isinstance(oAccessAst, ArmAstInteger);
+            oNode.oVar = oAccessAst;
+            return oNode;
         if not sRegConst:
             return oNode;
 
-        oInfo.cInstrEssenceRefs              += 1;
         oInfo.cAssignmentsWithUnresolvedRegs += 1;
-        return ArmAstReturn(ArmAstCppExpr('%s_novar(pVCpu, %s, "%s", %s, (uInstrEssence >> 24) & 31))'
-                                          % (self.sFuncPrefix, oInfo.sEnc, sRegName,
-                                             oNode.oValue.toStringEx(sLang = 'C').replace('\n', '\n        '),), # ugly.
-                                          cBitsWidth = 32));
+        return ArmAstReturn(ArmAstCppCall(self.sFuncPrefix + '_novar',
+                                          [ ArmAstCppExpr('pVCpu'),
+                                            ArmAstCppExpr(sRegConst),
+                                            ArmAstCppExpr('"%s"' % (sRegName,)),
+                                            oNode.oValue,
+                                            ArmAstCppExpr('uInstrEssence'), ]));
+
 
 
     def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo, aoStack):
@@ -2233,15 +2285,15 @@ class SysRegGeneratorBase(object):
         if isinstance(oNode, ArmAstFunction):
             # Undefined() -> return iemRaiseUndefined(pVCpu);
             if oNode.isMatchingFunctionCall('Undefined'):
-                return ArmAstReturn(ArmAstCppExpr('iemRaiseUndefined(pVCpu)', cBitsWidth = 32));
+                return ArmAstReturn(ArmAstCppCall('iemRaiseUndefined', [ArmAstCppExpr('pVCpu')]));
 
             # IsFeatureImplemented(FEAT_xxxx) -> pGstFeat->fXxxx:
             if oNode.sName == 'IsFeatureImplemented':
-                return self.transformCodePass2_IsFeatureImplemented(oNode, oInfo);
+                return self.transformCodePass2_IsFeatureImplemented(oNode);
 
             # EffectiveHCR_EL2_NVx
             if oNode.sName == 'EffectiveHCR_EL2_NVx':
-                return self.transformCodePass2_EffectiveHCR_EL2_NVx(oNode, oInfo);
+                return self.transformCodePass2_EffectiveHCR_EL2_NVx(oNode);
 
         elif isinstance(oNode, ArmAstBinaryOp):
             # PSTATE.EL == EL0 and similar:
@@ -2287,10 +2339,10 @@ class SysRegGeneratorBase(object):
                    or not isinstance(aoStack[-1], ArmAstConcat))):
             return self.transformCodePass2_Field(oNode);
 
-        elif (    isinstance(oNode, ArmAstIdentifier)
-              and aoStack
-              and isinstance(aoStack[-1], ArmAstAssignment)):
-            return self.transformCodePass2_Identifier(oNode, oInfo);
+        #elif (    isinstance(oNode, ArmAstIdentifier)
+        #      and aoStack
+        #      and isinstance(aoStack[-1], ArmAstAssignment)):
+        #    return self.transformCodePass2_Identifier(oNode);
 
         elif isinstance(oNode, ArmAstIfList):
             # Drop double parentheses around field extraction expressions when they are the sole if condition.
@@ -2299,11 +2351,6 @@ class SysRegGeneratorBase(object):
                     oNode.aoIfConditions[idxIfCond] = oIfCond.dropExtraParenthesis();
 
         elif isinstance(oNode, ArmAstSquareOp):
-            ## Translate NVMem[xxx[,128]] to function calls depending on context.
-            #if (    oNode.oVar.isMatchingIdentifier('NVMem')
-            #    and (not aoStack or not isinstance(aoStack[-1], ArmAstAssignment) or aoStack[-1].oVar is not oNode)):
-            #    return self.transformCodePass2_NVMemRead(oNode);
-
             # Deal with '*puDst = TTBR1_EL1[[0x3f:0]]'.
             if (    isinstance(oNode.oVar, ArmAstIdentifier)
                 and len(oNode.aoValues) == 1
@@ -2321,10 +2368,10 @@ class SysRegGeneratorBase(object):
             elif isinstance(oNode.oValue, ArmAstFunction):
                 if oNode.oValue.sName == 'Read_DBGDTR_EL0':
                     return self.transformCodePass2_Assign_Read_DBGDTR_EL0(oNode);
+            if isinstance(oNode.oVar, ArmAstIdentifier):
+                return self.transformCodePass2_AssignToIdentifier(oNode, oInfo);
             elif isinstance(oNode.oValue, ArmAstIdentifier):
-                return self.transformCodePass2_AssignFromUnresolvedReg(oNode, oInfo);
-            elif isinstance(oNode.oVar, ArmAstIdentifier):
-                return self.transformCodePass2_AssignToUnresolvedReg(oNode, oInfo);
+                return self.transformCodePass2_AssignFromIdentifier(oNode, oInfo);
 
         _ = fEliminationAllowed;
         return oNode;
@@ -2362,7 +2409,7 @@ class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
             ];
         elif isinstance(oInfo.oCode, ArmAstReturn) and oInfo.oCode.toString().find('Raise') >= 0:
             asLines.append('    RT_NOREF(puDst);');
-        if oInfo.cCallsToIsFeatureImplemented > 0:
+        if oInfo.cGstFeatsRefs > 0:
             asLines.append('    const CPUMFEATURESARMV8 * const pGstFeats = IEM_GET_GUEST_CPU_FEATURES(pVCpu);');
 
         if oInfo.oCode:
@@ -2401,7 +2448,7 @@ class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
             'DECLHIDDEN(VBOXSTRICTRC) iemCImplA64_mrs_generic(PVMCPU pVCpu, uint32_t idSysReg, uint32_t idxGprDst,',
             '                                                 uint64_t *puDst)',
             '{',
-            '    uint32_t const uInstrEssence = idSysReg | (idxGprDst << 24);',
+            '    uint32_t const uInstrEssence = IEM_CIMPL_SYSREG_INSTR_ESSENCE_MAKE(idSysReg, idxGprDst, 0, 0xf);',
             '    switch (idSysReg)',
             '    {',
         ];
@@ -2469,7 +2516,7 @@ class SysRegGeneratorA64MsrReg(SysRegGeneratorBase):
             ];
         elif isinstance(oInfo.oCode, ArmAstReturn) and oInfo.oCode.toString().find('Raise') >= 0:
             asLines.append('    RT_NOREF(uValue);');
-        if oInfo.cCallsToIsFeatureImplemented > 0:
+        if oInfo.cGstFeatsRefs > 0:
             asLines.append('    const CPUMFEATURESARMV8 * const pGstFeats = IEM_GET_GUEST_CPU_FEATURES(pVCpu);');
 
         if oInfo.oCode:
@@ -2508,13 +2555,13 @@ class SysRegGeneratorA64MsrReg(SysRegGeneratorBase):
             'DECLHIDDEN(VBOXSTRICTRC) iemCImplA64_msr_generic(PVMCPU pVCpu, uint32_t idSysReg, uint32_t idxGprSrc,',
             '                                                 uint64_t uValue)'
             '{',
-            '    uint32_t const uInstrEssence = idSysReg | (idxGprSrc << 24) | RT_BIT_32(31);',
+            '    uint32_t const uInstrEssence = IEM_CIMPL_SYSREG_INSTR_ESSENCE_MAKE(idSysReg, idxGprSrc, 1, 0xf);',
             '    switch (idSysReg)',
             '    {',
         ];
         for oInfo in self.aoInfo:
             if oInfo.sEnc[0] == 'A':
-                asLines.append('        case %s: %sreturn iemCImplA64_mrs_%s(pVCpu, puDst%s);'
+                asLines.append('        case %s: %sreturn iemCImplA64_msr_%s(pVCpu, uValue%s);'
                                % (oInfo.sEnc, ' ' * (45 - len(oInfo.sEnc)), oInfo.oAccessor.oEncoding.sAsmValue,
                                   ', uInstrEssence' if oInfo.cInstrEssenceRefs else '',));
         asLines += [

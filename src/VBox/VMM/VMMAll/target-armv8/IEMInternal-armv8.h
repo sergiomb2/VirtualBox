@@ -159,7 +159,16 @@ IEM_RAISE_PROTOS(iemRaiseInstructionAbortTlbPermision,
                  PVMCPUCC pVCpu, RTGCPTR GCPtrMem, uint8_t cbMem, PCIEMTLBENTRY pTlbe);
 
 
+/** Creates an instruction essence value for MRS, MSR and similar.   */
+#define IEM_CIMPL_SYSREG_INSTR_ESSENCE_MAKE(a_idSysReg, a_idxGpr, a_f1Write, a_f4Conditions) \
+    ((a_idSysReg) | ((a_idxGpr) << 16) | ((a_f1Write) << 24) | ((a_f4Conditions) << 28))
+#define IEM_CIMPL_SYSREG_INSTR_ESSENCE_GET_SYSREG(a_uInstrEssence)  ((a_uInstrEssence) & UINT32_C(0xffff))
+#define IEM_CIMPL_SYSREG_INSTR_ESSENCE_GET_GPR(a_uInstrEssence)     (((a_uInstrEssence) >> 16) & UINT32_C(0x1f))
+#define IEM_CIMPL_SYSREG_INSTR_ESSENCE_IS_WRITE(a_uInstrEssence)    RT_BOOL((a_uInstrEssence) & RT_BIT_32(24))
+#define IEM_CIMPL_SYSREG_INSTR_ESSENCE_IS_READ(a_uInstrEssence)     (!((a_uInstrEssence) & RT_BIT_32(24)))
+
 VBOXSTRICTRC iemRaiseSystemAccessTrap(PVMCPU pVCpu, uint32_t uAccessCode, uint32_t uInstrEssence) RT_NOEXCEPT;
+VBOXSTRICTRC iemRaiseSystemAccessTrapSve(PVMCPU pVCpu, uint32_t uEl) RT_NOEXCEPT;
 VBOXSTRICTRC iemRaiseSystemAccessTrapSme(PVMCPU pVCpu, uint32_t uEl) RT_NOEXCEPT;
 VBOXSTRICTRC iemRaiseSystemAccessTrapAdvSimdFpAccessA64(PVMCPU pVCpu, uint32_t uEl) RT_NOEXCEPT;
 VBOXSTRICTRC iemRaiseSystemAccessTrapUnknown(PVMCPU pVCpu, uint32_t uEl) RT_NOEXCEPT;
@@ -353,11 +362,13 @@ DECLHIDDEN(VBOXSTRICTRC) iemCImplA64_msr_novar(PVMCPU pVCpu, uint32_t idSysReg, 
                                                uint64_t uValue, uint32_t idxGprSrc) RT_NOEXCEPT;
 DECLHIDDEN(VBOXSTRICTRC) iemCImplA64_mrs_fallback(PVMCPU pVCpu, uint32_t idxGprDst, uint32_t idSysReg) RT_NOEXCEPT;
 DECLHIDDEN(VBOXSTRICTRC) iemCImplA64_msr_fallback(PVMCPU pVCpu, uint32_t idSysReg, uint64_t uValue, uint32_t idxGprSrc) RT_NOEXCEPT;
-DECLHIDDEN(VBOXSTRICTRC) iemNVMemReadU64(PVMCPU pVCpu, uint32_t off, uint64_t *puDst) RT_NOEXCEPT;
-DECLHIDDEN(VBOXSTRICTRC) iemNVMemWriteU64(PVMCPU pVCpu, uint32_t off, uint64_t uValue) RT_NOEXCEPT;
-DECLHIDDEN(uint64_t)     CPUMCpuIdLookupSysReg(PVMCPU pVCpu, uint32_t idSysReg) RT_NOEXCEPT;
-DECLHIDDEN(VBOXSTRICTRC) iemReadDbgDtrEl0U64(PVMCPU pVCpu, uint64_t *puDst) RT_NOEXCEPT;
-DECLHIDDEN(VBOXSTRICTRC) iemReadDbgDtrEl0U32(PVMCPU pVCpu, uint64_t *puDst) RT_NOEXCEPT;
+
+DECLHIDDEN(VBOXSTRICTRC) iemCImplHlpNVMemReadU64(PVMCPU pVCpu, uint32_t off, uint64_t *puDst) RT_NOEXCEPT;
+DECLHIDDEN(VBOXSTRICTRC) iemCImplHlpNVMemWriteU64(PVMCPU pVCpu, uint32_t off, uint64_t uValue) RT_NOEXCEPT;
+DECLHIDDEN(uint64_t)     iemCImplHlpGetIdSysReg(PVMCPU pVCpu, uint32_t idSysReg) RT_NOEXCEPT;
+DECLHIDDEN(VBOXSTRICTRC) iemCImplHlpReadDbgDtrEl0U64(PVMCPU pVCpu, uint64_t *puDst) RT_NOEXCEPT;
+DECLHIDDEN(VBOXSTRICTRC) iemCImplHlpReadDbgDtrEl0U32(PVMCPU pVCpu, uint64_t *puDst) RT_NOEXCEPT;
+
 
 
 
