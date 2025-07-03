@@ -58,6 +58,7 @@ from ArmAst import ArmAstIfList;
 from ArmAst import ArmAstInteger;
 from ArmAst import ArmAstReturn;
 from ArmAst import ArmAstSet;
+from ArmAst import ArmAstSlice;
 from ArmAst import ArmAstSquareOp;
 from ArmAst import ArmAstString;
 from ArmAst import ArmAstTypeAnnotation;
@@ -2099,6 +2100,26 @@ class SysRegGeneratorBase(object):
             return ArmAstInteger(tCpumCtxInfo[0], 64);
         return ArmAstCppExpr('pVCpu->cpum.GstCtx.%s' % (tCpumCtxInfo[0],), cBitsWidth = 64);
 
+    def transformCodePass2_SlicedIdentifier(self, oNode, oInfo):
+        """ Pass 2: Deal with '*puDst = TTBR1_EL1[[0x3f:0]]' """
+        assert len(oNode.aoValues) == 1 and isinstance(oNode.aoValues[0], ArmAstSlice);
+        oSlice = oNode.aoValues[0] # type: ArmAstSlice
+        iFrom  = oSlice.oFrom.getIntegerOrValue();
+        iTo    = oSlice.oTo.getIntegerOrValue();
+        if iFrom is not None and iTo is not None:
+            if 0 <= iTo <= iFrom < 64:
+                oVar = self.transformCodePass2_Identifier(oNode.oVar, oInfo);
+                if oVar is not oNode.oVar:
+                    # A typical use it to slice out the lower 64 bits of a 128 bit system register.
+                    if iTo == 0 and iFrom == 63:
+                        return ArmAstCppExpr('(uint64_t)%s' % (oVar.toString(),), 64);
+
+                    sExpr = '(%s & UINT64_C(%#x))' % (oVar.toString(), ((1 << (iFrom - iTo + 1)) - 1) << iTo);
+                    if iTo != 0:
+                        sExpr = '(%s >> %u)' % (sExpr, iTo,);
+                    return ArmAstCppExpr(sExpr, 64);
+        return oNode;
+
     def transformCodePass2_ParseNVMem(self, oNode):
         if len(oNode.aoValues) in (1, 2):
             off = oNode.aoValues[0].getIntegerOrValue();
@@ -2256,7 +2277,14 @@ class SysRegGeneratorBase(object):
             #if (    oNode.oVar.isMatchingIdentifier('NVMem')
             #    and (not aoStack or not isinstance(aoStack[-1], ArmAstAssignment) or aoStack[-1].oVar is not oNode)):
             #    return self.transformCodePass2_NVMemRead(oNode);
-            pass;
+
+            # Deal with '*puDst = TTBR1_EL1[[0x3f:0]]'.
+            if (    isinstance(oNode.oVar, ArmAstIdentifier)
+                and len(oNode.aoValues) == 1
+                and isinstance(oNode.aoValues[0], ArmAstSlice)
+                and aoStack
+                and isinstance(aoStack[-1], ArmAstAssignment)):
+                return self.transformCodePass2_SlicedIdentifier(oNode, oInfo);
 
         elif isinstance(oNode, ArmAstAssignment):
             if isinstance(oNode.oVar, ArmAstSquareOp):
@@ -2384,7 +2412,7 @@ class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
 
     def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo, aoStack):
         """ Callback used by the second pass."""
-        if oNode.isMatchingSquareOp('X', 't', 64):
+        if oNode.isMatchingSquareOp('X', 't', 64) or oNode.isMatchingSquareOp('X', 't', 32):
             return ArmAstCppExpr('*puDst', cBitsWidth = 64);
 
         return super().transformCodePass2Callback(oNode, fEliminationAllowed, oInfo, aoStack);
