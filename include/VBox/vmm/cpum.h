@@ -1735,6 +1735,8 @@ typedef struct CPUMFEATURESARMV8
     uint32_t        fOccmo : 1;
     /** Supports floating-point to/from integer in scalar fp reg (FEAT_IDTE3). */
     uint32_t        fIdte3 : 1;
+    /** Supports bitwise system register write masks (FEAT_SRMASK). */
+    uint32_t        fSrMask : 1;
     /** @} */
 
     /** Padding to the required size to match CPUMFEATURESX86. */

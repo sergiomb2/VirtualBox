@@ -3193,6 +3193,41 @@ DECLINLINE(uint32_t) iemGetEffHcrEl2NVx(PVMCPU pVCpu, const CPUMFEATURESARMV8 * 
 }
 
 
+/**
+ * Gets the effective ACTLRMASK_EL1 value.
+ */
+DECLINLINE(uint64_t) iemGetEffActlrMaskEl1(PVMCPU pVCpu, const CPUMFEATURESARMV8 * const pGstFeats)
+{
+    /** @todo implement ACTLRMASK_EL1 & FEAT_SRMASK */
+    Assert(!pGstFeats->fSrMask);
+    RT_NOREF(pVCpu, pGstFeats);
+    return 0;
+}
+
+
+/**
+ * Gets the effective SCTLRMASK_EL1 value.
+ */
+DECLINLINE(uint64_t) iemGetEffSctlrMaskEl1(PVMCPU pVCpu, const CPUMFEATURESARMV8 * const pGstFeats)
+{
+    /** @todo implement SCTLRMASK_EL1 & FEAT_SRMASK */
+    Assert(!pGstFeats->fSrMask);
+    RT_NOREF(pVCpu, pGstFeats);
+    return 0;
+}
+
+
+/**
+ * Gets the effective SCTLRMASK_EL2 value.
+ */
+DECLINLINE(uint64_t) iemGetEffSctlrMaskEl2(PVMCPU pVCpu, const CPUMFEATURESARMV8 * const pGstFeats)
+{
+    /** @todo implement SCTLRMASK_EL2 & FEAT_SRMASK */
+    Assert(!pGstFeats->fSrMask);
+    RT_NOREF(pVCpu, pGstFeats);
+    return 0;
+}
+
 /** @} */
 
 #endif /* !VMM_INCLUDED_SRC_VMMAll_target_armv8_IEMInline_armv8_h */

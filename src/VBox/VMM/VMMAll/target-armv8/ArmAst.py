@@ -519,8 +519,8 @@ class ArmAstBinaryOp(ArmAstBase):
         '-':   { '+', '-', },
         'MOD': { '*', 'MOD', },
         '*':   { '*', 'MOD', },
-        'AND': { 'AND', 'OR', },
-        'OR':  { 'AND', 'OR', },
+        'AND': { 'AND', },
+        'OR':  { 'OR', },
         '-->': { '-->', },
         '<->': { '<->', },
     };
@@ -541,7 +541,7 @@ class ArmAstBinaryOp(ArmAstBase):
         'MOD':  5,
         '*':    5,
         'AND':  11,
-        'OR':   15,
+        'OR':   13,
         '-->':  17,
         '<->':  17,
     };
@@ -739,8 +739,13 @@ class ArmAstBinaryOp(ArmAstBase):
             sNextOp     = aoList[idx + 1] if idx + 1 < len(aoList) else sCurOp;
             iNextOpPrio = self.kdOpPrecedence[sNextOp] if idx + 1 < len(aoList) else iCurOpPrio;
             sNodeExpr   = oNode.toStringEx(sLang, cchNewMaxWidth);
-            if isinstance(oNode, ArmAstBinaryOp) and self.kdOpPrecedence[oNode.sOp] > min(iNextOpPrio, iCurOpPrio):
-                sNodeExpr = '(' + sNodeExpr.replace('\n', '\n ') + ')';
+            if isinstance(oNode, ArmAstBinaryOp):
+                tOps = (sNextOp, sCurOp);
+                if (   self.kdOpPrecedence[oNode.sOp] > min(iNextOpPrio, iCurOpPrio)
+                    or (oNode.sOp == '&&'  and '||' in tOps) # Compilers may warn when mixing && and ||.  Helps readability too.
+                    or (oNode.sOp == 'AND' and 'OR' in tOps) # Compilers may warn when mixing & and |. Helps readability too.
+                   ):
+                    sNodeExpr = '(' + sNodeExpr.replace('\n', '\n ') + ')';
             if idx == 0:
                 sRetSameLine = sNodeExpr;
             else:
@@ -917,15 +922,23 @@ class ArmAstUnaryOp(ArmAstBase):
     def needParentheses(oNode):
         return isinstance(oNode, ArmAstBinaryOp)
 
+    @staticmethod
+    def getOpForLang(sOp, sLang, fAddSpace):
+        if sLang == 'C':
+            return ArmAstUnaryOp.kdOpsToC.get(sOp, sOp);
+        if len(sOp) > 1 and fAddSpace:
+            return sOp + ' ';
+        return sOp;
+
     def toStringEx(self, sLang = None, cchMaxWidth = 120):
         if ArmAstUnaryOp.needParentheses(self.oExpr):
-            return '%s(%s)' % (self.sOp, self.oExpr.toStringEx(sLang, cchMaxWidth),);
-        return '%s%s' % (self.sOp, self.oExpr.toStringEx(sLang, cchMaxWidth),);
+            return '%s(%s)' % (self.getOpForLang(self.sOp, sLang, False), self.oExpr.toStringEx(sLang, cchMaxWidth),);
+        return '%s%s' % (self.getOpForLang(self.sOp, sLang, True), self.oExpr.toStringEx(sLang, cchMaxWidth),);
 
     def toCExpr(self, oHelper):
         if ArmAstUnaryOp.needParentheses(self.oExpr):
-            return '%s(%s)' % (ArmAstUnaryOp.kdOpsToC[self.sOp], self.oExpr.toCExpr(oHelper));
-        return '%s%s' % (ArmAstUnaryOp.kdOpsToC[self.sOp], self.oExpr.toCExpr(oHelper));
+            return '%s(%s)' % (self.getOpForLang(self.sOp, 'C', False), self.oExpr.toCExpr(oHelper));
+        return '%s%s' % (self.getOpForLang(self.sOp, 'C', True), self.oExpr.toCExpr(oHelper));
 
     def getWidth(self, oHelper):
         if self.kdOps[self.sOp] == self.ksOpTypeLogical:
@@ -1891,9 +1904,9 @@ class ArmAstAssignment(ArmAstStatementBase):
         if '\n' in sVar:
             sVar += '\n   ' + sIndent;
             cchVar = 3;
-        sValue = self.oValue.toStringEx(sLang, cchMaxWidth);
+        sValue = self.oValue.toStringEx(sLang, max(cchMaxWidth - cchVar, 60));
         if '\n' in sValue:
-            sValue = sValue.replace('\n', '\n' + ' ' * (cchVar + 3) + sIndent);
+            sValue = '(' + sValue.replace('\n', '\n' + ' ' * (cchVar + 4) + sIndent) + ' )';
         return ('%s%s = %s;' % (sIndent, sVar, sValue)).split('\n');
 
 

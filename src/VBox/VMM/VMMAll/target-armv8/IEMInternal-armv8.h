@@ -365,13 +365,14 @@ DECLHIDDEN(VBOXSTRICTRC) iemCImplA64_msr_fallback(PVMCPU pVCpu, uint32_t idSysRe
 
 DECLHIDDEN(VBOXSTRICTRC) iemCImplHlpNVMemReadU64(PVMCPU pVCpu, uint32_t off, uint64_t *puDst) RT_NOEXCEPT;
 DECLHIDDEN(VBOXSTRICTRC) iemCImplHlpNVMemWriteU64(PVMCPU pVCpu, uint32_t off, uint64_t uValue) RT_NOEXCEPT;
-DECLHIDDEN(uint64_t)     iemCImplHlpGetIdSysReg(PVMCPU pVCpu, uint32_t idSysReg) RT_NOEXCEPT;
 DECLHIDDEN(VBOXSTRICTRC) iemCImplHlpReadDbgDtrEl0U64(PVMCPU pVCpu, uint64_t *puDst) RT_NOEXCEPT;
 DECLHIDDEN(VBOXSTRICTRC) iemCImplHlpReadDbgDtrEl0U32(PVMCPU pVCpu, uint64_t *puDst) RT_NOEXCEPT;
-
-
-
-
+DECLHIDDEN(uint64_t)     iemCImplHlpGetIdSysReg(PVMCPU pVCpu, uint32_t idSysReg) RT_NOEXCEPT;
+DECLHIDDEN(uint64_t)     iemCImplHlpGetAmUserEnrEl0(PVMCPU pVCpu) RT_NOEXCEPT;
+DECLHIDDEN(uint64_t)     iemCImplHlpGetPmUserEnrEl0(PVMCPU pVCpu) RT_NOEXCEPT;
+DECLHIDDEN(uint64_t)     iemCImplHlpGetPmSelrEl0(PVMCPU pVCpu) RT_NOEXCEPT;
+DECLHIDDEN(uint64_t)     iemCImplHlpGetPmUacrEl1(PVMCPU pVCpu) RT_NOEXCEPT;
+DECLHIDDEN(uint64_t)     iemCImplHlpGetPhysicalSystemTimerCount(PVMCPU pVCpu) RT_NOEXCEPT;
 
 /** @} */
 

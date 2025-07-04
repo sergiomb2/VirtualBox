@@ -395,6 +395,7 @@ g_dSpecFeatToCpumFeat = {
     'FEAT_SPEv1p5':                 'fSpev1p5',
     'FEAT_SPMU':                    'fSpmu',
     'FEAT_SPMU2':                   'fSpmu2',
+    'FEAT_SRMASK':                  'fSrMask',
     'FEAT_SSBS':                    'fSsbs',
     'FEAT_SSBS2':                   'fSsbs2',
     'FEAT_SSVE_AES':                'fSsveAes',
@@ -448,16 +449,12 @@ g_dSpecFeatToCpumFeat = {
     'FEAT_WFxT':                    'fWfxt',
     'FEAT_XNX':                     'fXnx',
     'FEAT_XS':                      'fXs',
-
-    ## @todo
-    'FEAT_SRMASK':                  -1,
 };
 
 
 ## Mapping register names to CPUMCTX members.
 ## The value is: (sName|fReservedValue,)
 g_dRegToCpumCtx = {
-    'AArch64.PMUSERENR_EL0':    ( 0, ), # Concat uses EN; we don't support it, so report zero.
     'AArch64.AMUSERENR_EL0':    ( 0, ), # We don't support this, so report zero.
     'AArch64.CNTP_CTL_EL0':     ( 0, ), # We don't seem to support this, so report zero.
     'AArch64.GCSCRE0_EL1':      ( 0, ), # FEAT_GCS / ARMv9.4; we don't support this, returning zero for now.
@@ -1298,6 +1295,7 @@ class SysRegGeneratorBase(object):
         self.cComplete      = 0;
         self.cIncomplete    = 0;
         self.cUnresolvedRegs = 0;       # Number of info items with unresolved registers.
+        self.dWarnings      = {};
 
     def generateOneHandler(self, oInfo):
         return [ '', '/// @todo %s / %s' % (self.sInstr, oInfo.sEnc,) ];
@@ -1310,6 +1308,29 @@ class SysRegGeneratorBase(object):
 
     def getRegStateName(self):
         return 'AArch64' if self.isA64Instruction() else 'AArch32';
+
+    def warn(self, sMsg, oRetValue):
+        if sMsg not in self.dWarnings:
+            self.dWarnings[sMsg]  = 1;
+            #print('warning: %s' % (sMsg,)); # delay
+        else:
+            self.dWarnings[sMsg] += 1;
+        return oRetValue;
+
+    def warnXcpt(self, oXcpt, oRetValue):
+        return self.warn(str(oXcpt), oRetValue);
+
+    def printWarnings(self):
+        """ Prints the warnings and returns a list of them for insertion into the C++ file. """
+        asWarnings = [];
+        for sMsg, cOccurences in sorted(self.dWarnings.items()):
+            if cOccurences > 1:
+                asWarnings.append('warning: %s (%u times)' % (sMsg, cOccurences,));
+            else:
+                asWarnings.append('warning: %s' % (sMsg,));
+        if asWarnings:
+            sys.stderr.write('\n'.join(asWarnings) + '\n');
+        return asWarnings;
 
     def checkCConversionCallback(self, oNode, oInfo):
         """ Walker callback used by morphCodeToC() to look for nodes that aren't suitable for C. """
@@ -1478,6 +1499,12 @@ class SysRegGeneratorBase(object):
         _ = oInfo;
         return ArmAstInteger(0, cBitsWidth);
 
+    def transformCodePass1_IsZero(self, oNode):
+        """ Pass 1: IsZero(EffectiveSCTLRMASK_EL1()). """
+        if len(oNode.aoArgs) == 1:
+            return ArmAstUnaryOp('!', oNode.aoArgs[0]);
+        raise Exception('Unexpected: %s' % (oNode.toString(),));
+
     def transformCodePass1_AArch64_SystemAccessTrap(self, oNode): # pylint: disable=invalid-name
         """ Pass 1: AArch64_SystemAccessTrap(EL2,0x18) and such. """
         if len(oNode.aoArgs) == 2:
@@ -1620,6 +1647,9 @@ class SysRegGeneratorBase(object):
             if oNode.sName == 'ImpDefBool':
                 return self.transformCodePass1_ImpDefBool(oNode);
 
+            if oNode.sName == 'IsZero':
+                return self.transformCodePass1_IsZero(oNode);
+
             if oNode.sName == 'AArch64_SystemAccessTrap':
                 return self.transformCodePass1_AArch64_SystemAccessTrap(oNode);
 
@@ -1693,7 +1723,7 @@ class SysRegGeneratorBase(object):
         aoFields = oReg.daoFields.get(sField); # List[ArmFieldsBase]
         if not aoFields:
             oXcpt = Exception('%s: Field "%s" not found in register "%s"' % (sWhatFor, sField, sRegisterName,));
-            if fWarnOnly: print('warning: %s' % (oXcpt)); return (None, None, None);
+            if fWarnOnly: return self.warnXcpt(oXcpt, (None, None, None));
             raise oXcpt;
 
         tCpumCtxInfo = g_dRegToCpumCtx.get('%s.%s' % (sState, sRegisterName));
@@ -1704,20 +1734,30 @@ class SysRegGeneratorBase(object):
                 return (oReg, spec.ArmFieldsField(None, [spec.ArmRange(0, 1),], 'OSLK'),
                         'pVCpu->cpum.GstCtx.fOsLck'); # HACK ALERT: boolean field
 
-            # If this is an ID register, we must a helper function to access it (assuming RES0).
-            oAccessExprOrInt = None;
-            for oAccessor in oReg.aoAccessors:
-                if isinstance(oAccessor, spec.ArmAccessorSystem):
-                    if oAccessor.oEncoding.sAsmValue == sRegisterName:
-                        if self.isIdRegisterEncoding(oAccessor.oEncoding):
-                            oAccessExprOrInt = oAccessor.oEncoding.getSysRegIdCreate();
-                            break;
-            if not oAccessExprOrInt:
-                oXcpt = Exception('%s: No CPUMCTX mapping for register %s.%s (looking up field %s)'
-                                  % (sWhatFor, sState, sRegisterName, sField,));
-                if fWarnOnly: print('warning: %s' % (oXcpt)); return (None, None, None);
-                raise oXcpt;
-            oAccessExprOrInt = 'iemCImplHlpGetIdSysReg(pVCpu, %s)' % (oAccessExprOrInt,); ## @todo return AST object
+            # Some hacks for unimplemented registers and gcc warnings.
+            if sRegisterName == 'PMUSERENR_EL0' and sState == 'AArch64':
+                oAccessExprOrInt = 'iemCImplHlpGetPmUserEnrEl0(pVCpu)';
+            elif sRegisterName == 'AMUSERENR_EL0' and sState == 'AArch64':
+                oAccessExprOrInt = 'iemCImplHlpGetAmUserEnrEl0(pVCpu)';
+            elif sRegisterName == 'PMUACR_EL1' and sState == 'AArch64':
+                 oAccessExprOrInt = 'iemCImplHlpGetPmUacrEl1(pVCpu)';
+            #elif sRegisterName == 'PMSELR_EL0' and sState == 'AArch64':
+            #     oAccessExprOrInt = 'iemCImplHlpGetPmSelrEl0(pVCpu)';
+            else:
+                # If this is an ID register, we must a helper function to access it (assuming RES0).
+                oAccessExprOrInt = None;
+                for oAccessor in oReg.aoAccessors:
+                    if isinstance(oAccessor, spec.ArmAccessorSystem):
+                        if oAccessor.oEncoding.sAsmValue == sRegisterName:
+                            if self.isIdRegisterEncoding(oAccessor.oEncoding):
+                                oAccessExprOrInt = oAccessor.oEncoding.getSysRegIdCreate();
+                                break;
+                if not oAccessExprOrInt:
+                    oXcpt = Exception('%s: No CPUMCTX mapping for register %s.%s (looking up field %s)'
+                                      % (sWhatFor, sState, sRegisterName, sField,));
+                    if fWarnOnly: return self.warnXcpt(oXcpt, (None, None, None));
+                    raise oXcpt;
+                oAccessExprOrInt = 'iemCImplHlpGetIdSysReg(pVCpu, %s)' % (oAccessExprOrInt,); ## @todo return AST object
 
         #
         # Iff this is an conditional field, there may be more than one entry in
@@ -1757,7 +1797,7 @@ class SysRegGeneratorBase(object):
                                   % (type(oField).__name__, oField.toString(),
                                      type(oField.oParent).__name__, oField.oParent.toString(),)
                                   for oField in aoFields] ));
-            if fWarnOnly: print('warning: %s' % (oXcpt)); return (None, None, None);
+            if fWarnOnly: return self.warnXcpt(oXcpt, (None, None, None));
             raise oXcpt;
 
 
@@ -1781,13 +1821,80 @@ class SysRegGeneratorBase(object):
             if sCpumFeature is True:  return 'true /*%s*/' % (sFeatureNm,);
             if sCpumFeature is False: return 'false /*%s*/' % (sFeatureNm,);
             return ArmAstCppExpr('false /** @todo pGstFeats->%s */' % (sFeatureNm,), cBitsWidth = 1);
-        raise Exception('Unexpected IsFeatureImplemented arguments: %s' % (oNode.aoArgs,));
+        raise Exception('Unexpected: %s' % (oNode,));
 
     def transformCodePass2_EffectiveHCR_EL2_NVx(self, oNode): # pylint: disable=invalid-name
         """ Pass 2: EffectiveHCR_EL2_NVx() -> helper call. """
         if len(oNode.aoArgs) == 0:
             return ArmAstCppCall('iemGetEffHcrEl2NVx', [ ArmAstCppExpr('pVCpu'), ArmAstCppExpr('pGstFeats'), ], cBitsWidth = 3);
-        raise Exception('Unexpected IsFeatureImplemented arguments: %s' % (oNode.aoArgs,));
+        raise Exception('Unexpected: %s' % (oNode,));
+
+    def transformCodePass2_EffectiveACTLRMASK_EL1(self, oNode): # pylint: disable=invalid-name
+        """ Pass 2: EffectiveACTLRMASK_EL1() -> helper call. """
+        if len(oNode.aoArgs) == 0:
+            return ArmAstCppCall('iemGetEffActlrMaskEl1', [ ArmAstCppExpr('pVCpu'), ArmAstCppExpr('pGstFeats'), ],
+                                 cBitsWidth = 64);
+        raise Exception('Unexpected: %s' % (oNode,));
+
+    def transformCodePass2_EffectiveSCTLRMASK_EL1(self, oNode): # pylint: disable=invalid-name
+        """ Pass 2: EffectiveSCTLRMASK_EL1() -> helper call. """
+        if len(oNode.aoArgs) == 0:
+            return ArmAstCppCall('iemGetEffSctlrMaskEl1', [ ArmAstCppExpr('pVCpu'), ArmAstCppExpr('pGstFeats'), ],
+                                 cBitsWidth = 64);
+        raise Exception('Unexpected: %s' % (oNode,));
+
+    def transformCodePass2_EffectiveSCTLRMASK_EL2(self, oNode): # pylint: disable=invalid-name
+        """ Pass 2: EffectiveSCTLRMASK_EL2() -> helper call. """
+        if len(oNode.aoArgs) == 0:
+            return ArmAstCppCall('iemGetEffSctlrMaskEl2', [ ArmAstCppExpr('pVCpu'), ArmAstCppExpr('pGstFeats'), ],
+                                 cBitsWidth = 64);
+        raise Exception('Unexpected: %s' % (oNode,));
+
+    def transformCodePass2_PhysicalCountInt(self, oNode):
+        """ Pass 2: Translate PhysicalCountInt(). """
+        if len(oNode.aoArgs) == 0:
+            return ArmAstCppCall('iemCImplHlpGetPhysicalSystemTimerCount', [ ArmAstCppExpr('pVCpu'), ], cBitsWidth = 64);
+        raise Exception('Unexpected: %s' % (oNode,));
+
+    def transformCodePass2_UInt(self, oNode):
+        """ Pass 2: Eliminate UInt. """
+        if len(oNode.aoArgs) == 1:
+            # If it's a C++ expression, we should be safe wrt signed-ness and width.
+            if isinstance(oNode.aoArgs[0], ArmAstCppExprBase):
+                return oNode.aoArgs[0];
+            ## @todo Prepending (uint64_t) or similar isn't possible unless it's already an C++ expression...
+            return oNode;
+        raise Exception('Unexpected: %s' % (oNode,));
+
+    def transformCodePass2_Zeros(self, oNode):
+        """ Pass 2: Eliminate Zeros(bits). """
+        if len(oNode.aoArgs) == 1:
+            cBits = oNode.aoArgs[0].getIntegerOrValue();
+            if cBits is not None and 0 < cBits <= 64:
+                return ArmAstInteger(0, cBits);
+        raise Exception('Unexpected: %s' % (oNode,));
+
+    def transformCodePass2_ZeroExtend(self, oNode):
+        """ Pass 2: Eliminate ZeroExtend(value, bits). """
+        if len(oNode.aoArgs) == 2:
+            cBits = oNode.aoArgs[1].getIntegerOrValue();
+            if cBits is not None and 0 < cBits <= 64:
+                #oValue = oNode.aoArgs[0];
+                #if isinstance(oValue, (ArmAstInteger,)):
+                #return ArmAstInteger(0, cBits);
+                return oNode; ## @todo fix this.
+        raise Exception('Unexpected: %s' % (oNode,));
+
+    def transformCodePass2_SignExtend(self, oNode):
+        """ Pass 2: Eliminate SignExtend(value, bits). """
+        if len(oNode.aoArgs) == 2:
+            cBits = oNode.aoArgs[1].getIntegerOrValue();
+            if cBits is not None and 0 < cBits <= 64:
+                #oValue = oNode.aoArgs[0]; AST.SquareOp
+                #if isinstance(oValue, (ArmAstInteger,)):
+                #return ArmAstInteger(0, cBits);
+                return oNode; ## @todo fix this.
+        raise Exception('Unexpected: %s' % (oNode,));
 
 
     class VBoxAstCppConcatEntry(object):
@@ -2123,8 +2230,7 @@ class SysRegGeneratorBase(object):
                                                  cBitsWidth = 64);
 
             oXcpt = Exception('Assignment/Identifier: No CPUMCTX mapping for register %s.%s' % (sState, oNode.sName,));
-            print('warning: %s' % (oXcpt));
-            return oNode;
+            return self.warnXcpt(oXcpt, oNode);
             #raise oXcpt;
 
         if isinstance(tCpumCtxInfo[0], int):
@@ -2149,7 +2255,7 @@ class SysRegGeneratorBase(object):
                         sExpr = '(%s & UINT64_C(%#x))' % (oVar.toString(), ((1 << (iFrom - iTo + 1)) - 1) << iTo);
                         if iTo != 0:
                             sExpr = '(%s >> %u)' % (sExpr, iTo,);
-                    return ArmAstCppExpr(sExpr, 64);
+                    return ArmAstCppExpr(sExpr, cBitsWidth = iFrom - iTo + 1); # Width is important for sign & zero extending.
         return oNode;
 
     def transformCodePass2_ParseNVMem(self, oNode):
@@ -2234,9 +2340,8 @@ class SysRegGeneratorBase(object):
         # As a last restort, see if it matches the oInfo.sEnc & sAsmValue.
         if oInfo.sAsmValue == sRegName:
             return (None, oInfo.sEnc);
-        print('warning! Assignment %s Identifier: Unable to map %s.%s to anything'
-              % ('from' if fRead else 'to', sState, sRegName,));
-        return (None, None)
+        return self.warn('Assignment %s Identifier: Unable to map %s.%s to anything'
+                         % ('from' if fRead else 'to', sState, sRegName,), (None, None));
 
 
     def transformCodePass2_AssignFromIdentifier(self, oNode, oInfo): # pylint: disable=invalid-name
@@ -2285,6 +2390,8 @@ class SysRegGeneratorBase(object):
 
 
 
+    koReSkipIdentifierInBinOp = re.compile(r'^EL\d$');
+
     def transformCodePass2Callback(self, oNode, fEliminationAllowed, oInfo, aoStack):
         """ Callback for pass 2: C++ translation. """
         if isinstance(oNode, ArmAstFunction):
@@ -2296,9 +2403,27 @@ class SysRegGeneratorBase(object):
             if oNode.sName == 'IsFeatureImplemented':
                 return self.transformCodePass2_IsFeatureImplemented(oNode);
 
-            # EffectiveHCR_EL2_NVx
+            # Effective<register> getter functions:
             if oNode.sName == 'EffectiveHCR_EL2_NVx':
                 return self.transformCodePass2_EffectiveHCR_EL2_NVx(oNode);
+            if oNode.sName == 'EffectiveACTLRMASK_EL1':
+                return self.transformCodePass2_EffectiveACTLRMASK_EL1(oNode);
+            if oNode.sName == 'EffectiveSCTLRMASK_EL1':
+                return self.transformCodePass2_EffectiveSCTLRMASK_EL1(oNode);
+            if oNode.sName == 'EffectiveSCTLRMASK_EL2':
+                return self.transformCodePass2_EffectiveSCTLRMASK_EL1(oNode);
+
+            if oNode.sName == 'PhysicalCountInt':
+                return self.transformCodePass2_PhysicalCountInt(oNode);
+
+            # UInt.
+            if oNode.sName == 'UInt':
+                return self.transformCodePass2_UInt(oNode);
+
+            # Zeros.  Don't convert in concats as we want to handle those specially.
+            if oNode.sName == 'Zeros' and (not aoStack or not isinstance(aoStack[-1], ArmAstConcat)):
+                return self.transformCodePass2_Zeros(oNode);
+
 
         elif isinstance(oNode, ArmAstBinaryOp):
             # PSTATE.EL == EL0 and similar:
@@ -2344,10 +2469,14 @@ class SysRegGeneratorBase(object):
                    or not isinstance(aoStack[-1], ArmAstConcat))):
             return self.transformCodePass2_Field(oNode);
 
-        #elif (    isinstance(oNode, ArmAstIdentifier)
-        #      and aoStack
-        #      and isinstance(aoStack[-1], ArmAstAssignment)):
-        #    return self.transformCodePass2_Identifier(oNode);
+        # Identifiers are tricky, as we don't want to prematurely process them in assignments,
+        # concatenations, field access, dot-atoms and such. Thus the limited parent node and
+        # name filtering hacks.
+        elif (    isinstance(oNode, ArmAstIdentifier)
+              and aoStack
+              and (   isinstance(aoStack[-1], ArmAstUnaryOp)
+                   or (isinstance(aoStack[-1], ArmAstBinaryOp) and not self.koReSkipIdentifierInBinOp.match(oNode.sName)) ) ):
+            return self.transformCodePass2_Identifier(oNode);
 
         elif isinstance(oNode, ArmAstIfList):
             # Drop double parentheses around field extraction expressions when they are the sole if condition.
@@ -2356,12 +2485,12 @@ class SysRegGeneratorBase(object):
                     oNode.aoIfConditions[idxIfCond] = oIfCond.dropExtraParenthesis();
 
         elif isinstance(oNode, ArmAstSquareOp):
-            # Deal with '*puDst = TTBR1_EL1[[0x3f:0]]'.
+            # Deal with '*puDst = TTBR1_EL1[[0x3f:0]]' and 'SignExtend(X[t,0x40][[0x1f:0]], 0x40)'.
             if (    isinstance(oNode.oVar, ArmAstIdentifier)
                 and len(oNode.aoValues) == 1
                 and isinstance(oNode.aoValues[0], ArmAstSlice)
                 and aoStack
-                and isinstance(aoStack[-1], ArmAstAssignment)):
+                and isinstance(aoStack[-1], (ArmAstAssignment, ArmAstFunction))):
                 return self.transformCodePass2_SlicedIdentifier(oNode);
 
         elif isinstance(oNode, ArmAstAssignment):
@@ -2591,8 +2720,9 @@ class SysRegGeneratorA64MsrReg(SysRegGeneratorBase):
         """ Callback used by the second pass."""
         # Replace X[t,64] references with uValue.
         if oNode.isMatchingSquareOp('X', 't', 64):# or oNode.oVar.isMatchingSquareOp('X', 't', 32):
-            if aoStack and isinstance(aoStack[-1], ArmAstAssignment):
+            if aoStack and isinstance(aoStack[-1], (ArmAstAssignment, ArmAstBinaryOp, ArmAstSquareOp)):
                 return ArmAstCppExpr('uValue', cBitsWidth = 64);
+
         # Return statements w/o a value are NOP branches, make them return VINF_SUCCESS.
         elif isinstance(oNode, ArmAstReturn):
             if not oNode.oValue:
@@ -3274,7 +3404,16 @@ class IEMArmGenerator(object):
                 ' * %4u registers' % (len(oGenerator.aoInfo),),
                 ' * %4u complete - %u with unresolved registers'  % (oGenerator.cComplete, oGenerator.cUnresolvedRegs,),
                 ' * %4u incomplete' % (oGenerator.cIncomplete,),
-                ' */',
+            ];
+            asWarnings = oGenerator.printWarnings();
+            if asWarnings:
+                asLines += [
+                    ' *',
+                    ' * Warnings:',
+                ];
+                asLines += [ ' *   ' + sWarning[9:] for sWarning in asWarnings ];
+            asLines += [
+                ' */'
             ];
 
             # Individual handler functions.
