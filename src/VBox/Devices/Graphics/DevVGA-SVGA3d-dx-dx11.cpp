@@ -7066,18 +7066,27 @@ static void dxSetupPipeline(PVGASTATECC pThisCC, PVMSVGA3DDXCONTEXT pDXContext)
                             }
 
                             cResources = idxSR + 1;
-
-                            /* Update componentType of the pixel shader output signature to correspond to the bound resources. */
-                            if (idxSR < pDXShader->shaderInfo.cOutputSignature)
-                            {
-                                SVGA3dDXSignatureEntry *pSignatureEntry = &pDXShader->shaderInfo.aOutputSignature[idxSR];
-                                pSignatureEntry->componentType = DXShaderComponentTypeFromFormat(pSRViewEntry->format);
-                            }
                         }
                     }
 
                     rc = DXShaderUpdateResources(&pDXShader->shaderInfo, aResourceDimension, aResourceReturnType, cResources);
                     AssertRC(rc); /* Ignore rc because the shader will most likely work anyway. */
+
+                    /* Update componentType of the pixel shader output signature to correspond to the bound resources. */
+                    for (uint32_t idxRT = 0;
+                        idxRT < RT_MIN(SVGA3D_MAX_SIMULTANEOUS_RENDER_TARGETS, pDXShader->shaderInfo.cOutputSignature);
+                        ++idxRT)
+                    {
+                        SVGA3dRenderTargetViewId const renderTargetViewId = pDXContext->svgaDXContext.renderState.renderTargetViewIds[idxRT];
+                        if (renderTargetViewId != SVGA3D_INVALID_ID)
+                        {
+                            ASSERT_GUEST_CONTINUE(renderTargetViewId < pDXContext->cot.cRTView);
+                            SVGACOTableDXRTViewEntry const *pRTViewEntry = &pDXContext->cot.paRTView[renderTargetViewId];
+
+                            SVGA3dDXSignatureEntry *pSignatureEntry = &pDXShader->shaderInfo.aOutputSignature[idxRT];
+                            pSignatureEntry->componentType = DXShaderComponentTypeFromFormat(pRTViewEntry->format);
+                        }
+                    }
                 }
 
                 if (shaderType == SVGA3D_SHADERTYPE_VS)
