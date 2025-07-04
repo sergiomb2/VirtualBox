@@ -478,10 +478,10 @@ static DECLCALLBACK(int) recordingCodecVPXEncode(PRECORDINGCODEC pCodec, PRECORD
 
             /* Blit mouse cursor to front buffer. */
             if (RT_SUCCESS(vrc))
-                vrc = RecordingVideoFrameBlitRawAlpha(pFront, pPosNew->x, pPosNew->y,
-                                                      pCursor->pau8Buf, pCursor->cbBuf,
-                                                      0 /* uSrcX */, 0 /* uSrcY */, pCursor->Info.uWidth, pCursor->Info.uHeight,
-                                                      pCursor->Info.uBytesPerLine, pCursor->Info.uBPP, pCursor->Info.enmPixelFmt);
+                RecordingVideoFrameBlitRawAlpha(pFront, pPosNew->x, pPosNew->y,
+                                                pCursor->pau8Buf, pCursor->cbBuf,
+                                                0 /* uSrcX */, 0 /* uSrcY */, pCursor->Info.uWidth, pCursor->Info.uHeight,
+                                                pCursor->Info.uBytesPerLine, pCursor->Info.uBPP, pCursor->Info.enmPixelFmt);
 #if 0
             RecordingUtilsDbgDumpVideoFrameEx(pFront, "/tmp/recording", "cursor-alpha-front");
 #endif
