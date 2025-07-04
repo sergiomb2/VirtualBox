@@ -362,8 +362,8 @@ int RecordingStream::process(RecordingBlockSet &streamBlockSet, RecordingBlockMa
         }
 
         /* Move block set to housekeeping set. */
-        streamBlockSet.Map.erase(itStreamBlock);
         m_BlockSetHousekeeping.Insert(msTimestamp, itStreamBlock->second);
+        streamBlockSet.Map.erase(itStreamBlock);
         itStreamBlock = streamBlockSet.Map.begin();
     }
 
