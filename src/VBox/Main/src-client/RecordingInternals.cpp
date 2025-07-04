@@ -327,7 +327,7 @@ DECLINLINE(void) recordingVideoFrameBlitRawAlpha(PRECORDINGVIDEOFRAME pFrame, ui
                                                  const uint8_t *pu8Src, size_t cbSrc, uint32_t uSrcX, uint32_t uSrcY, uint32_t uSrcWidth, uint32_t uSrcHeight,
                                                  uint32_t uSrcBytesPerLine, uint8_t uSrcBPP, RECORDINGPIXELFMT enmFmt)
 {
-    RT_NOREF(cbSrc, uSrcBytesPerLine, enmFmt);
+    RT_NOREF(cbSrc, uSrcBytesPerLine, uSrcBPP, enmFmt);
 
     Assert(enmFmt == RECORDINGPIXELFMT_BRGA32);
     Assert(pFrame->Info.enmPixelFmt == enmFmt);
