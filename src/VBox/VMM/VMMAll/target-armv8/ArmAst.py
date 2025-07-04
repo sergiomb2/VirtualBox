@@ -1767,6 +1767,61 @@ class ArmAstStatementBase(ArmAstBase):
         """ Checks if this is a NOP statement. """
         return isinstance(self, ArmAstNop);
 
+    def doAllPathsReturn(self):
+        """ Checks if all code paths ends with a return statement. """
+        return False;
+
+
+class ArmAstStatementList(ArmAstStatementBase):
+    """
+    List of statements.
+    """
+    def __init__(self, aoStmts):
+        ArmAstStatementBase.__init__(self, 'Statement List');
+        self.aoStmts = aoStmts;
+
+    def clone(self):
+        return ArmAstStatementList([oStmt.clone() for oStmt in self.aoStmts]);
+
+    def isSame(self, oOther):
+        if isinstance(oOther, ArmAstStatementList):
+            if len(self.aoStmts) == len(oOther.aoStmts):
+                for i, oStmt in enumerate(self.aoStmts):
+                    if not oStmt.isSame(oOther.aoStmts[i]):
+                        return False;
+                return True;
+        return False;
+
+    def walk(self, fnCallback, oCallbackArg = None, fDepthFirst = True):
+        return self._walker(fnCallback, oCallbackArg, fDepthFirst, *self.aoStmts);
+
+    def transform(self, fnCallback, fEliminationAllowed, oCallbackArg, aoStack):
+        aoStack.append(self);
+        idx = 0;
+        while idx < len(self.aoStmts):
+            oStmt = self.aoStmts[idx].transform(fnCallback, True, oCallbackArg, aoStack);
+            if oStmt:
+                self.aoStmts[idx] = oStmt;
+                idx += 1;
+            else:
+                del self.aoStmts[idx];
+        ## @todo remove anything but comments following a return statement...
+        aoStack.pop();
+        return fnCallback(self, fEliminationAllowed, oCallbackArg, aoStack);
+
+    def toStringList(self, sIndent = '', sLang = None, cchMaxWidth = 120):
+        asLines = [];
+        for oStmt in self.aoStmts:
+            asLines += oStmt.toStringList(sIndent, sLang, cchMaxWidth);
+        return asLines;
+
+    def doAllPathsReturn(self):
+        if self.aoStmts:
+            for oStmt in reversed(self.aoStmts):
+                if isinstance(oStmt, ArmAstStatementBase) and oStmt.doAllPathsReturn():
+                    return True;
+        return False;
+
 
 class ArmAstNop(ArmAstStatementBase):
     """
@@ -1882,6 +1937,9 @@ class ArmAstReturn(ArmAstStatementBase):
             return ('%sreturn %s;' % (sIndent, sValue.replace('\n', '\n' + '       ' + sIndent),)).split('\n');
         return [ '%sreturn;' % (sIndent,) ];
 
+    def doAllPathsReturn(self):
+        return True;
+
 
 class ArmAstIfList(ArmAstStatementBase):
     """
@@ -1979,11 +2037,12 @@ class ArmAstIfList(ArmAstStatementBase):
         sNextIndent     = sIndent + '    ';
         cchMaxWidth     = max(cchMaxWidth,     60);
         cchNextMaxWidth = max(cchMaxWidth - 4, 60);
+        fNeedElse       = False;
         for i, oIfCond in enumerate(self.aoIfConditions):
             sIfCond = oIfCond.toStringEx(sLang, cchMaxWidth);
             if '\n' in sIfCond:
-                sIfCond = sIfCond.replace('\n', '\n         ' + sIndent if i > 0 else '\n    ' + sIndent);
-            asLines.extend(('%s%sif (%s)' % (sIndent, 'else ' if i > 0 else '', sIfCond,)).split('\n'));
+                sIfCond = sIfCond.replace('\n', '\n         ' + sIndent if fNeedElse else '\n    ' + sIndent);
+            asLines.extend(('%s%sif (%s)' % (sIndent, 'else ' if fNeedElse else '', sIfCond,)).split('\n'));
 
             oIfStmt = self.aoIfStatements[i];
             if isinstance(oIfStmt, ArmAstStatementBase):
@@ -1997,16 +2056,17 @@ class ArmAstIfList(ArmAstStatementBase):
             else:
                 sTmp = sNextIndent + oIfStmt.toStringEx(sLang, cchNextMaxWidth);
                 asLines.extend(sTmp.replace('\n', '\n' + sNextIndent).split('\n'));
+            fNeedElse = fNeedElse or (not isinstance(oIfStmt, ArmAstStatementBase) or not oIfStmt.doAllPathsReturn());
 
         if self.oElseStatement:
-            if self.aoIfConditions:
+            if self.aoIfConditions and fNeedElse:
                 asLines.append(sIndent + 'else');
             else:
                 sNextIndent     = sIndent;     # Trick.
                 cchNextMaxWidth = cchMaxWidth; # Trick.
             if isinstance(self.oElseStatement, ArmAstStatementBase):
                 asStmts = self.oElseStatement.toStringList(sNextIndent, sLang, cchNextMaxWidth);
-                if sLang == 'C' and len(asStmts) != 1:
+                if sLang == 'C' and len(asStmts) != 1 and fNeedElse:
                     asLines.append(sIndent + '{');
                     asLines.extend(asStmts);
                     asLines.append(sIndent + '}');
@@ -2016,6 +2076,20 @@ class ArmAstIfList(ArmAstStatementBase):
                 sTmp = sNextIndent + self.oElseStatement.toStringEx(sLang, cchNextMaxWidth);
                 asLines.extend(sTmp.replace('\n', '\n' + sNextIndent).split('\n'));
         return asLines;
+
+    def doAllPathsReturn(self):
+        # There must be an else statement and it must return.
+        if (   not self.oElseStatement
+            or not isinstance(self.oElseStatement, ArmAstStatementBase)
+            or not self.oElseStatement.doAllPathsReturn()):
+            return False;
+
+        # The else-block is good, now check each of the if-blocks.
+        for oStmt in self.aoIfStatements:
+            if (   not isinstance(oStmt, ArmAstStatementBase)
+                or not oStmt.doAllPathsReturn()):
+                return False;
+        return True;
 
 
     khAttribSet = frozenset(['_type', 'access', 'condition',]);

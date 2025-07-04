@@ -62,6 +62,7 @@ from ArmAst import ArmAstReturn;
 from ArmAst import ArmAstSet;
 from ArmAst import ArmAstSlice;
 from ArmAst import ArmAstSquareOp;
+from ArmAst import ArmAstStatementList;
 from ArmAst import ArmAstString;
 from ArmAst import ArmAstTypeAnnotation;
 from ArmAst import ArmAstUnaryOp;
@@ -1327,7 +1328,7 @@ class SysRegGeneratorBase(object):
             return True;
 
         elif isinstance(oNode, (ArmAstBool, ArmAstCppExprBase, ArmAstCppStmt, ArmAstIfList, ArmAstInteger, ArmAstUnaryOp,
-                                ArmAstAssignment, self.VBoxAstCppConcat)):
+                                ArmAstAssignment, ArmAstStatementList, self.VBoxAstCppConcat)):
             return True;
 
         oInfo.cIncompleteNodes += 1;
@@ -1337,6 +1338,10 @@ class SysRegGeneratorBase(object):
         """ Morphs the accessor code and assigns the result to self.oCode """
         assert oInfo.oCode is None;
         oInfo.oCode = self.transformCodePass2(oInfo, self.transformCodePass1(oInfo, oInfo.oAccessor.oAccess.clone()));
+
+        # Add a return statement if necessary.
+        if not oInfo.oCode.doAllPathsReturn():
+            oInfo.oCode = ArmAstStatementList([oInfo.oCode, ArmAstReturn(ArmAstCppExpr('VINF_SUCCESS')),]);
 
         # Update the completion status and other statistics.
         oInfo.cIncompleteNodes  = 0;
@@ -2126,7 +2131,7 @@ class SysRegGeneratorBase(object):
             return ArmAstInteger(tCpumCtxInfo[0], 64);
         return ArmAstCppExpr('pVCpu->cpum.GstCtx.%s' % (tCpumCtxInfo[0],), cBitsWidth = 64);
 
-    def transformCodePass2_SlicedIdentifier(self, oNode, oInfo):
+    def transformCodePass2_SlicedIdentifier(self, oNode):
         """ Pass 2: Deal with '*puDst = TTBR1_EL1[[0x3f:0]]' """
         assert len(oNode.aoValues) == 1 and isinstance(oNode.aoValues[0], ArmAstSlice);
         oSlice = oNode.aoValues[0] # type: ArmAstSlice
@@ -2357,7 +2362,7 @@ class SysRegGeneratorBase(object):
                 and isinstance(oNode.aoValues[0], ArmAstSlice)
                 and aoStack
                 and isinstance(aoStack[-1], ArmAstAssignment)):
-                return self.transformCodePass2_SlicedIdentifier(oNode, oInfo);
+                return self.transformCodePass2_SlicedIdentifier(oNode);
 
         elif isinstance(oNode, ArmAstAssignment):
             if isinstance(oNode.oVar, ArmAstSquareOp):
@@ -2368,9 +2373,10 @@ class SysRegGeneratorBase(object):
             elif isinstance(oNode.oValue, ArmAstFunction):
                 if oNode.oValue.sName == 'Read_DBGDTR_EL0':
                     return self.transformCodePass2_Assign_Read_DBGDTR_EL0(oNode);
+
             if isinstance(oNode.oVar, ArmAstIdentifier):
                 return self.transformCodePass2_AssignToIdentifier(oNode, oInfo);
-            elif isinstance(oNode.oValue, ArmAstIdentifier):
+            if isinstance(oNode.oValue, ArmAstIdentifier):
                 return self.transformCodePass2_AssignFromIdentifier(oNode, oInfo);
 
         _ = fEliminationAllowed;
@@ -2420,8 +2426,6 @@ class SysRegGeneratorA64Mrs(SysRegGeneratorBase):
                 '#endif',
                 '    return VERR_IEM_ASPECT_NOT_IMPLEMENTED;'
             ];
-        elif not isinstance(oInfo.oCode, ArmAstReturn):
-            asLines.append('    return VINF_SUCCESS;');
 
         asLines.append('    /* -------- Original code specification: -------- */');
         asLines.extend([ '    // ' + sLine for sLine in oInfo.oAccessor.oAccess.toStringList()]);
@@ -2527,8 +2531,6 @@ class SysRegGeneratorA64MsrReg(SysRegGeneratorBase):
                 '#endif',
                 '    return VERR_IEM_ASPECT_NOT_IMPLEMENTED;'
             ];
-        elif not isinstance(oInfo.oCode, ArmAstReturn):
-            asLines.append('    return VINF_SUCCESS;');
 
         asLines.append('    /* -------- Original code specification: -------- */');
         asLines.extend([ '    // ' + sLine for sLine in oInfo.oAccessor.oAccess.toStringList()]);
