@@ -1740,7 +1740,7 @@ class SysRegGeneratorBase(object):
             elif sRegisterName == 'AMUSERENR_EL0' and sState == 'AArch64':
                 oAccessExprOrInt = 'iemCImplHlpGetAmUserEnrEl0(pVCpu)';
             elif sRegisterName == 'PMUACR_EL1' and sState == 'AArch64':
-                 oAccessExprOrInt = 'iemCImplHlpGetPmUacrEl1(pVCpu)';
+                oAccessExprOrInt = 'iemCImplHlpGetPmUacrEl1(pVCpu)';
             #elif sRegisterName == 'PMSELR_EL0' and sState == 'AArch64':
             #     oAccessExprOrInt = 'iemCImplHlpGetPmSelrEl0(pVCpu)';
             else:
@@ -2082,10 +2082,11 @@ class SysRegGeneratorBase(object):
         #(fValue, fFixed, fWildcard, cBitsWidth) = oNode.oRight.getValueDetails();
 
         #
-        # Drop the comparison and shifting if we're checking that any of the
-        # fields are non-zero.
+        # If all concatenated fields are from the same register, and the check
+        # is either for any non-zero fields or that they are all non-zero, we
+        # can drop the shifting and combine the masks.
         #
-        if fValue == 0 and fWildcard == 0 and oNode.sOp == '!=':
+        if fValue == 0 and fWildcard == 0 and oNode.sOp in ('!=', '==',):
             if oNode.oLeft.areAllFromSameRegister():
                 fMask       = 0;
                 sAccessExpr = None;
@@ -2100,7 +2101,10 @@ class SysRegGeneratorBase(object):
                         assert oInfoEntry.fValue == 0;
                 oNode.oLeft.asExprs = ['%s & UINT64_C(%#x) /*%s*/' % (sAccessExpr, fMask, ','.join(asNames))];
                 oNode.oLeft.sExpr = '(%s)' % (oNode.oLeft.asExprs[0],)
-                return oNode.oLeft;
+
+                if oNode.sOp == '!=':
+                    return oNode.oLeft;
+                return ArmAstUnaryOp('!', oNode.oLeft);
 
         return oNode;
 
